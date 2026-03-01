@@ -39,7 +39,7 @@ if echo "$normalized" | grep -qE '(^|[;&|])[[:space:]]*(supabase|[^[:space:]]*su
   echo "Rule: \"The database is never reset unless the user explicitly requests it.\"" >&2
   echo "Source: skills/database/references/workflow.md" >&2
   echo "" >&2
-  echo "Alternative: Fix errors with more SQL via supabase:execute_sql." >&2
+  echo "Alternative: Fix errors with more SQL via psql." >&2
   echo "If the user explicitly asked for a reset, ask them to run it manually." >&2
   exit 2
 fi

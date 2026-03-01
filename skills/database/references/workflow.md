@@ -15,7 +15,7 @@ The daily development loop. How agents build features, apply changes, and produc
 
 The agent applies every change in two places simultaneously:
 
-1. **The live local database** — via MCP `supabase:execute_sql`, so changes take effect immediately
+1. **The live local database** — via `psql`, so changes take effect immediately
 2. **The schema files** — in `supabase/schemas/`, so the source of truth stays in sync
 
 Schema files are the canonical representation of your database. The live database is the working copy. Both must always reflect the same state.
@@ -31,7 +31,7 @@ Schema files are the canonical representation of your database. The live databas
 When building a feature, the agent:
 
 1. Writes the SQL in the appropriate schema file (see [naming conventions](./naming_conventions.md))
-2. Immediately applies the same SQL via `supabase:execute_sql` — every file write must be followed by an apply
+2. Immediately applies the same SQL via `psql` — every file write must be followed by an apply
 3. If something breaks, fixes it with more SQL — never resets
 4. Continues building until the feature is complete
 
@@ -47,7 +47,7 @@ Review the results and fix any findings (e.g., mutable `search_path`, missing `S
 
 ### Fixing Errors
 
-When `supabase:execute_sql` returns an error:
+When `psql` returns an error:
 
 - **Constraint violation** — Fix the data, then retry the schema change
 - **Duplicate object** — The schema file should already use `IF NOT EXISTS` / `CREATE OR REPLACE`
@@ -80,7 +80,7 @@ Check the generated file in `supabase/migrations/`:
 
 - Verify all changes are captured
 - Statement ordering is handled automatically by `--use-pg-delta`
-- If any `supabase:execute_sql` data fixes are needed for the migration to replay cleanly, add them manually
+- If any `psql` data fixes are needed for the migration to replay cleanly, add them manually
 
 ### Verify (requires user confirmation)
 
@@ -139,7 +139,7 @@ END;
 $$;
 ```
 
-Apply via `supabase:execute_sql`.
+Apply via `psql`.
 
 **2. Create the entity file** — `supabase/schemas/public/readings.sql`:
 ```sql
@@ -179,7 +179,7 @@ ON public.readings FOR DELETE
 USING (_auth_reading_is_owner(id));
 ```
 
-Apply via `supabase:execute_sql`.
+Apply via `psql`.
 
 **3. Create API functions** — `supabase/schemas/api/reading.sql`:
 ```sql
@@ -230,7 +230,7 @@ END;
 $$;
 ```
 
-Apply via `supabase:execute_sql`.
+Apply via `psql`.
 
 **4. Generate types:**
 ```bash
@@ -243,7 +243,7 @@ supabase gen types typescript --local > src/types/database.ts
 
 Example: Adding `archived_at` to `readings`.
 
-**1. Update the table definition** in `supabase/schemas/public/readings.sql` and apply the ALTER via `supabase:execute_sql`:
+**1. Update the table definition** in `supabase/schemas/public/readings.sql` and apply the ALTER via `psql`:
 ```sql
 -- Add to the CREATE TABLE definition (for fresh setups)
 archived_at timestamptz DEFAULT NULL
@@ -252,14 +252,14 @@ archived_at timestamptz DEFAULT NULL
 ALTER TABLE public.readings ADD COLUMN IF NOT EXISTS archived_at timestamptz DEFAULT NULL;
 ```
 
-**2. Add index** if needed — update `supabase/schemas/public/readings.sql` and apply via `supabase:execute_sql`:
+**2. Add index** if needed — update `supabase/schemas/public/readings.sql` and apply via `psql`:
 ```sql
 CREATE INDEX IF NOT EXISTS idx_readings_archived_at
 ON public.readings(archived_at)
 WHERE archived_at IS NOT NULL;
 ```
 
-**3. Add the function** — update `supabase/schemas/api/reading.sql` and apply via `supabase:execute_sql`:
+**3. Add the function** — update `supabase/schemas/api/reading.sql` and apply via `psql`:
 ```sql
 CREATE OR REPLACE FUNCTION reading_archive(p_reading_id uuid)
 RETURNS jsonb
@@ -282,7 +282,7 @@ END;
 $$;
 ```
 
-**4. Fix data errors** if any exist, via `supabase:execute_sql`:
+**4. Fix data errors** if any exist, via `psql`:
 ```sql
 UPDATE public.readings SET archived_at = NULL WHERE archived_at = '0001-01-01';
 ```
@@ -298,7 +298,7 @@ supabase gen types typescript --local > src/types/database.ts
 
 Example: Auto-update `updated_at` on row changes.
 
-**1. Create trigger function** (once per project) — `supabase/schemas/public/_internal.sql`. Apply via `supabase:execute_sql`:
+**1. Create trigger function** (once per project) — `supabase/schemas/public/_internal.sql`. Apply via `psql`:
 ```sql
 CREATE OR REPLACE FUNCTION _internal_set_updated_at()
 RETURNS trigger
@@ -313,7 +313,7 @@ END;
 $$;
 ```
 
-**2. Create trigger** — `supabase/schemas/public/readings.sql`. Apply via `supabase:execute_sql`:
+**2. Create trigger** — `supabase/schemas/public/readings.sql`. Apply via `psql`:
 ```sql
 DROP TRIGGER IF EXISTS trg_readings_updated_at ON public.readings;
 CREATE TRIGGER trg_readings_updated_at

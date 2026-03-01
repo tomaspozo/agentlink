@@ -1,7 +1,7 @@
 -- =============================================================================
 -- CHECK SETUP: Verify required infrastructure is in place
 -- =============================================================================
--- Run this via supabase:execute_sql to verify that all required extensions, internal
+-- Run this via psql to verify that all required extensions, internal
 -- functions, and Vault secrets exist before starting development.
 --
 -- Returns a single JSON object with the verification results:

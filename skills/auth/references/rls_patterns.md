@@ -485,4 +485,4 @@ RESET role;
 RESET request.jwt.claims;
 ```
 
-Run these via `supabase:execute_sql` to verify policies during development.
+Run these via `psql` to verify policies during development.

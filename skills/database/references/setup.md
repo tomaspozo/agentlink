@@ -35,16 +35,18 @@ Run `supabase status` from the project root. This confirms:
 ## 1. Verify Supabase MCP
 
 Confirm the `supabase` MCP server for local development is connected. The skill
-depends on two tools:
+depends on MCP for two tools:
 
-- `supabase:execute_sql` — run SQL against the local database
 - `supabase:apply_migration` — apply schema migrations
+- `supabase:get_advisors` — run the security advisor
 
-If the server is not available, the user must configure it before proceeding.
+All SQL execution goes through `psql` using the DB URL from `supabase status`.
+
+If the MCP server is not available, the user must configure it before proceeding.
 
 ## 2. Run the Setup Check
 
-Load `assets/check_setup.sql` and execute it via `supabase:execute_sql`. The result is a JSON object:
+Load `assets/check_setup.sql` and execute it via `psql`. The result is a JSON object:
 
 ```json
 {
@@ -92,7 +94,7 @@ If any secret in the `secrets` object is `false`, the values need to be stored i
 
 Get the values from `supabase status` (local) or the Supabase Dashboard (production).
 
-**Path A — Agent creates secrets via `supabase:execute_sql`:**
+**Path A — Agent creates secrets via `psql`:**
 
 Ask the user for the missing values, then run for each:
 
@@ -123,7 +125,7 @@ This is for local development only. Production secrets are managed through the S
 
 ## 7. Re-run the Check
 
-Run `assets/check_setup.sql` again via `supabase:execute_sql` and confirm `"ready": true` before proceeding to Phase 1.
+Run `assets/check_setup.sql` again via `psql` and confirm `"ready": true` before proceeding to Phase 1.
 
 ## 8. Configure API Schemas
 

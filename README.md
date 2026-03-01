@@ -99,7 +99,7 @@ If you need to run these, run them manually in your terminal.
 
 ### MCP Server
 
-The agent requires a Supabase MCP server connected to `http://localhost:54321/mcp` — the native endpoint exposed by `supabase start`. During Phase 0, the agent checks if the MCP is available and guides you through configuring it in your environment (Claude Code, Cursor, Windsurf, etc.) if it isn't. All SQL execution goes through `supabase:execute_sql` — the agent never falls back to `psql`.
+The agent requires a Supabase MCP server connected to `http://localhost:54321/mcp` — the native endpoint exposed by `supabase start`. During Phase 0, the agent checks if the MCP is available and guides you through configuring it in your environment (Claude Code, Cursor, Windsurf, etc.) if it isn't. MCP is used for `supabase:apply_migration` and `supabase:get_advisors`. All SQL execution goes through `psql` using the DB URL from `supabase status`.
 
 ---
 

@@ -5,7 +5,7 @@
 -- Copy these into supabase/schemas/public/_internal.sql in your project.
 --
 -- Before applying these functions, ensure setup verification passes:
---   1. Run check_setup.sql via supabase:execute_sql to see what's missing.
+--   1. Run check_setup.sql via psql to see what's missing.
 --   2. Extensions must be enabled: pg_net, supabase_vault.
 --   3. Vault secrets must be stored. See assets/seed.sql for the full template
 --      and explanation. Append its content to supabase/seed.sql so secrets

@@ -2,7 +2,7 @@
 name: database
 description: Schema files, migrations, and type generation for Supabase Postgres. Use when the task involves creating or modifying tables, columns, indexes, triggers, RLS policies, or database functions. Activate whenever the task touches supabase/schemas/, supabase/migrations/, or involves structural database changes.
 license: MIT
-compatibility: Requires Supabase CLI and Supabase MCP server
+compatibility: Requires Supabase CLI, psql, and Supabase MCP server
 metadata:
   author: agentlink
   version: "0.1"
@@ -14,7 +14,7 @@ Schema files, migrations, and project setup. Prerequisites and architecture are 
 
 ## Setup Check
 
-Run [`assets/check_setup.sql`](./assets/check_setup.sql) via `supabase:execute_sql`. If `"ready": true` → skip to the development loop. If anything is `false` → load [Setup Guide](./references/setup.md).
+Run [`assets/check_setup.sql`](./assets/check_setup.sql) via `psql`. If `"ready": true` → skip to the development loop. If anything is `false` → load [Setup Guide](./references/setup.md).
 
 ---
 
@@ -53,7 +53,7 @@ Files are grouped by Postgres schema (`public/`, `api/`) with entity-centric fil
 ## Development Loop
 
 1. **Write SQL** to the appropriate schema file (see organization above)
-2. **Apply live** — Run the same SQL via `supabase:execute_sql`
+2. **Apply live** — Run the same SQL via `psql`
 3. **Fix errors** with more SQL — never reset the database
 4. **Iterate** until the feature is complete
 
