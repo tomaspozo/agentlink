@@ -235,7 +235,6 @@ npx skills add resend/resend-skills resend/email-best-practices resend/react-ema
 ## Reference Files
 
 - **[🛡️ RLS Patterns](./references/rls_patterns.md)** — Tenant-scoped policies, RBAC, multi-tenancy model, invitation flows, JWT claims
-- **[🔐 Auth Patterns](./references/auth.md)** — OAuth setup, sign-up/sign-in flows, email confirmation, password reset, session guidance
 
 ## Assets
 

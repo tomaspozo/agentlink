@@ -34,7 +34,7 @@ This is **not** just an env var rename. The migration touches client code, edge 
 | Edge function auth | Manual `createClient()` + gateway JWT check | `withSupabase` wrapper handles auth |
 | Edge function config | `verify_jwt = true` (default) | `verify_jwt = false` (required) |
 | Edge function secrets | `SUPABASE_ANON_KEY` env | `SB_PUBLISHABLE_KEY` + `SB_SECRET_KEY` env |
-| Edge function shared code | Custom `supabase.ts`, `supabase-admin.ts` | `withSupabase.ts`, `cors.ts`, `responses.ts` |
+| Edge function shared code | Custom `supabase.ts`, `supabase-admin.ts` | `withSupabase.ts`, `responses.ts` — CORS from SDK |
 | Vault secrets | None or old names | `SB_PUBLISHABLE_KEY`, `SB_SECRET_KEY`, `SUPABASE_URL` |
 | Seed file | No vault secrets | Vault secrets for persistence across `db reset` |
 
@@ -76,7 +76,7 @@ This is the largest part of the migration. Each step below must be completed.
 
 ### 1. Set up shared utilities
 
-Check if `supabase/functions/_shared/withSupabase.ts` exists. If not, tell the user to run `npx create-agentlink@latest` to install the shared utilities (`withSupabase.ts`, `cors.ts`, `responses.ts`, `types.ts`).
+Check if `supabase/functions/_shared/withSupabase.ts` exists. If not, tell the user to run `npx create-agentlink@latest` to install the shared utilities (`withSupabase.ts`, `responses.ts`, `types.ts`).
 
 ### 2. Set `verify_jwt = false` in `config.toml`
 
@@ -141,7 +141,7 @@ Deno.serve(
 
     if (error) return errorResponse(error.message);
     return jsonResponse(data);
-  })
+  }),
 );
 ```
 
@@ -221,7 +221,7 @@ After completing all steps, run through this checklist:
 - [ ] No references to `NEXT_PUBLIC_SUPABASE_ANON_KEY` in codebase
 - [ ] `verify_jwt = false` set for all functions in `config.toml`
 - [ ] Edge function secrets configured (`supabase secrets list`)
-- [ ] Vault secrets present (`check_setup.sql` returns `"ready": true`)
+- [ ] Vault secrets present (`npx create-agentlink check` passes)
 - [ ] Seed file updated with new vault secret names
 - [ ] All edge functions use `withSupabase` wrapper (no manual `createClient`)
 - [ ] Old shared client files removed

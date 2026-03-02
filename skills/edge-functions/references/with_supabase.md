@@ -59,7 +59,7 @@ Deno.serve(
 
     if (error) return errorResponse(error.message);
     return jsonResponse(data);
-  })
+  }),
 );
 ```
 
@@ -92,7 +92,7 @@ Deno.serve(
 
     if (error) return errorResponse(error.message);
     return jsonResponse({ received: true });
-  })
+  }),
 );
 ```
 
@@ -112,12 +112,12 @@ Use this for:
 Deno.serve(
   withSupabase({ allow: "private" }, async (_req, ctx) => {
     const { data, error } = await ctx.adminClient.rpc(
-      "cleanup_expired_sessions"
+      "cleanup_expired_sessions",
     );
 
     if (error) return errorResponse(error.message);
     return jsonResponse({ deleted: data });
-  })
+  }),
 );
 ```
 
@@ -139,7 +139,7 @@ Deno.serve(
 
     if (error) return errorResponse(error.message);
     return jsonResponse(data);
-  })
+  }),
 );
 ```
 
@@ -196,11 +196,11 @@ Deno.serve(
   withSupabase({ allow: "user" }, async (req, ctx) => {
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SB_PUBLISHABLE_KEY")!
+      Deno.env.get("SB_PUBLISHABLE_KEY")!,
     );
     const { data } = await supabase.rpc("some_function");
     // ...
-  })
+  }),
 );
 
 // ✅ CORRECT — use ctx.client
@@ -208,7 +208,7 @@ Deno.serve(
   withSupabase({ allow: "user" }, async (_req, ctx) => {
     const { data } = await ctx.client.rpc("some_function");
     // ...
-  })
+  }),
 );
 ```
 
@@ -220,7 +220,7 @@ Deno.serve(
   withSupabase({ allow: "user" }, async (_req, ctx) => {
     const { data } = await ctx.adminClient.rpc("profile_get_by_user");
     // ...
-  })
+  }),
 );
 
 // ✅ CORRECT — let RLS scope the query to the user
@@ -228,7 +228,7 @@ Deno.serve(
   withSupabase({ allow: "user" }, async (_req, ctx) => {
     const { data } = await ctx.client.rpc("profile_get_by_user");
     // ...
-  })
+  }),
 );
 ```
 
@@ -240,7 +240,7 @@ Deno.serve(
   withSupabase({ allow: "user" }, async (req, ctx) => {
     const signature = req.headers.get("stripe-signature");
     // ...
-  })
+  }),
 );
 
 // ✅ CORRECT — use public, validate the webhook signature yourself
@@ -249,7 +249,7 @@ Deno.serve(
     const signature = req.headers.get("stripe-signature");
     if (!signature) return errorResponse("Missing signature", 401);
     // ...
-  })
+  }),
 );
 ```
 
@@ -265,14 +265,9 @@ interface SupabaseContext {
   client: SupabaseClient;       // Respects RLS
   adminClient: SupabaseClient;  // Bypasses RLS
 
-  // Available when allow is 'user'
-  user?: {
-    id: string;
-    email?: string;
-    role?: string;
-    [key: string]: unknown;
-  };
-  claims?: Record<string, unknown>;
+  // Available when allow includes 'user' and auth succeeds
+  user?: Record<string, unknown>;   // { id, email, role, ...claims }
+  claims?: Record<string, unknown>; // Raw JWT claims from getClaims()
 }
 ```
 
@@ -281,11 +276,11 @@ interface SupabaseContext {
 Do not rewrite this from scratch. The `_shared/` utilities are installed by the CLI. If missing, run `npx create-agentlink@latest`.
 
 The wrapper handles:
-- CORS preflight (`OPTIONS` requests) automatically
+- CORS preflight (`OPTIONS` requests) automatically — uses `corsHeaders` from `@supabase/supabase-js/cors`
 - Resolution of `SB_PUBLISHABLE_KEY` and `SB_SECRET_KEY` from environment
 - Clear error messages if secrets are missing
 - JWT validation via `getClaims` for `allow: "user"`
-- Secret key validation for `allow: "private"`
-- User-scoped client creation with the caller's JWT for `allow: "user"`
-- Public client for `allow: "public"` and `allow: "private"`
+- Secret key validation via `apikey` header for `allow: "private"`
+- User-scoped client creation with the caller's JWT for `allow: "user"` (created per-request)
+- Reusable public and admin clients for `allow: "public"` and `allow: "private"` (created once, shared across requests)
 - Array allow for dual-auth — tries each type in order, first match wins

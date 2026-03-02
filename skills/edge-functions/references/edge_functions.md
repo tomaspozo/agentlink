@@ -21,7 +21,6 @@ Every Edge Function uses the `withSupabase` wrapper. **See [withSupabase Referen
 supabase/functions/
 ├── _shared/                    # Global shared utilities
 │   ├── withSupabase.ts         # Context wrapper (core utility)
-│   ├── cors.ts                 # CORS headers
 │   ├── responses.ts            # Response helpers
 │   └── types.ts                # Shared TypeScript types
 ├── _feature-name/              # Feature-specific shared modules
