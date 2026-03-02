@@ -83,15 +83,21 @@ The database is **never** reset unless the user explicitly requests it.
 
 ## Troubleshooting
 
-If something is missing or broken, the CLI can fix it:
+If something is missing or broken, use `check` to diagnose and `--force-update` to fix:
 
-| Issue | Fix |
-|-------|-----|
-| Missing `_internal_*` functions | `npx create-agentlink check` — re-runs setup validation and fixes missing components |
-| Missing extensions (`pg_net`, `supabase_vault`) | `npx create-agentlink check` |
-| Missing vault secrets | `npx create-agentlink check` |
-| Missing `api` schema or grants | `npx create-agentlink check` |
-| Missing `supabase/schemas/` structure | `npx create-agentlink@latest` in project directory |
+1. **Diagnose:** `npx create-agentlink check` → read the JSON output, look at which fields are `false`
+2. **Fix:** `npx create-agentlink --force-update` → re-applies all setup (templates, config, SQL, migrations)
+3. **Verify:** `npx create-agentlink check` → confirm `ready: true`
+
+| Issue | Diagnose with `check` | Fix |
+|-------|----------------------|-----|
+| Missing `_internal_*` functions | `database.functions: false` | `npx create-agentlink --force-update` |
+| Missing extensions (`pg_net`, `supabase_vault`) | `database.extensions: false` | `npx create-agentlink --force-update` |
+| Missing vault secrets | `database.secrets: false` | `npx create-agentlink --force-update` |
+| Missing `api` schema or grants | `database.api_schema: false` | `npx create-agentlink --force-update` |
+| Missing `supabase/schemas/` structure | `files: false` | `npx create-agentlink --force-update` |
+
+Use `npx create-agentlink info <component>` to understand what a missing component does before fixing it.
 
 ---
 

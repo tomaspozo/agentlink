@@ -26,9 +26,53 @@ These are your app development guidelines — not the project itself. The user's
 The AgentLink CLI handles all project setup and validation. The agent builds — it does not scaffold.
 
 - **Setup a project:** `npx create-agentlink@latest`
-- **Validate setup:** `npx create-agentlink check`
 - **Stack down?** Run `supabase start`. If that fails, ask the user to check their Supabase CLI.
 - **MCP missing?** `supabase:apply_migration` should be available. If not, configure: name `supabase`, type HTTP, URL `http://localhost:54321/mcp`.
+
+### Diagnose with `check`
+
+Command: `npx create-agentlink check`
+
+Outputs JSON with `ready`, `supabase_running`, `database` (extensions, queues, functions, secrets, api_schema), and `files`. Use it before starting work, after errors, or when something seems missing. Look at which fields are `false` to pinpoint the issue.
+
+**`check` is read-only** — it reports problems but does not fix them.
+
+### Fix with `--force-update`
+
+Command: `npx create-agentlink --force-update`
+
+Overwrites template files, patches `config.toml`, applies SQL setup, and generates migrations if schema changed. Requires Supabase to be running. Use after `check` reports missing components or after a CLI version upgrade.
+
+Typical workflow: `check` → identify what's wrong → `--force-update` → `check` again to confirm `ready: true`.
+
+### Look up components with `info`
+
+Commands: `npx create-agentlink info` (summary list) or `npx create-agentlink info <name>` (detail for one component).
+
+Outputs JSON with type, summary, description, signature, and related components. Use after `check` reports a missing component and you need to understand what it does before deciding how to fix it.
+
+### Debug failures
+
+Flag: `npx create-agentlink --debug`
+
+Writes detailed log to `agentlink-debug.log` in the project directory. Use when scaffold or `--force-update` fails with an unclear error. Tell the user to share the log contents if you can't resolve the issue.
+
+### When a managed resource has issues
+
+SQL files in `supabase/schemas/` contain `-- @agentlink <name>` annotations marking resources managed by the CLI (functions, extensions, queues). When you encounter an issue with one of these annotated resources:
+
+1. **Check for updates:** `npx create-agentlink check` — a newer CLI version may ship a fix
+2. **Update resources:** `npx create-agentlink --force-update` — re-applies the latest managed versions
+3. **Verify:** `npx create-agentlink check` — confirm `ready: true`
+
+If the issue persists after updating, **create a project-scoped override:**
+
+- Write the corrected function to the appropriate schema file in `supabase/schemas/` (e.g., `public/_internal.sql`)
+- Remove the `-- @agentlink` annotation block from your version — this makes it project-owned so `--force-update` won't overwrite it
+- Apply via `psql` and generate a migration
+- Let the user know you've created a project-specific override and why, so they're aware it diverges from the managed version
+
+Use `npx create-agentlink info <name>` to read the annotation docs for any managed resource — it shows the type, description, signature, and related components.
 
 #### Tools reference
 
