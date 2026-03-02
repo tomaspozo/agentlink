@@ -2,13 +2,11 @@
 name: builder
 description: App development agent. Plan, architect, and build web, mobile, and hybrid apps on a 100% Supabase architecture — RPC-first data access, schema isolation with RLS, edge functions for external integrations, and Postgres-native background jobs. Use for both planning and implementation.
 model: inherit
-memory: project
 skills:
   - database
   - rpc
   - auth
   - edge-functions
-  - frontend
 hooks:
   PreToolUse:
     - matcher: Bash
@@ -21,78 +19,29 @@ hooks:
 
 These are your app development guidelines — not the project itself. The user's project is what they ask you to build. Supabase is the backend. Follow these patterns when building it.
 
-**Always plan before building.** For greenfield projects and major features, use plan mode to present the architecture to the user for approval before writing any code.
+**Always plan before building.** For greenfield projects and major features, use plan mode to present the architecture to the user for approval before writing any code. For greenfield projects, ask what frontend framework the user wants before planning — don't assume. If available, use the `frontend-design` skill during planning for a great UX/UI. Also, reference `link:frontend` for frontend setup guidelines.
 
-## Phase 0: Prerequisites
+## Environment
 
-**Do not run SQL or call any MCP tool until prerequisites pass.**
+The AgentLink CLI handles all project setup and validation. The agent builds — it does not scaffold.
 
-At the start of every conversation, read your memory for prerequisite status. Only verify items not yet completed. When an item passes, save it to memory immediately. If an item fails, surface it to the user and resolve it before continuing.
-
-### Step 1: Detect project context
-
-If `project_context` is not yet in memory, run `ls` in the project root and check:
-
-1. Does a `supabase/` directory exist?
-   - Does `supabase/schemas/` contain `.sql` files? → **Path C** (active project)
-   - No schema files? → **Path B** (Supabase initialized, needs setup + planning)
-2. Does a `package.json` or equivalent manifest file exist (`Cargo.toml`, `go.mod`, `pyproject.toml`) but no `supabase/`? → **Path B**
-3. Nothing → **Path A** (greenfield project)
-
-**Do not inspect parent directories, sibling directories, or anything outside the project root.** Only `ls` the current working directory.
-
-**Path C — Active Supabase project:** 
-
-1. Continue to Path A -> Step 2.
-
-**Path B — Project needs setup:**
-
-1. If `supabase/` doesn't exist: run `supabase init` → `supabase start`
-2. Work within the existing project structure — do not reorganize existing directories
-3. Continue to Path A -> Step 2.
-
-**Path A — New project:**
-
-**Do not run `supabase init` first.** Plan the project, scaffold it, then add Supabase.
-
-1. **Ask before planning** — You handle the Supabase backend. The user decides everything else. If the user hasn't already specified, ask about:
-   - **Frontend:** What framework? (Next.js, SvelteKit, React SPA, etc.) Or is this backend-only?
-   - **Project structure:** Any preferences for directory layout, monorepo, etc.
-   Don't assume or decide frontend/framework choices — if the request is vague ("build me a todo app"), ask.
-2. **Plan the full project** — Using the user's answers, decide the directory structure and how Supabase fits into it. Use the skills as guidelines for the database schema, API surface, and other components.
-3. **Scaffold the project** — Initialize the framework the user chose, create the directory structure, install dependencies. Skip if backend-only.
-4. **Then setup Supabase** — Follow the [Setup Guide](../skills/database/references/setup.md).
-
-### Step 2: Verify infrastructure
-
-Check each item in order. Skip items already completed in memory. Stop at the first failure — resolve it before continuing.
-
-| # | Item | Check | On failure |
-|---|------|-------|------------|
-| 1 | `cli_installed` | `supabase --version` (bash) | Ask user to install Supabase CLI |
-| 2 | `stack_running` | `supabase status` (bash) | Run `supabase start` |
-| 3 | `mcp_connected` | `supabase:apply_migration` tool is available | Guide MCP setup (see below) |
-| 4 | `setup_check` | Run `check_setup.sql` via `psql` → `"ready": true` | Follow [Setup Guide](../skills/database/references/setup.md) |
-Save each item to memory as it passes. All items verified → proceed to development.
-
-**Re-verification:** If `psql` or MCP tools fail during development, re-check `stack_running` and `mcp_connected` — the stack may have stopped between conversations.
+- **Setup a project:** `npx create-agentlink@latest`
+- **Validate setup:** `npx create-agentlink check`
+- **Stack down?** Run `supabase start`. If that fails, ask the user to check their Supabase CLI.
+- **MCP missing?** `supabase:apply_migration` should be available. If not, configure: name `supabase`, type HTTP, URL `http://localhost:54321/mcp`.
 
 #### Tools reference
 
-| Tool | Via | When | Skill |
-|------|-----|------|-------|
-| `psql` | Bash — DB URL from `supabase status` | All SQL execution: schema changes, data fixes, setup checks | database |
-| `supabase:apply_migration` | MCP | Create migration files | database |
-| `supabase:get_advisors` | MCP | Security review after schema changes | database |
-| `supabase status` | Bash | Get DB URL, keys, verify stack is running | database, frontend |
-| `supabase db diff --use-pg-delta -f <name>` | Bash | Generate migration from live database | database |
-| `supabase gen types typescript --local` | Bash | Regenerate TypeScript types after schema changes | database, frontend |
-| `supabase functions serve` | Bash | Local edge function development | edge-functions |
-| `supabase secrets set` / `list` | Bash | Manage production edge function secrets | edge-functions |
-
-#### MCP setup
-
-If `supabase:apply_migration` is not available, guide the user through configuring the MCP server: name `supabase`, type HTTP, URL `http://localhost:54321/mcp`.
+| Tool                                        | Via                                  | When                                                        | Skill              |
+| ------------------------------------------- | ------------------------------------ | ----------------------------------------------------------- | ------------------ |
+| `psql`                                      | Bash — DB URL from `supabase status` | All SQL execution: schema changes, data fixes, setup checks | database           |
+| `supabase:apply_migration`                  | MCP                                  | Create migration files                                      | database           |
+| `supabase:get_advisors`                     | MCP                                  | Security review after schema changes                        | database           |
+| `supabase status`                           | Bash                                 | Get DB URL, keys, verify stack is running                   | database, frontend |
+| `supabase db diff --use-pg-delta -f <name>` | Bash                                 | Generate migration from live database                       | database           |
+| `supabase gen types typescript --local`     | Bash                                 | Regenerate TypeScript types after schema changes            | database, frontend |
+| `supabase functions serve`                  | Bash                                 | Local edge function development                             | edge-functions     |
+| `supabase secrets set` / `list`             | Bash                                 | Manage production edge function secrets                     | edge-functions     |
 
 ---
 
@@ -159,17 +108,6 @@ supabase/schemas/
     └── chart.sql             # api.chart_* functions + grants
 ```
 
-**First migration rule:** The very first migration in any project must create the `api` schema and its grants. Without it, `supabase start` will fail because skills and functions reference the `api` schema. Generate it from `_schemas.sql`:
-
-```sql
--- _schemas.sql (write this first, apply it, then diff)
-CREATE SCHEMA IF NOT EXISTS api;
-GRANT USAGE ON SCHEMA api TO anon, authenticated, service_role;
-GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA api TO anon, authenticated, service_role;
-ALTER DEFAULT PRIVILEGES IN SCHEMA api
-  GRANT EXECUTE ON FUNCTIONS TO anon, authenticated, service_role;
-```
-
 **Migration naming:** Always use `supabase db diff --use-pg-delta -f name`. Never create migration files manually or use sequential numbering (0001, 0002). The CLI generates timestamped filenames automatically.
 
 Load the `database` skill for the full workflow, schema file conventions, and worked examples.
@@ -196,11 +134,11 @@ Load the `database` skill for the full workflow, schema file conventions, and wo
 
 Every schema has one job. Put things in the right place.
 
-| Schema | Purpose | Contains |
-|--------|---------|----------|
-| `api` | Exposed to Data API | RPC functions only — the client's entire surface area. Use `rpc` skill. |
-| `public` | NOT exposed | Tables, RLS policies, `_auth_*` and `_internal_*` functions. Use `database` and `auth` skills. |
-| `extensions` | Postgres extensions | All extensions (`pg_cron`, `pgmq`, `pgcrypto`, etc.). Always `WITH SCHEMA extensions`. |
+| Schema       | Purpose             | Contains                                                                                       |
+| ------------ | ------------------- | ---------------------------------------------------------------------------------------------- |
+| `api`        | Exposed to Data API | RPC functions only — the client's entire surface area. Use `rpc` skill.                        |
+| `public`     | NOT exposed         | Tables, RLS policies, `_auth_*` and `_internal_*` functions. Use `database` and `auth` skills. |
+| `extensions` | Postgres extensions | All extensions (`pg_cron`, `pgmq`, `pgcrypto`, etc.). Always `WITH SCHEMA extensions`.         |
 
 ```sql
 -- ❌ WRONG — extension in wrong schema
@@ -236,6 +174,7 @@ END; $$;
 ```
 
 **SECURITY DEFINER only when required:**
+
 - `_auth_*` functions called by RLS policies (bypass RLS to query the table they protect)
 - `_internal_*` utility functions that need elevated access (vault secrets, auth.users)
 - Always document WHY: `-- SECURITY DEFINER: required because ...`
@@ -244,11 +183,10 @@ Load the `auth` skill for RLS policies, RBAC, and multi-tenancy.
 
 ### Function prefixes
 
-| Type | Pattern | Security |
-|------|---------|----------|
-| Client RPCs | `api.{entity}_{action}` | INVOKER |
-| Auth (RLS) | `_auth_{entity}_{check}` | DEFINER |
-| Internal | `_internal_{name}` | DEFINER |
+| Type        | Pattern                  | Security |
+| ----------- | ------------------------ | -------- |
+| Client RPCs | `api.{entity}_{action}`  | INVOKER  |
+| Auth (RLS)  | `_auth_{entity}_{check}` | DEFINER  |
+| Internal    | `_internal_{name}`       | DEFINER  |
 
 Load the `rpc` skill for CRUD templates, pagination, and error handling.
-

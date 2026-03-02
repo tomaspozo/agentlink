@@ -4,7 +4,7 @@
 
 An opinionated way to build on Supabase with AI agents.
 
-Agent Link is a Claude Code plugin with composable skills and an app development agent. Each skill covers a specific domain — schema development, RPCs, edge functions, auth, frontend — and Claude loads whichever skills are relevant to the current task automatically. The agent bundles all skills together with prerequisites and architecture enforcement.
+Agent Link is a Claude Code plugin with composable skills and an app development agent. Each skill covers a specific domain — schema development, RPCs, edge functions, auth, frontend — and Claude loads whichever skills are relevant to the current task automatically. The agent bundles all skills together with architecture enforcement and composable skills.
 
 ---
 
@@ -65,41 +65,34 @@ Skills use progressive disclosure to keep context lean:
 3. **References** — loaded on demand from SKILL.md for detailed patterns
 4. **Assets** — ready-to-copy SQL and TypeScript files dropped into projects
 
-The `@agentlink:builder` agent preloads all domain skills and enforces prerequisites and architecture before any work begins. Individual skills can also be used standalone — Claude loads multiple skills simultaneously when a task spans domains.
+The `@agentlink:builder` agent preloads all domain skills and enforces architecture patterns across all skills. Individual skills can also be used standalone — Claude loads multiple skills simultaneously when a task spans domains.
 
 ---
 
 ## Agent Configuration
 
-The app development agent ships with opinionated defaults that affect how it runs:
+The app development agent ships with opinionated defaults:
 
-### Prerequisites (Phase 0)
+### Setup
 
-The agent runs a prerequisite check at the start of every conversation. It tracks each item independently in memory — CLI installed, local stack running, MCP connected, setup scripts passed, companion skills offered. Verified items are skipped on subsequent conversations. Unresolved items are surfaced every time until fixed.
+The CLI handles all project setup. The agent builds — it does not scaffold.
 
-This means if you haven't configured the Supabase MCP server yet, the agent will keep guiding you through it until it's set up. Once it's done, it won't ask again.
+- **New project:** `npx create-agentlink@latest` — scaffolds Supabase, schemas, shared utilities, vault secrets
+- **Validate setup:** `npx create-agentlink check` — verifies extensions, internal functions, vault secrets, api schema
+- **Stack down?** `supabase start`
 
-### Memory
+### MCP Server
 
-The agent has persistent memory scoped to your project (`.claude/agent-memory/builder/`). It builds knowledge across sessions — schema decisions, entity names, setup state, prerequisite status, patterns specific to your codebase. You can:
-
-- **Read it** to see what the agent remembers about your project
-- **Edit it** to correct mistakes or add context the agent should know
-- **Delete it** to start fresh
-- **Commit it** to share project knowledge with your team via version control
+The agent requires a Supabase MCP server connected to `http://localhost:54321/mcp` — the native endpoint exposed by `supabase start`. MCP is used for `supabase:apply_migration` and `supabase:get_advisors`. All SQL execution goes through `psql` using the DB URL from `supabase status`.
 
 ### Blocked Commands
 
-As a protective measure, the agent is blocked from running these destructive database commands:
+The agent is blocked from running destructive database commands:
 
 - `supabase db reset` — destroys and recreates the local database
 - `supabase db push --force` / `-f` — overwrites remote schema without diffing
 
 If you need to run these, run them manually in your terminal.
-
-### MCP Server
-
-The agent requires a Supabase MCP server connected to `http://localhost:54321/mcp` — the native endpoint exposed by `supabase start`. During Phase 0, the agent checks if the MCP is available and guides you through configuring it in your environment (Claude Code, Cursor, Windsurf, etc.) if it isn't. MCP is used for `supabase:apply_migration` and `supabase:get_advisors`. All SQL execution goes through `psql` using the DB URL from `supabase status`.
 
 ---
 
@@ -126,16 +119,6 @@ npx skills add vercel-labs/next-skills --skill next-best-practices   # Next.js p
 ```bash
 npx skills add resend/resend-skills resend/email-best-practices resend/react-email
 ```
-
-See the [Skill Catalog](./docs/CATALOG.md) for details on what each companion provides.
-
----
-
-## Documentation
-
-- **[About Agent Link](./docs/ABOUT.md)** — Principles, architecture, and design philosophy
-- **[Skill Catalog](./docs/CATALOG.md)** — Full catalog with status and roadmap
-- **[Website](https://agentlink.sh)** — Full manifesto, architecture overview, and waitlist
 
 ---
 

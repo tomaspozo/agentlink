@@ -28,15 +28,7 @@ This is required because the `withSupabase` wrapper handles auth itself. If `ver
 
 ### First edge function in a project?
 
-Check if `supabase/functions/_shared/withSupabase.ts` exists. If not:
-
-1. Ask the user if they'd like you to set up the shared utilities
-2. Copy files from this skill's `assets/functions/` into the project's `supabase/functions/_shared/`:
-   - `withSupabase.ts` — context wrapper (the core utility)
-   - `cors.ts` — CORS headers
-   - `responses.ts` — `jsonResponse`, `errorResponse`, `notFound` helpers
-   - `types.ts` — shared TypeScript types
-3. Verify secrets are configured (see below)
+The `_shared/` utilities (`withSupabase.ts`, `cors.ts`, `responses.ts`, `types.ts`) should already exist in `supabase/functions/_shared/` — the CLI sets these up. If missing, run `npx create-agentlink@latest`.
 
 ### Creating a new function
 

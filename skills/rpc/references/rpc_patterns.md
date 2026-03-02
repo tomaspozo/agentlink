@@ -538,7 +538,7 @@ RETURN jsonb_build_object('success', true, 'chart_id', v_id);
 
 ## Grants
 
-Schema-level default privileges handle grants automatically. The `_schemas.sql` file (created by `scaffold_schemas.sh`) contains:
+Schema-level default privileges handle grants automatically. The `_schemas.sql` file contains:
 
 ```sql
 GRANT USAGE ON SCHEMA api TO anon, authenticated, service_role;
