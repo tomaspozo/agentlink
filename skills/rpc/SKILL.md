@@ -54,7 +54,7 @@ $$;
 - **`api.` schema** — all client-facing functions live here
 - **`SECURITY INVOKER`** — RLS applies automatically, no manual `auth.uid()` filtering
 - **`SET search_path = ''`** — prevents search path injection
-- **Fully qualified table names** — `public.charts`, never just `charts`
+- **Fully qualified names** — `public.charts`, `public._auth_*`, `public._internal_*` — never bare names
 - **No per-function `GRANT EXECUTE`** — schema-level default privileges in `_schemas.sql` handle this automatically
 - **`p_` prefix** on parameters, `v_` prefix on local variables
 
@@ -69,7 +69,7 @@ $$;
 
 ```sql
 -- This goes in public schema, NOT api — it's not client-facing
-CREATE OR REPLACE FUNCTION _auth_chart_can_read(p_chart_id uuid)
+CREATE OR REPLACE FUNCTION public._auth_chart_can_read(p_chart_id uuid)
 RETURNS boolean
 LANGUAGE plpgsql
 SECURITY DEFINER  -- required: called by RLS policies on the charts table
@@ -134,6 +134,6 @@ RETURN jsonb_build_object(
 - [ ] Function in `api` schema (not `public`)
 - [ ] `SECURITY INVOKER` (unless `_auth_*` or `_internal_*`)
 - [ ] `SET search_path = ''`
-- [ ] Fully qualified table names (`public.tablename`)
+- [ ] Fully qualified names — tables (`public.tablename`) and function calls (`public._auth_*`, `public._internal_*`)
 - [ ] Don't manually filter by `auth.uid()` in INVOKER functions — RLS does this
 - [ ] Validate input parameters before use

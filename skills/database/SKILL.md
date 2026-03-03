@@ -68,16 +68,46 @@ The database is **never** reset unless the user explicitly requests it.
 
 | Object | Pattern | Example |
 |--------|---------|---------|
-| Tables | plural, snake_case | `charts`, `user_profiles` |
+| Tables | plural, snake_case | `public.charts`, `public.user_profiles` |
 | Columns | singular, snake_case | `user_id`, `created_at` |
 | Client RPCs | `api.{entity}_{action}` | `api.chart_create`, `api.chart_get_by_id` |
-| Auth functions | `_auth_{entity}_{check}` | `_auth_chart_can_read` |
-| Internal functions | `_internal_{name}` | `_internal_get_secret` |
+| Auth functions | `public._auth_{entity}_{check}` | `public._auth_chart_can_read` |
+| Internal functions | `public._internal_{name}` | `public._internal_get_secret` |
 | Indexes | `idx_{table}_{columns}` | `idx_charts_user_id` |
 | Policies | descriptive English | `"Users can read own charts"` |
 | Triggers | `trg_{table}_{event}` | `trg_charts_updated_at` |
 
 > **📋 Load [Naming Conventions](./references/naming_conventions.md) for the full reference.**
+
+## Always Schema-Qualify
+
+Every table, function, and object reference in SQL must include its schema. Never use bare names — even inside function bodies, in CREATE/DROP, or in GRANT/REVOKE.
+
+```sql
+-- ❌ NOT THIS — bare table names
+SELECT * FROM charts WHERE user_id = auth.uid();
+
+-- ✅ THIS — schema-qualified
+SELECT * FROM public.charts WHERE user_id = auth.uid();
+
+-- ❌ NOT THIS — bare function definition
+CREATE OR REPLACE FUNCTION _auth_chart_can_read(p_chart_id uuid) ...
+
+-- ✅ THIS
+CREATE OR REPLACE FUNCTION public._auth_chart_can_read(p_chart_id uuid) ...
+
+-- ❌ NOT THIS — bare function call
+PERFORM _internal_call_edge_function('queue-worker');
+
+-- ✅ THIS
+PERFORM public._internal_call_edge_function('queue-worker');
+
+-- ❌ NOT THIS — bare GRANT/REVOKE
+GRANT EXECUTE ON FUNCTION _internal_get_secret(text) TO service_role;
+
+-- ✅ THIS
+GRANT EXECUTE ON FUNCTION public._internal_get_secret(text) TO service_role;
+```
 
 ---
 

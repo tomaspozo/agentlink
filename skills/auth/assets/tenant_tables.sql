@@ -54,7 +54,7 @@ CREATE INDEX IF NOT EXISTS idx_invitations_token
   ON public.invitations(token) WHERE accepted_at IS NULL;
 
 -- Auth helper functions
-CREATE OR REPLACE FUNCTION _auth_tenant_id()
+CREATE OR REPLACE FUNCTION public._auth_tenant_id()
 RETURNS uuid
 LANGUAGE sql
 STABLE
@@ -64,7 +64,7 @@ AS $$
   SELECT (auth.jwt() -> 'app_metadata' ->> 'tenant_id')::uuid;
 $$;
 
-CREATE OR REPLACE FUNCTION _auth_tenant_role()
+CREATE OR REPLACE FUNCTION public._auth_tenant_role()
 RETURNS text
 LANGUAGE sql
 STABLE
@@ -74,7 +74,7 @@ AS $$
   SELECT (auth.jwt() -> 'app_metadata' ->> 'tenant_role')::text;
 $$;
 
-CREATE OR REPLACE FUNCTION _auth_has_role(p_minimum_role text)
+CREATE OR REPLACE FUNCTION public._auth_has_role(p_minimum_role text)
 RETURNS boolean
 LANGUAGE plpgsql
 STABLE
@@ -82,7 +82,7 @@ SECURITY INVOKER
 SET search_path = ''
 AS $$
 DECLARE
-  v_role text := _auth_tenant_role();
+  v_role text := public._auth_tenant_role();
   v_levels jsonb := '{"viewer": 1, "member": 2, "admin": 3, "owner": 4}'::jsonb;
 BEGIN
   RETURN COALESCE(
@@ -92,7 +92,7 @@ BEGIN
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION _auth_is_tenant_member(p_tenant_id uuid)
+CREATE OR REPLACE FUNCTION public._auth_is_tenant_member(p_tenant_id uuid)
 RETURNS boolean
 LANGUAGE plpgsql
 SECURITY DEFINER  -- required: avoids RLS recursion on memberships table
@@ -109,27 +109,27 @@ $$;
 -- RLS policies
 CREATE POLICY "Members can read own tenants"
 ON public.tenants FOR SELECT
-USING (_auth_is_tenant_member(id));
+USING (public._auth_is_tenant_member(id));
 
 CREATE POLICY "Members can read tenant memberships"
 ON public.memberships FOR SELECT
-USING (tenant_id = _auth_tenant_id());
+USING (tenant_id = public._auth_tenant_id());
 
 CREATE POLICY "Admins can insert memberships"
 ON public.memberships FOR INSERT
 WITH CHECK (
-  tenant_id = _auth_tenant_id() AND _auth_has_role('admin')
+  tenant_id = public._auth_tenant_id() AND public._auth_has_role('admin')
 );
 
 CREATE POLICY "Admins can delete memberships"
 ON public.memberships FOR DELETE
 USING (
-  tenant_id = _auth_tenant_id() AND _auth_has_role('admin')
+  tenant_id = public._auth_tenant_id() AND public._auth_has_role('admin')
 );
 
 CREATE POLICY "Admins can read invitations"
 ON public.invitations FOR SELECT
-USING (tenant_id = _auth_tenant_id() AND _auth_has_role('admin'));
+USING (tenant_id = public._auth_tenant_id() AND public._auth_has_role('admin'));
 
 -- API functions
 CREATE OR REPLACE FUNCTION api.tenant_select(p_tenant_id uuid)

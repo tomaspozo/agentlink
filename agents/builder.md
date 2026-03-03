@@ -158,21 +158,9 @@ Load the `database` skill for the full workflow, schema file conventions, and wo
 
 ### Always schema-qualify
 
-Every table, function, and object reference in SQL must include its schema name. Never use unqualified names — even inside function bodies.
+Every SQL identifier must include its schema (`public.charts`, `public._auth_*`, `api.chart_create`). No bare names — in definitions, calls, grants, or anywhere else.
 
-```sql
--- ❌ WRONG — unqualified
-SELECT * FROM charts WHERE user_id = auth.uid();
-INSERT INTO pings (monitor_id, is_up) VALUES (...);
-
--- ✅ CORRECT — always schema-qualified
-SELECT * FROM public.charts WHERE user_id = auth.uid();
-INSERT INTO public.pings (monitor_id, is_up) VALUES (...);
-```
-
-This prevents `search_path` ambiguity and makes it explicit which schema owns each object.
-
-Load the `database` skill for the full workflow, schema file conventions, and worked examples.
+Load the `database` skill for full NOT THIS / THIS examples.
 
 ### Schema usage
 
@@ -230,7 +218,7 @@ Load the `auth` skill for RLS policies, RBAC, and multi-tenancy.
 | Type        | Pattern                  | Security |
 | ----------- | ------------------------ | -------- |
 | Client RPCs | `api.{entity}_{action}`  | INVOKER  |
-| Auth (RLS)  | `_auth_{entity}_{check}` | DEFINER  |
-| Internal    | `_internal_{name}`       | DEFINER  |
+| Auth (RLS)  | `public._auth_{entity}_{check}` | DEFINER  |
+| Internal    | `public._internal_{name}`       | DEFINER  |
 
 Load the `rpc` skill for CRUD templates, pagination, and error handling.

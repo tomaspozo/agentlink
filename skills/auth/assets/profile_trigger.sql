@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS public.profiles (
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
 -- Trigger function
-CREATE OR REPLACE FUNCTION _internal_handle_new_user()
+CREATE OR REPLACE FUNCTION public._internal_handle_new_user()
 RETURNS trigger
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -41,7 +41,7 @@ $$;
 CREATE TRIGGER trg_auth_users_new_user
   AFTER INSERT ON auth.users
   FOR EACH ROW
-  EXECUTE FUNCTION _internal_handle_new_user();
+  EXECUTE FUNCTION public._internal_handle_new_user();
 
 -- RLS policies
 CREATE POLICY "Users can read own profile"

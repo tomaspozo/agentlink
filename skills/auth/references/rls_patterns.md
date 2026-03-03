@@ -24,15 +24,15 @@ RLS has two clause types:
 
 ```sql
 -- USING: "which rows can I read?"
-CREATE POLICY "read own" ON charts FOR SELECT
+CREATE POLICY "read own" ON public.charts FOR SELECT
 USING (user_id = auth.uid());
 
 -- WITH CHECK: "can I insert this row?"
-CREATE POLICY "insert own" ON charts FOR INSERT
+CREATE POLICY "insert own" ON public.charts FOR INSERT
 WITH CHECK (user_id = auth.uid());
 
 -- UPDATE needs both: USING filters which rows you can target, WITH CHECK validates the result
-CREATE POLICY "update own" ON charts FOR UPDATE
+CREATE POLICY "update own" ON public.charts FOR UPDATE
 USING (user_id = auth.uid())
 WITH CHECK (user_id = auth.uid());
 ```
@@ -101,7 +101,7 @@ WITH CHECK (
 For cleaner policies, extract the claim into a helper:
 
 ```sql
-CREATE OR REPLACE FUNCTION _auth_tenant_id()
+CREATE OR REPLACE FUNCTION public._auth_tenant_id()
 RETURNS uuid
 LANGUAGE sql
 STABLE
@@ -117,7 +117,7 @@ Then policies become:
 ```sql
 CREATE POLICY "Tenant members can read projects"
 ON public.projects FOR SELECT
-USING (tenant_id = _auth_tenant_id());
+USING (tenant_id = public._auth_tenant_id());
 ```
 
 ---
@@ -138,7 +138,7 @@ Roles are stored in the `memberships` table and optionally in JWT claims for fas
 ### Role-checking helper
 
 ```sql
-CREATE OR REPLACE FUNCTION _auth_tenant_role()
+CREATE OR REPLACE FUNCTION public._auth_tenant_role()
 RETURNS text
 LANGUAGE sql
 STABLE
@@ -149,7 +149,7 @@ AS $$
 $$;
 
 -- For checking minimum role level
-CREATE OR REPLACE FUNCTION _auth_has_role(p_minimum_role text)
+CREATE OR REPLACE FUNCTION public._auth_has_role(p_minimum_role text)
 RETURNS boolean
 LANGUAGE plpgsql
 STABLE
@@ -157,7 +157,7 @@ SECURITY INVOKER
 SET search_path = ''
 AS $$
 DECLARE
-  v_role text := _auth_tenant_role();
+  v_role text := public._auth_tenant_role();
   v_levels jsonb := '{"viewer": 1, "member": 2, "admin": 3, "owner": 4}'::jsonb;
 BEGIN
   RETURN (v_levels ->> v_role)::int >= (v_levels ->> p_minimum_role)::int;
@@ -171,22 +171,22 @@ $$;
 -- Viewers and above can read
 CREATE POLICY "Tenant members can read projects"
 ON public.projects FOR SELECT
-USING (tenant_id = _auth_tenant_id());
+USING (tenant_id = public._auth_tenant_id());
 
 -- Members and above can write
 CREATE POLICY "Members can insert projects"
 ON public.projects FOR INSERT
 WITH CHECK (
-  tenant_id = _auth_tenant_id()
-  AND _auth_has_role('member')
+  tenant_id = public._auth_tenant_id()
+  AND public._auth_has_role('member')
 );
 
 -- Admins and above can delete
 CREATE POLICY "Admins can delete projects"
 ON public.projects FOR DELETE
 USING (
-  tenant_id = _auth_tenant_id()
-  AND _auth_has_role('admin')
+  tenant_id = public._auth_tenant_id()
+  AND public._auth_has_role('admin')
 );
 ```
 
@@ -239,7 +239,7 @@ ALTER TABLE public.invitations ENABLE ROW LEVEL SECURITY;
 ### Membership check helper
 
 ```sql
-CREATE OR REPLACE FUNCTION _auth_is_tenant_member(p_tenant_id uuid)
+CREATE OR REPLACE FUNCTION public._auth_is_tenant_member(p_tenant_id uuid)
 RETURNS boolean
 LANGUAGE plpgsql
 SECURITY DEFINER  -- required: RLS on memberships would cause recursion
@@ -261,19 +261,19 @@ $$;
 -- Tenants: members can see their own tenants
 CREATE POLICY "Members can read own tenants"
 ON public.tenants FOR SELECT
-USING (_auth_is_tenant_member(id));
+USING (public._auth_is_tenant_member(id));
 
 -- Memberships: members can see other members of their tenant
 CREATE POLICY "Members can read tenant memberships"
 ON public.memberships FOR SELECT
-USING (tenant_id = _auth_tenant_id());
+USING (tenant_id = public._auth_tenant_id());
 
 -- Memberships: only admins can manage members
 CREATE POLICY "Admins can manage memberships"
 ON public.memberships FOR INSERT
 WITH CHECK (
-  tenant_id = _auth_tenant_id()
-  AND _auth_has_role('admin')
+  tenant_id = public._auth_tenant_id()
+  AND public._auth_has_role('admin')
 );
 ```
 
@@ -345,7 +345,7 @@ AS $$
 DECLARE
   v_invitation record;
 BEGIN
-  IF NOT _auth_has_role('admin') THEN
+  IF NOT public._auth_has_role('admin') THEN
     RAISE EXCEPTION 'Only admins can invite members';
   END IF;
 
@@ -353,13 +353,13 @@ BEGIN
   IF EXISTS (
     SELECT 1 FROM public.memberships m
     JOIN auth.users u ON u.id = m.user_id
-    WHERE m.tenant_id = _auth_tenant_id() AND u.email = p_email
+    WHERE m.tenant_id = public._auth_tenant_id() AND u.email = p_email
   ) THEN
     RAISE EXCEPTION 'User is already a member';
   END IF;
 
   INSERT INTO public.invitations (tenant_id, email, role, invited_by)
-  VALUES (_auth_tenant_id(), p_email, p_role, auth.uid())
+  VALUES (public._auth_tenant_id(), p_email, p_role, auth.uid())
   RETURNING * INTO v_invitation;
 
   -- Send invitation email via edge function
@@ -368,7 +368,7 @@ BEGIN
     jsonb_build_object(
       'email', p_email,
       'token', v_invitation.token,
-      'tenant_id', _auth_tenant_id()
+      'tenant_id', public._auth_tenant_id()
     )
   );
 

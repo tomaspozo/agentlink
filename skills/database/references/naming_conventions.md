@@ -27,9 +27,9 @@ Consistent naming across all database objects.
 
 | Type | Pattern | Example |
 |------|---------|---------|
-| Business logic | `{entity}_{action}` | `chart_create`, `chart_get_by_id`, `reading_archive` |
-| Auth (RLS) | `_auth_{entity}_{check}` | `_auth_chart_can_read`, `_auth_reading_is_owner` |
-| Internal utils | `_internal_{name}` | `_internal_get_secret`, `_internal_call_edge_function` |
+| Business logic | `api.{entity}_{action}` | `api.chart_create`, `api.chart_get_by_id`, `api.reading_archive` |
+| Auth (RLS) | `public._auth_{entity}_{check}` | `public._auth_chart_can_read`, `public._auth_reading_is_owner` |
+| Internal utils | `public._internal_{name}` | `public._internal_get_secret`, `public._internal_call_edge_function` |
 
 ### Function Actions (Common Verbs)
 

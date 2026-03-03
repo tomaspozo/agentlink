@@ -108,7 +108,7 @@ Example: Adding a `readings` entity to a project that already has `charts`.
 
 **1. Create auth functions** — `supabase/schemas/public/_auth.sql`:
 ```sql
-CREATE OR REPLACE FUNCTION _auth_reading_can_read(p_reading_id uuid)
+CREATE OR REPLACE FUNCTION public._auth_reading_can_read(p_reading_id uuid)
 RETURNS boolean
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -123,7 +123,7 @@ BEGIN
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION _auth_reading_is_owner(p_reading_id uuid)
+CREATE OR REPLACE FUNCTION public._auth_reading_is_owner(p_reading_id uuid)
 RETURNS boolean
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -164,7 +164,7 @@ CREATE INDEX IF NOT EXISTS idx_readings_created_at ON public.readings(created_at
 -- RLS policies
 CREATE POLICY "Users can read own or public readings"
 ON public.readings FOR SELECT
-USING (_auth_reading_can_read(id));
+USING (public._auth_reading_can_read(id));
 
 CREATE POLICY "Users can insert own readings"
 ON public.readings FOR INSERT
@@ -172,11 +172,11 @@ WITH CHECK (user_id = auth.uid());
 
 CREATE POLICY "Users can update own readings"
 ON public.readings FOR UPDATE
-USING (_auth_reading_is_owner(id));
+USING (public._auth_reading_is_owner(id));
 
 CREATE POLICY "Users can delete own readings"
 ON public.readings FOR DELETE
-USING (_auth_reading_is_owner(id));
+USING (public._auth_reading_is_owner(id));
 ```
 
 Apply via `psql`.
@@ -261,7 +261,7 @@ WHERE archived_at IS NOT NULL;
 
 **3. Add the function** — update `supabase/schemas/api/reading.sql` and apply via `psql`:
 ```sql
-CREATE OR REPLACE FUNCTION reading_archive(p_reading_id uuid)
+CREATE OR REPLACE FUNCTION api.reading_archive(p_reading_id uuid)
 RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY INVOKER
@@ -300,7 +300,7 @@ Example: Auto-update `updated_at` on row changes.
 
 **1. Create trigger function** (once per project) — `supabase/schemas/public/_internal.sql`. Apply via `psql`:
 ```sql
-CREATE OR REPLACE FUNCTION _internal_set_updated_at()
+CREATE OR REPLACE FUNCTION public._internal_set_updated_at()
 RETURNS trigger
 LANGUAGE plpgsql
 SECURITY INVOKER
@@ -319,5 +319,5 @@ DROP TRIGGER IF EXISTS trg_readings_updated_at ON public.readings;
 CREATE TRIGGER trg_readings_updated_at
   BEFORE UPDATE ON public.readings
   FOR EACH ROW
-  EXECUTE FUNCTION _internal_set_updated_at();
+  EXECUTE FUNCTION public._internal_set_updated_at();
 ```

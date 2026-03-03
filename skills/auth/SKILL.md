@@ -56,7 +56,7 @@ ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ```sql
 -- Trigger function: supabase/schemas/public/_internal.sql
 -- Trigger: supabase/schemas/public/profiles.sql
-CREATE OR REPLACE FUNCTION _internal_handle_new_user()
+CREATE OR REPLACE FUNCTION public._internal_handle_new_user()
 RETURNS trigger
 LANGUAGE plpgsql
 SECURITY DEFINER  -- required: reads from auth.users which RLS can't access
@@ -76,7 +76,7 @@ $$;
 CREATE TRIGGER trg_auth_users_new_user
   AFTER INSERT ON auth.users
   FOR EACH ROW
-  EXECUTE FUNCTION _internal_handle_new_user();
+  EXECUTE FUNCTION public._internal_handle_new_user();
 ```
 
 ### Profile RPCs
@@ -173,7 +173,7 @@ When access checks are more complex than a single column comparison, use `_auth_
 
 ```sql
 -- supabase/schemas/public/_auth.sql
-CREATE OR REPLACE FUNCTION _auth_chart_can_read(p_chart_id uuid)
+CREATE OR REPLACE FUNCTION public._auth_chart_can_read(p_chart_id uuid)
 RETURNS boolean
 LANGUAGE plpgsql
 SECURITY DEFINER  -- required: called by RLS on the table it queries
@@ -191,7 +191,7 @@ $$;
 -- Policy uses the function
 CREATE POLICY "Users can read own or public charts"
 ON public.charts FOR SELECT
-USING (_auth_chart_can_read(id));
+USING (public._auth_chart_can_read(id));
 ```
 
 **When to use helpers vs inline:** Use inline `user_id = auth.uid()` when the check is a single column comparison. Use `_auth_*` helpers when the check involves joins, multiple conditions, or tenant membership lookups. Don't over-abstract — a simple `USING` clause doesn't need a function.

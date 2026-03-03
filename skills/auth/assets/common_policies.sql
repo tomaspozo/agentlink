@@ -37,23 +37,23 @@ USING (user_id = auth.uid());
 
 CREATE POLICY "Tenant members can read <table>"
 ON public.<table> FOR SELECT
-USING (tenant_id = _auth_tenant_id());
+USING (tenant_id = public._auth_tenant_id());
 
 CREATE POLICY "Tenant members can insert <table>"
 ON public.<table> FOR INSERT
 WITH CHECK (
-  tenant_id = _auth_tenant_id()
-  AND _auth_has_role('member')
+  tenant_id = public._auth_tenant_id()
+  AND public._auth_has_role('member')
 );
 
 CREATE POLICY "Tenant members can update <table>"
 ON public.<table> FOR UPDATE
-USING (tenant_id = _auth_tenant_id() AND _auth_has_role('member'))
-WITH CHECK (tenant_id = _auth_tenant_id());
+USING (tenant_id = public._auth_tenant_id() AND public._auth_has_role('member'))
+WITH CHECK (tenant_id = public._auth_tenant_id());
 
 CREATE POLICY "Tenant admins can delete <table>"
 ON public.<table> FOR DELETE
-USING (tenant_id = _auth_tenant_id() AND _auth_has_role('admin'));
+USING (tenant_id = public._auth_tenant_id() AND public._auth_has_role('admin'));
 
 
 -- ---------------------------------------------------------------------------
