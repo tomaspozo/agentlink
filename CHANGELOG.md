@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.6.1] - 2026-03-02
+
+### Added
+
+- "Always Schema-Qualify" section in database skill with NOT THIS / THIS examples for tables, function definitions, function calls, and grants
+- Detailed CLI command sections in builder agent: `check`, `--force-update`, `info`, `--debug`
+- Guidance for handling managed `@agentlink` resources (update, override, or project-scope)
+
+### Changed
+
+- Enforce `public.` schema prefix on all `_auth_*` and `_internal_*` function references — definitions, calls, triggers, grants, and RLS policies across all skills
+- Update naming convention tables to include schema prefixes (`public._auth_*`, `public._internal_*`)
+- Expand RPC checklist to cover schema-qualified function calls, not just table names
+
 ## [0.6.0] - 2026-03-01
 
 The agent no longer sets up your project — the CLI does. This is a fundamental shift in how Agent Link works: infrastructure setup (`npx create-agentlink`) runs once in seconds, and the agent spends zero tokens verifying prerequisites, copying asset files, or scaffolding directories. Every token goes toward building your app.
