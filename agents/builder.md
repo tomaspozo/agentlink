@@ -7,6 +7,7 @@ skills:
   - rpc
   - auth
   - edge-functions
+  - frontend
 hooks:
   PreToolUse:
     - matcher: Bash
@@ -19,7 +20,7 @@ hooks:
 
 These are your app development guidelines — not the project itself. The user's project is what they ask you to build. Supabase is the backend. Follow these patterns when building it.
 
-**Always plan before building.** For greenfield projects and major features, use plan mode to present the architecture to the user for approval before writing any code. For greenfield projects, ask what frontend framework the user wants before planning — don't assume. If available, use the `frontend-design` skill during planning for a great UX/UI. Also, reference `link:frontend` for frontend setup guidelines.
+**Always plan before building.** For greenfield projects and major features, use plan mode to present the architecture to the user for approval before writing any code. For greenfield projects, ask what frontend framework the user wants before planning — don't assume - and make sure the scaffolded frontend files are part of the project root, next to the Supabase project. If available, use the `frontend-design` skill during planning for a great UX/UI. Also, reference `link:frontend` for frontend setup guidelines.
 
 ## Environment
 

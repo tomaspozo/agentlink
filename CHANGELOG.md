@@ -16,7 +16,7 @@
 
 ## [0.6.0] - 2026-03-01
 
-The agent no longer sets up your project — the CLI does. This is a fundamental shift in how Agent Link works: infrastructure setup (`npx create-agentlink`) runs once in seconds, and the agent spends zero tokens verifying prerequisites, copying asset files, or scaffolding directories. Every token goes toward building your app.
+The agent no longer sets up your project — the CLI does. This is a fundamental shift in how Agent Link works: infrastructure setup with `npx create-agentlink` and the agent spends zero tokens verifying prerequisites, copying asset files, or scaffolding directories. Every token goes toward building your app.
 
 This aligns with the Agent Link philosophy: **tools for agents, not agents as tools.** The CLI is purpose-built tooling that gives the agent a ready environment. The agent is a builder that assumes a working environment and gets to work. Each does what it's best at.
 
