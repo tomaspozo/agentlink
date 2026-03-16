@@ -15,14 +15,16 @@ The daily development loop. How agents build features, apply changes, and produc
 
 The agent applies every change in two places simultaneously:
 
-1. **The live database** (local or cloud) — via `psql`, so changes take effect immediately
+1. **The live database** (local or cloud) — via `npx create-agentlink@latest db apply` or `psql`, so changes take effect immediately
 2. **The schema files** — in `supabase/schemas/`, so the source of truth stays in sync
 
 Schema files are the canonical representation of your database. The live database is the working copy. Both must always reflect the same state.
 
-> **Cloud mode:** Use the remote `psql` connection string from `CLAUDE.md` instead of the local DB URL from `supabase status`.
+**Apply methods:**
+- **Batch (recommended):** `npx create-agentlink@latest db apply` — applies all schema files with correct ordering via `pgdelta`. DB URL auto-resolved from `.env.local`.
+- **Single statement:** `psql <db_url> -c "SQL"` — fine for quick one-off changes.
 
-Schema files are clean declarations — no `DROP` statements. Use `CREATE TABLE IF NOT EXISTS`, `CREATE OR REPLACE FUNCTION`, `CREATE INDEX IF NOT EXISTS`, plain `CREATE POLICY`, plain `CREATE TRIGGER`. DROPs belong in migrations only.
+Schema files are clean declarations — no `DROP` statements. Use `CREATE TABLE IF NOT EXISTS`, `CREATE OR REPLACE FUNCTION`, `CREATE INDEX IF NOT EXISTS`, `DROP POLICY IF EXISTS` + `CREATE POLICY`. DROPs belong in migrations only.
 
 **The database is never reset unless the user explicitly requests it.**
 
@@ -35,9 +37,9 @@ Schema files are clean declarations — no `DROP` statements. Use `CREATE TABLE 
 When building a feature, the agent:
 
 1. Writes the SQL in the appropriate schema file (see [naming conventions](./naming_conventions.md))
-2. Immediately applies the same SQL via `psql` — every file write must be followed by an apply
-   - **Local:** DB URL from `supabase status`
-   - **Cloud:** remote connection string from `CLAUDE.md`
+2. Applies via `npx create-agentlink@latest db apply` — every file write must be followed by an apply
+   - DB URL auto-resolved from `.env.local` (no `--db-url` needed)
+   - **Single statement:** `psql <db_url> -c "SQL"` is fine for quick one-off changes
 3. If something breaks, fixes it with more SQL — never resets
 4. Continues building until the feature is complete
 
@@ -75,22 +77,26 @@ No migrations are created. The agent works directly against the live database wh
 Generate a single migration capturing all un-migrated changes:
 
 ```bash
-# Local
-supabase db diff --use-pg-delta -f descriptive_migration_name
+# Local or Cloud (DB URL auto-resolved from .env.local)
+npx create-agentlink@latest db migrate descriptive_migration_name
 
-# Cloud — diff against the linked remote project, then push
-supabase db diff --use-pg-delta -f descriptive_migration_name --linked
+# Cloud only: push after generating
 supabase db push
 ```
 
-This compares the live database against the migrations folder and outputs everything that's different as one migration file. The `--use-pg-delta` flag automatically resolves statement ordering (tables before indexes, functions before triggers, etc.).
+**What the command does:**
+Exports baseline catalog → applies schemas → exports desired catalog → diffs baseline vs desired → writes migration file. Non-destructive — no reset, no data backup needed.
+
+Statement ordering is handled automatically by `pgdelta`.
+
+**Limitation:** `pgdelta` filters out `cron` and `storage` schemas. If your change includes `cron.schedule()` or storage policies, append them manually to the generated migration file.
 
 ### Review
 
 Check the generated file in `supabase/migrations/`:
 
 - Verify all changes are captured
-- Statement ordering is handled automatically by `--use-pg-delta`
+- Statement ordering is handled automatically by `pgdelta`
 - If any `psql` data fixes are needed for the migration to replay cleanly, add them manually
 
 ### Verify (requires user confirmation)
@@ -112,6 +118,8 @@ supabase gen types typescript --project-id <ref> > src/types/database.ts
 ```
 
 Run this after completing a set of related changes, not after every individual statement.
+
+**Prerequisite:** `pgdelta` is bundled with the CLI — no separate install needed.
 
 ---
 
@@ -154,7 +162,7 @@ END;
 $$;
 ```
 
-Apply via `psql`.
+Apply via `npx create-agentlink@latest db apply`.
 
 **2. Create the entity file** — `supabase/schemas/public/readings.sql`:
 ```sql
@@ -194,7 +202,7 @@ ON public.readings FOR DELETE
 USING (public._auth_reading_is_owner(id));
 ```
 
-Apply via `psql`.
+Apply via `npx create-agentlink@latest db apply`.
 
 **3. Create API functions** — `supabase/schemas/api/reading.sql`:
 ```sql
@@ -245,7 +253,7 @@ END;
 $$;
 ```
 
-Apply via `psql`.
+Apply via `npx create-agentlink@latest db apply`.
 
 **4. Generate types:**
 ```bash

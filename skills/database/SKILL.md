@@ -32,7 +32,7 @@ supabase/schemas/
     └── chart.sql              # Custom api.chart_* functions
 ```
 
-Files are grouped by Postgres schema (`public/`, `api/`) with entity-centric files inside. Statement ordering is handled automatically by `supabase db diff --use-pg-delta`.
+Files are grouped by Postgres schema (`public/`, `api/`) with entity-centric files inside. Statement ordering is handled automatically by `pgdelta declarative apply`.
 
 **Conventions:**
 - `public/` files = **plural** (match table names): `charts.sql`
@@ -45,8 +45,10 @@ Files are grouped by Postgres schema (`public/`, `api/`) with entity-centric fil
 
 - No `DROP` statements in schema files — clean declarations only
 - Use: `CREATE TABLE IF NOT EXISTS`, `CREATE OR REPLACE FUNCTION`, `CREATE INDEX IF NOT EXISTS`, plain `CREATE POLICY`, plain `CREATE TRIGGER`
+- Exception: use `DROP POLICY IF EXISTS` + `CREATE POLICY` for idempotent policies (policies don't support `CREATE OR REPLACE`)
+- Use `record` type in `DECLARE` blocks (not `public.tablename%rowtype`) — avoids ordering issues with `pgdelta`
 - `DROP` statements belong in migrations only (for renaming/cleanup)
-- Reason: schema files represent desired state for `db diff`; drops create phantom diffs
+- Reason: schema files represent desired state for `pgdelta`; unnecessary drops create phantom diffs
 
 ### `@agentlink` Annotations
 
@@ -74,26 +76,17 @@ CREATE OR REPLACE FUNCTION api.chart_create(...)
 ## Development Loop
 
 1. **Write SQL** to the appropriate schema file (see organization above)
-2. **Apply live** — Run the same SQL via `psql`
+2. **Apply** — `npx create-agentlink@latest db apply`
 3. **Fix errors** with more SQL — never reset the database
 4. **Iterate** until the feature is complete
 
 > **Companion:** If `supabase-postgres-best-practices` is available, invoke it to review schema changes before proceeding.
 
-5. **Generate types** — `supabase gen types typescript --local > src/types/database.ts`
-6. **Create migration** — `supabase db diff --use-pg-delta -f descriptive_migration_name`
+5. **Generate types** — `supabase gen types typescript --local > src/types/database.ts` (cloud: `--project-id <ref>`)
+6. **Create migration** — `npx create-agentlink@latest db migrate descriptive_name`
+7. **(Cloud only) Push** — `supabase db push`
 
-### Cloud mode
-
-The same loop applies, but with cloud-specific commands. Check `CLAUDE.md` for the remote `psql` connection string.
-
-1. **Write SQL** to the appropriate schema file
-2. **Apply live** — Run the same SQL via `psql` using the remote connection string from `CLAUDE.md`
-3. **Fix errors** with more SQL — never reset the database
-4. **Iterate** until the feature is complete
-5. **Generate types** — `supabase gen types typescript --project-id <ref> > src/types/database.ts`
-6. **Create migration** — `supabase db diff --use-pg-delta -f descriptive_name --linked`
-7. **Push to cloud** — `supabase db push`
+The DB URL is auto-resolved from `.env.local` (written by the CLI during scaffold). No `--db-url` flag needed in either local or cloud mode.
 
 > **📝 Load [Development](./references/workflow.md) for the full workflow, error handling, and worked examples (new entity, new field, triggers).**
 

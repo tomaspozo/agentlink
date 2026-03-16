@@ -50,7 +50,31 @@ Calls `supabase migration repair <version> --status applied --local` for each ve
 
 ---
 
-## How `db diff` Works Internally
+## Why `pgdelta` Instead of `supabase db diff`
+
+`supabase db diff` (including `--use-pg-delta`) applies schema files **alphabetically** to a shadow database. This breaks when schema files have cross-file FK references — e.g., `animals.sql` creates a table that `birth_records.sql` references, but `birth_records.sql` sorts first alphabetically. The shadow DB build fails.
+
+**Solution:** We use `pgdelta` (bundled with the CLI) via two subcommands:
+
+- `npx create-agentlink@latest db apply` — applies all schema files with `pgdelta declarative apply`, which resolves statement ordering automatically
+- `npx create-agentlink@latest db migrate name` — generates migrations by comparing catalog snapshots (no shadow DB needed)
+
+DB URL is auto-resolved from `.env.local` (written during scaffold). No `--db-url` flag needed. An explicit `--db-url` override is available if needed.
+
+### How `db migrate` works
+
+Unified flow for both local and cloud:
+1. Exports baseline catalog from current DB state
+2. Applies schemas via `pgdelta declarative apply`
+3. Exports desired state catalog
+4. Diffs baseline vs desired (`pgdelta plan`) → writes migration file
+5. (Cloud only) User pushes with `supabase db push`
+
+Non-destructive — no `db reset`, no data backup/restore.
+
+**Limitation:** `pgdelta` filters out `cron` and `storage` schemas. Append `cron.schedule()` or storage policies manually to the generated migration.
+
+### Legacy: How `db diff` worked internally
 
 1. Creates a **shadow database** on the shadow port (default 54320)
 2. Replays all existing migrations from `supabase/migrations/` on the shadow DB
@@ -58,9 +82,7 @@ Calls `supabase migration repair <version> --status applied --local` for each ve
 4. Compares the shadow DB state against the live local DB
 5. Outputs the SQL delta as a new migration file
 
-The `--use-pg-delta` flag uses the pg-delta diffing algorithm, which produces cleaner output.
-
-**Key implication:** If a schema file references an object that doesn't exist in migrations (e.g., `api` schema), the shadow DB build fails. This is why `_schemas.sql` must be both a migration AND a schema file.
+**Key implication:** If a schema file references an object that doesn't exist in migrations (e.g., `api` schema), the shadow DB build fails. This is why `_schemas.sql` must be both a migration AND a schema file. This approach is still used by the CLI's scaffold/update flow (Tier 1) but is **not recommended** for application migrations (Tier 2) due to the alphabetical ordering issue.
 
 ---
 

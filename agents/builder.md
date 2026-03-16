@@ -89,8 +89,9 @@ Use `npx create-agentlink info <name>` to read the annotation docs for any manag
 
 | Task | Local | Cloud |
 | ---- | ----- | ----- |
-| SQL execution | `psql` — DB URL from `supabase status` | `psql` — remote connection string (see `CLAUDE.md`) |
-| Generate migration | `supabase db diff --use-pg-delta -f name` | `supabase db diff --use-pg-delta -f name --linked` |
+| Apply SQL (all schemas) | `npx create-agentlink@latest db apply` | `npx create-agentlink@latest db apply` |
+| Apply SQL (single statement) | `psql` — DB URL from `supabase status` | `psql` — remote connection string (see `CLAUDE.md`) |
+| Generate migration | `npx create-agentlink@latest db migrate name` | `npx create-agentlink@latest db migrate name` |
 | Push migration | N/A (applied locally) | `supabase db push` |
 | Generate types | `supabase gen types typescript --local` | `supabase gen types typescript --project-id <ref>` |
 | Edge functions (dev) | `supabase functions serve` | `supabase functions deploy` |
@@ -150,9 +151,9 @@ Develop with the Supabase CLI — locally via Docker or against a cloud project.
 All database changes follow this loop. **Never skip steps or create migration files manually.**
 
 1. **Write SQL** to schema files in `supabase/schemas/` (not to migration files)
-2. **Apply live** — run the same SQL via `psql`
+2. **Apply live** — `npx create-agentlink@latest db apply`
 3. **Fix errors** with more SQL — never reset the database
-4. **Generate migration** — `supabase db diff --use-pg-delta -f descriptive_name`
+4. **Generate migration** — `npx create-agentlink@latest db migrate descriptive_name`
 
 Schema files are the source of truth. Migrations are generated, never hand-written.
 
@@ -171,7 +172,7 @@ supabase/schemas/
     └── chart.sql              # agent builds — api.chart_* functions + grants
 ```
 
-**Migration naming:** Always use `supabase db diff --use-pg-delta -f name`. Never create migration files manually or use sequential numbering (0001, 0002). The CLI generates timestamped filenames automatically.
+**Migration naming:** Always use `npx create-agentlink@latest db migrate name`. Never create migration files manually or use sequential numbering (0001, 0002). The CLI generates timestamped filenames automatically.
 
 Load the `database` skill for the full workflow, schema file conventions, and worked examples.
 

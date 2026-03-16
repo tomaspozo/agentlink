@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.8.0] - 2026-03-15
+
+Replace `supabase db diff` with `pgdelta` for migration generation. The CLI now bundles `pgdelta` and exposes two subcommands — `db apply` and `db migrate` — that resolve cross-file FK ordering issues and unify the local/cloud workflow.
+
+### Added
+
+- `npx create-agentlink@latest db apply` — applies all schema files with `pgdelta declarative apply`, resolving statement ordering automatically
+- `npx create-agentlink@latest db migrate name` — generates migrations by comparing catalog snapshots (no shadow DB needed)
+- `pgdelta` documentation in CLI migration system reference: how it works, why it replaces `db diff`, limitations (cron/storage schema filtering)
+- Idempotent policy pattern: `DROP POLICY IF EXISTS` + `CREATE POLICY` (policies don't support `CREATE OR REPLACE`)
+- Guidance to use `record` type in `DECLARE` blocks instead of `%rowtype` to avoid `pgdelta` ordering issues
+
+### Changed
+
+- **Development loop unified** — same `db apply` / `db migrate` commands for both local and cloud (DB URL auto-resolved from `.env.local`)
+- Builder agent tools reference table updated with new CLI subcommands
+- Database skill development loop simplified: removed separate cloud mode section, single workflow for both modes
+- Database workflow reference rewritten around `pgdelta` — batch apply (recommended) vs single-statement `psql`
+- All worked examples updated to use `db apply` instead of raw `psql`
+- CLI skill Tier 2 migration section rewritten for `pgdelta`
+- `supabase db diff --use-pg-delta` moved to "Legacy" section in migration system reference
+
 ## [0.7.0] - 2026-03-15
 
 Cloud mode support — the plugin now works with both local Docker development and cloud-hosted Supabase projects. Every skill, the builder agent, and the CLI skill have been updated with mode-aware commands and workflows.
