@@ -28,7 +28,7 @@ This is required because the `withSupabase` wrapper handles auth itself. If `ver
 
 ### First edge function in a project?
 
-The `_shared/` utilities (`withSupabase.ts`, `responses.ts`, `types.ts`) should already exist in `supabase/functions/_shared/` — the CLI sets these up. If missing, run `npx create-agentlink@latest`.
+The `_shared/` utilities (`withSupabase.ts`, `responses.ts`, `types.ts`) should already exist in `supabase/functions/_shared/` — the CLI sets these up. If missing, run `npx @agentlinksh/cli@latest`.
 
 ### Creating a new function
 

@@ -29,7 +29,7 @@ The AgentLink CLI handles all project setup and validation. The agent builds —
 
 Check `CLAUDE.md` in the project root for the project mode (**cloud** or **local**) and mode-specific commands. If `CLAUDE.md` is missing, read `agentlink.json` — `mode: "cloud"` means cloud, anything else means local.
 
-- **Setup a project:** `npx create-agentlink@latest`
+- **Setup a project:** `npx @agentlinksh/cli@latest`
 
 **Local mode:**
 - **Stack down?** Run `supabase start`. If that fails, ask the user to check their Supabase CLI.
@@ -42,7 +42,7 @@ Check `CLAUDE.md` in the project root for the project mode (**cloud** or **local
 
 ### Diagnose with `check`
 
-Command: `npx create-agentlink check`
+Command: `npx @agentlinksh/cli@latest check`
 
 Outputs JSON with `ready`, `supabase_running`, `database` (extensions, queues, functions, secrets, api_schema), and `files`. Use it before starting work, after errors, or when something seems missing. Look at which fields are `false` to pinpoint the issue.
 
@@ -50,7 +50,7 @@ Outputs JSON with `ready`, `supabase_running`, `database` (extensions, queues, f
 
 ### Fix with `--force-update`
 
-Command: `npx create-agentlink --force-update`
+Command: `npx @agentlinksh/cli@latest --force-update`
 
 Overwrites template files, patches `config.toml`, applies SQL setup, and generates migrations if schema changed. Requires Supabase to be running. Use after `check` reports missing components or after a CLI version upgrade.
 
@@ -58,13 +58,13 @@ Typical workflow: `check` → identify what's wrong → `--force-update` → `ch
 
 ### Look up components with `info`
 
-Commands: `npx create-agentlink info` (summary list) or `npx create-agentlink info <name>` (detail for one component).
+Commands: `npx @agentlinksh/cli@latest info` (summary list) or `npx @agentlinksh/cli@latest info <name>` (detail for one component).
 
 Outputs JSON with type, summary, description, signature, and related components. Use after `check` reports a missing component and you need to understand what it does before deciding how to fix it.
 
 ### Debug failures
 
-Flag: `npx create-agentlink --debug`
+Flag: `npx @agentlinksh/cli@latest --debug`
 
 Writes detailed log to `agentlink-debug.log` in the project directory. Use when scaffold or `--force-update` fails with an unclear error. Tell the user to share the log contents if you can't resolve the issue.
 
@@ -72,9 +72,9 @@ Writes detailed log to `agentlink-debug.log` in the project directory. Use when 
 
 SQL files in `supabase/schemas/` contain `-- @agentlink <name>` annotations marking resources managed by the CLI (functions, extensions, queues). When you encounter an issue with one of these annotated resources:
 
-1. **Check for updates:** `npx create-agentlink check` — a newer CLI version may ship a fix
-2. **Update resources:** `npx create-agentlink --force-update` — re-applies the latest managed versions
-3. **Verify:** `npx create-agentlink check` — confirm `ready: true`
+1. **Check for updates:** `npx @agentlinksh/cli@latest check` — a newer CLI version may ship a fix
+2. **Update resources:** `npx @agentlinksh/cli@latest --force-update` — re-applies the latest managed versions
+3. **Verify:** `npx @agentlinksh/cli@latest check` — confirm `ready: true`
 
 If the issue persists after updating, **create a project-scoped override:**
 
@@ -83,15 +83,15 @@ If the issue persists after updating, **create a project-scoped override:**
 - Apply via `psql` and generate a migration
 - Let the user know you've created a project-specific override and why, so they're aware it diverges from the managed version
 
-Use `npx create-agentlink info <name>` to read the annotation docs for any managed resource — it shows the type, description, signature, and related components.
+Use `npx @agentlinksh/cli@latest info <name>` to read the annotation docs for any managed resource — it shows the type, description, signature, and related components.
 
 #### Tools reference
 
 | Task | Local | Cloud |
 | ---- | ----- | ----- |
-| Apply SQL (all schemas) | `npx create-agentlink@latest db apply` | `npx create-agentlink@latest db apply` |
+| Apply SQL (all schemas) | `npx @agentlinksh/cli@latest db apply` | `npx @agentlinksh/cli@latest db apply` |
 | Apply SQL (single statement) | `psql` — DB URL from `supabase status` | `psql` — remote connection string (see `CLAUDE.md`) |
-| Generate migration | `npx create-agentlink@latest db migrate name` | `npx create-agentlink@latest db migrate name` |
+| Generate migration | `npx @agentlinksh/cli@latest db migrate name` | `npx @agentlinksh/cli@latest db migrate name` |
 | Push migration | N/A (applied locally) | `supabase db push` |
 | Generate types | `supabase gen types typescript --local` | `supabase gen types typescript --project-id <ref>` |
 | Edge functions (dev) | `supabase functions serve` | `supabase functions deploy` |
@@ -151,9 +151,9 @@ Develop with the Supabase CLI — locally via Docker or against a cloud project.
 All database changes follow this loop. **Never skip steps or create migration files manually.**
 
 1. **Write SQL** to schema files in `supabase/schemas/` (not to migration files)
-2. **Apply live** — `npx create-agentlink@latest db apply`
+2. **Apply live** — `npx @agentlinksh/cli@latest db apply`
 3. **Fix errors** with more SQL — never reset the database
-4. **Generate migration** — `npx create-agentlink@latest db migrate descriptive_name`
+4. **Generate migration** — `npx @agentlinksh/cli@latest db migrate descriptive_name`
 
 Schema files are the source of truth. Migrations are generated, never hand-written.
 
@@ -172,7 +172,7 @@ supabase/schemas/
     └── chart.sql              # agent builds — api.chart_* functions + grants
 ```
 
-**Migration naming:** Always use `npx create-agentlink@latest db migrate name`. Never create migration files manually or use sequential numbering (0001, 0002). The CLI generates timestamped filenames automatically.
+**Migration naming:** Always use `npx @agentlinksh/cli@latest db migrate name`. Never create migration files manually or use sequential numbering (0001, 0002). The CLI generates timestamped filenames automatically.
 
 Load the `database` skill for the full workflow, schema file conventions, and worked examples.
 

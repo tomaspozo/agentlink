@@ -9,7 +9,7 @@ metadata:
 
 # CLI
 
-The `create-agentlink` CLI scaffolds new Supabase projects and updates existing ones. It handles infrastructure setup, template files, database configuration, and migration generation.
+The `@agentlinksh/cli` CLI scaffolds new Supabase projects and updates existing ones. It handles infrastructure setup, template files, database configuration, and migration generation.
 
 ---
 
@@ -18,7 +18,7 @@ The `create-agentlink` CLI scaffolds new Supabase projects and updates existing 
 ### Scaffold a new project
 
 ```bash
-npx create-agentlink <name> [prompt]
+npx @agentlinksh/cli@latest <name> [prompt]
 ```
 
 Interactive wizard that: checks prerequisites, starts Supabase (or creates a cloud project with `--cloud`), sets up the database (extensions, schemas, functions, queues, auth triggers), scaffolds a React + Vite + React Router v7 frontend (default) or Next.js (`--nextjs`), writes template files, generates migrations, configures Claude Code, installs MCP + plugin + companion skills, then launches Claude Code with the prompt.
@@ -26,7 +26,7 @@ Interactive wizard that: checks prerequisites, starts Supabase (or creates a clo
 ### Scaffold in an existing project
 
 ```bash
-cd my-project && npx create-agentlink
+cd my-project && npx @agentlinksh/cli@latest
 ```
 
 Detects the existing directory and integrates AgentLink into it. Requires a clean git working tree.
@@ -34,7 +34,7 @@ Detects the existing directory and integrates AgentLink into it. Requires a clea
 ### Update an existing project
 
 ```bash
-npx create-agentlink --force-update
+npx @agentlinksh/cli@latest --force-update
 ```
 
 Re-applies template files, patches `config.toml`, runs SQL setup, and regenerates migrations if schemas changed. Use after a CLI version upgrade or when `check` reports missing components.
@@ -42,7 +42,7 @@ Re-applies template files, patches `config.toml`, runs SQL setup, and regenerate
 ### Diagnose
 
 ```bash
-npx create-agentlink check
+npx @agentlinksh/cli@latest check
 ```
 
 Outputs JSON with `ready`, `supabase_running`, `database` (extensions, queues, functions, secrets, api_schema), and `files`. Read-only — reports problems but does not fix them.
@@ -50,8 +50,8 @@ Outputs JSON with `ready`, `supabase_running`, `database` (extensions, queues, f
 ### Component info
 
 ```bash
-npx create-agentlink info          # Summary list
-npx create-agentlink info <name>   # Detail for one component
+npx @agentlinksh/cli@latest info          # Summary list
+npx @agentlinksh/cli@latest info <name>   # Detail for one component
 ```
 
 Shows type, summary, description, signature, and related components. Use to understand what a missing component does.
@@ -98,8 +98,8 @@ Post-setup migrations are written *after* `db diff` runs and marked as applied v
 
 ```bash
 # Local or Cloud (DB URL auto-resolved from .env.local)
-npx create-agentlink@latest db apply
-npx create-agentlink@latest db migrate descriptive_name
+npx @agentlinksh/cli@latest db apply
+npx @agentlinksh/cli@latest db migrate descriptive_name
 
 # Cloud only: push after generating
 supabase db push

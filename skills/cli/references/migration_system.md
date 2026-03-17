@@ -56,8 +56,8 @@ Calls `supabase migration repair <version> --status applied --local` for each ve
 
 **Solution:** We use `pgdelta` (bundled with the CLI) via two subcommands:
 
-- `npx create-agentlink@latest db apply` — applies all schema files with `pgdelta declarative apply`, which resolves statement ordering automatically
-- `npx create-agentlink@latest db migrate name` — generates migrations by comparing catalog snapshots (no shadow DB needed)
+- `npx @agentlinksh/cli@latest db apply` — applies all schema files with `pgdelta declarative apply`, which resolves statement ordering automatically
+- `npx @agentlinksh/cli@latest db migrate name` — generates migrations by comparing catalog snapshots (no shadow DB needed)
 
 DB URL is auto-resolved from `.env.local` (written during scaffold). No `--db-url` flag needed. An explicit `--db-url` override is available if needed.
 

@@ -76,14 +76,14 @@ CREATE OR REPLACE FUNCTION api.chart_create(...)
 ## Development Loop
 
 1. **Write SQL** to the appropriate schema file (see organization above)
-2. **Apply** — `npx create-agentlink@latest db apply`
+2. **Apply** — `npx @agentlinksh/cli@latest db apply`
 3. **Fix errors** with more SQL — never reset the database
 4. **Iterate** until the feature is complete
 
 > **Companion:** If `supabase-postgres-best-practices` is available, invoke it to review schema changes before proceeding.
 
 5. **Generate types** — `supabase gen types typescript --local > src/types/database.ts` (cloud: `--project-id <ref>`)
-6. **Create migration** — `npx create-agentlink@latest db migrate descriptive_name`
+6. **Create migration** — `npx @agentlinksh/cli@latest db migrate descriptive_name`
 7. **(Cloud only) Push** — `supabase db push`
 
 The DB URL is auto-resolved from `.env.local` (written by the CLI during scaffold). No `--db-url` flag needed in either local or cloud mode.
@@ -147,19 +147,19 @@ GRANT EXECUTE ON FUNCTION public._internal_admin_get_secret(text) TO service_rol
 
 If something is missing or broken, use `check` to diagnose and `--force-update` to fix:
 
-1. **Diagnose:** `npx create-agentlink check` → read the JSON output, look at which fields are `false`
-2. **Fix:** `npx create-agentlink --force-update` → re-applies all setup (templates, config, SQL, migrations)
-3. **Verify:** `npx create-agentlink check` → confirm `ready: true`
+1. **Diagnose:** `npx @agentlinksh/cli@latest check` → read the JSON output, look at which fields are `false`
+2. **Fix:** `npx @agentlinksh/cli@latest --force-update` → re-applies all setup (templates, config, SQL, migrations)
+3. **Verify:** `npx @agentlinksh/cli@latest check` → confirm `ready: true`
 
 | Issue | Diagnose with `check` | Fix |
 |-------|----------------------|-----|
-| Missing `_internal_admin_*` functions | `database.functions: false` | `npx create-agentlink --force-update` |
-| Missing extensions (`pg_net`, `supabase_vault`) | `database.extensions: false` | `npx create-agentlink --force-update` |
-| Missing vault secrets | `database.secrets: false` | `npx create-agentlink --force-update` |
-| Missing `api` schema or grants | `database.api_schema: false` | `npx create-agentlink --force-update` |
-| Missing `supabase/schemas/` structure | `files: false` | `npx create-agentlink --force-update` |
+| Missing `_internal_admin_*` functions | `database.functions: false` | `npx @agentlinksh/cli@latest --force-update` |
+| Missing extensions (`pg_net`, `supabase_vault`) | `database.extensions: false` | `npx @agentlinksh/cli@latest --force-update` |
+| Missing vault secrets | `database.secrets: false` | `npx @agentlinksh/cli@latest --force-update` |
+| Missing `api` schema or grants | `database.api_schema: false` | `npx @agentlinksh/cli@latest --force-update` |
+| Missing `supabase/schemas/` structure | `files: false` | `npx @agentlinksh/cli@latest --force-update` |
 
-Use `npx create-agentlink info <component>` to understand what a missing component does before fixing it.
+Use `npx @agentlinksh/cli@latest info <component>` to understand what a missing component does before fixing it.
 
 ---
 

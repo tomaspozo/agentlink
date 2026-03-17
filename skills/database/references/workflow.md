@@ -15,13 +15,13 @@ The daily development loop. How agents build features, apply changes, and produc
 
 The agent applies every change in two places simultaneously:
 
-1. **The live database** (local or cloud) — via `npx create-agentlink@latest db apply` or `psql`, so changes take effect immediately
+1. **The live database** (local or cloud) — via `npx @agentlinksh/cli@latest db apply` or `psql`, so changes take effect immediately
 2. **The schema files** — in `supabase/schemas/`, so the source of truth stays in sync
 
 Schema files are the canonical representation of your database. The live database is the working copy. Both must always reflect the same state.
 
 **Apply methods:**
-- **Batch (recommended):** `npx create-agentlink@latest db apply` — applies all schema files with correct ordering via `pgdelta`. DB URL auto-resolved from `.env.local`.
+- **Batch (recommended):** `npx @agentlinksh/cli@latest db apply` — applies all schema files with correct ordering via `pgdelta`. DB URL auto-resolved from `.env.local`.
 - **Single statement:** `psql <db_url> -c "SQL"` — fine for quick one-off changes.
 
 Schema files are clean declarations — no `DROP` statements. Use `CREATE TABLE IF NOT EXISTS`, `CREATE OR REPLACE FUNCTION`, `CREATE INDEX IF NOT EXISTS`, `DROP POLICY IF EXISTS` + `CREATE POLICY`. DROPs belong in migrations only.
@@ -37,7 +37,7 @@ Schema files are clean declarations — no `DROP` statements. Use `CREATE TABLE 
 When building a feature, the agent:
 
 1. Writes the SQL in the appropriate schema file (see [naming conventions](./naming_conventions.md))
-2. Applies via `npx create-agentlink@latest db apply` — every file write must be followed by an apply
+2. Applies via `npx @agentlinksh/cli@latest db apply` — every file write must be followed by an apply
    - DB URL auto-resolved from `.env.local` (no `--db-url` needed)
    - **Single statement:** `psql <db_url> -c "SQL"` is fine for quick one-off changes
 3. If something breaks, fixes it with more SQL — never resets
@@ -78,7 +78,7 @@ Generate a single migration capturing all un-migrated changes:
 
 ```bash
 # Local or Cloud (DB URL auto-resolved from .env.local)
-npx create-agentlink@latest db migrate descriptive_migration_name
+npx @agentlinksh/cli@latest db migrate descriptive_migration_name
 
 # Cloud only: push after generating
 supabase db push
@@ -162,7 +162,7 @@ END;
 $$;
 ```
 
-Apply via `npx create-agentlink@latest db apply`.
+Apply via `npx @agentlinksh/cli@latest db apply`.
 
 **2. Create the entity file** — `supabase/schemas/public/readings.sql`:
 ```sql
@@ -202,7 +202,7 @@ ON public.readings FOR DELETE
 USING (public._auth_reading_is_owner(id));
 ```
 
-Apply via `npx create-agentlink@latest db apply`.
+Apply via `npx @agentlinksh/cli@latest db apply`.
 
 **3. Create API functions** — `supabase/schemas/api/reading.sql`:
 ```sql
@@ -253,7 +253,7 @@ END;
 $$;
 ```
 
-Apply via `npx create-agentlink@latest db apply`.
+Apply via `npx @agentlinksh/cli@latest db apply`.
 
 **4. Generate types:**
 ```bash

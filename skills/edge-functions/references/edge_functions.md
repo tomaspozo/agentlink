@@ -37,7 +37,7 @@ Folders prefixed with `_` are shared modules and are NOT deployed as edge functi
 
 ### Setting Up Shared Utilities
 
-**When creating the first edge function for a project**, check if `supabase/functions/_shared/withSupabase.ts` exists. If not, tell the user to run `npx create-agentlink@latest` to set up the shared utilities.
+**When creating the first edge function for a project**, check if `supabase/functions/_shared/withSupabase.ts` exists. If not, tell the user to run `npx @agentlinksh/cli@latest` to set up the shared utilities.
 
 ---
 
