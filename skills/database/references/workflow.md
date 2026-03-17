@@ -1,11 +1,10 @@
 # Development
 
-The daily development loop. How agents build features, apply changes, and produce migrations.
+The daily development loop. How agents build features and apply changes.
 
 ## Contents
 - Core Principle
 - Development Loop (making changes, fixing errors)
-- Migration Workflow (during development, committing, review, verify)
 - Generating Types
 - Examples (new entity, new field, triggers)
 
@@ -63,45 +62,6 @@ When `psql` returns an error:
 - **Data type mismatch** — Migrate the data first, then alter the column
 
 The agent handles errors with more SQL. The database accumulates real state during development — treat it like a production database that happens to be local.
-
----
-
-## Migration Workflow
-
-### During Development
-
-No migrations are created. The agent works directly against the live database while keeping schema files in sync. Changes accumulate in the local Postgres instance.
-
-### When Ready to Commit
-
-Generate a single migration capturing all un-migrated changes:
-
-```bash
-# Local or Cloud (DB URL auto-resolved from .env.local)
-npx @agentlinksh/cli@latest db migrate descriptive_migration_name
-
-# Cloud only: push after generating
-supabase db push
-```
-
-**What the command does:**
-Exports baseline catalog → applies schemas → exports desired catalog → diffs baseline vs desired → writes migration file. Non-destructive — no reset, no data backup needed.
-
-Statement ordering is handled automatically by `pgdelta`.
-
-**Limitation:** `pgdelta` filters out `cron` and `storage` schemas. If your change includes `cron.schedule()` or storage policies, append them manually to the generated migration file.
-
-### Review
-
-Check the generated file in `supabase/migrations/`:
-
-- Verify all changes are captured
-- Statement ordering is handled automatically by `pgdelta`
-- If any `psql` data fixes are needed for the migration to replay cleanly, add them manually
-
-### Verify (requires user confirmation)
-
-**DO NOT run `supabase db reset`.** This destroys and recreates the local database. If a reset is needed, tell the user and let them run it manually in their terminal. Never run it yourself, even if asked to "verify" or "test" a migration.
 
 ---
 

@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **Development loop simplified** — agent only uses `db apply` during development. Migrations removed from the build loop and repositioned as a deployment concern, generated only when the user explicitly asks.
+- Cloud DB URL format updated to use Supabase connection pooler (`pooler.supabase.com`) — IPv4-compatible, works in all environments. Direct connection (`db.<ref>.supabase.co`) requires IPv6.
+- Builder agent tools reference: migration commands moved to bottom with "(deployment)" label
+- Database skill: migration steps removed from development loop, added note about deployment-only migrations
+- Database workflow reference: migration section removed from development docs
+- CLI skill: migration system section rewritten with development vs deployment separation
+- CLI migration system reference: `db apply` marked as the development command, `db migrate` marked as deployment-only, added cloud DB URL format docs, added note about empty migrations when developing directly on cloud
+
 ## [0.8.0] - 2026-03-15
 
 Replace `supabase db diff` with `pgdelta` for migration generation. The CLI now bundles `pgdelta` and exposes two subcommands — `db apply` and `db migrate` — that resolve cross-file FK ordering issues and unify the local/cloud workflow.

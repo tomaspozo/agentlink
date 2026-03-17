@@ -83,10 +83,10 @@ CREATE OR REPLACE FUNCTION api.chart_create(...)
 > **Companion:** If `supabase-postgres-best-practices` is available, invoke it to review schema changes before proceeding.
 
 5. **Generate types** — `supabase gen types typescript --local > src/types/database.ts` (cloud: `--project-id <ref>`)
-6. **Create migration** — `npx @agentlinksh/cli@latest db migrate descriptive_name`
-7. **(Cloud only) Push** — `supabase db push`
 
 The DB URL is auto-resolved from `.env.local` (written by the CLI during scaffold). No `--db-url` flag needed in either local or cloud mode.
+
+**Migrations are not part of the development loop.** The agent writes SQL, applies it, and keeps building. Migrations are generated only when the user explicitly asks, or as part of a deployment workflow to promote changes to another environment. See the `cli` skill for migration commands.
 
 > **📝 Load [Development](./references/workflow.md) for the full workflow, error handling, and worked examples (new entity, new field, triggers).**
 
@@ -165,6 +165,6 @@ Use `npx @agentlinksh/cli@latest info <component>` to understand what a missing 
 
 ## Reference Files
 
-- **[📝 Development](./references/workflow.md)** — Development loop, migration workflow, worked examples
+- **[📝 Development](./references/workflow.md)** — Development loop, worked examples
 - **[📋 Naming Conventions](./references/naming_conventions.md)** — Tables, columns, functions, schema files
 

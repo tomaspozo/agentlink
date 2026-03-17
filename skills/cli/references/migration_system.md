@@ -56,12 +56,24 @@ Calls `supabase migration repair <version> --status applied --local` for each ve
 
 **Solution:** We use `pgdelta` (bundled with the CLI) via two subcommands:
 
-- `npx @agentlinksh/cli@latest db apply` — applies all schema files with `pgdelta declarative apply`, which resolves statement ordering automatically
-- `npx @agentlinksh/cli@latest db migrate name` — generates migrations by comparing catalog snapshots (no shadow DB needed)
+- `npx @agentlinksh/cli@latest db apply` — applies all schema files with `pgdelta declarative apply`, which resolves statement ordering automatically. **This is the only command the agent uses during development.**
+- `npx @agentlinksh/cli@latest db migrate name` — generates migrations by comparing catalog snapshots (no shadow DB needed). **Deployment only — used when the user explicitly asks.**
 
 DB URL is auto-resolved from `.env.local` (written during scaffold). No `--db-url` flag needed. An explicit `--db-url` override is available if needed.
 
+### Cloud DB URL format
+
+Cloud mode uses the Supabase connection pooler (IPv4-compatible):
+
+```
+postgresql://postgres.[project_id]:[password]@aws-0-[region].pooler.supabase.com:5432/postgres
+```
+
+This is written to `.env.local` during scaffold. The direct connection (`db.<ref>.supabase.co`) requires IPv6 and does not work in many environments.
+
 ### How `db migrate` works
+
+> **Note:** Migration generation is a deployment concern. The agent does not run this during development — only when the user explicitly asks for a migration.
 
 Unified flow for both local and cloud:
 1. Exports baseline catalog from current DB state
@@ -71,6 +83,8 @@ Unified flow for both local and cloud:
 5. (Cloud only) User pushes with `supabase db push`
 
 Non-destructive — no `db reset`, no data backup/restore.
+
+**Important:** In cloud mode, if `db apply` has already been run (which it has during development), the migration will be empty because the database already matches the schema files. This is expected — migrations are for deploying to a *different* environment. For cloud projects where you develop directly on the target database, migrations are unnecessary.
 
 **Limitation:** `pgdelta` filters out `cron` and `storage` schemas. Append `cron.schedule()` or storage policies manually to the generated migration.
 

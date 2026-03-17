@@ -120,8 +120,8 @@ supabase migration repair ${TIMESTAMP} --status applied --local
 # Local — get the DB URL from supabase status
 DB_URL=$(supabase status -o json | jq -r '.DB_URL // .db_url')
 
-# Cloud — use the remote connection string from CLAUDE.md
-# DB_URL="postgresql://postgres:$SUPABASE_DB_PASSWORD@db.<ref>.supabase.co:5432/postgres"
+# Cloud — use the pooler URL from .env.local (IPv4-compatible)
+# DB_URL="postgresql://postgres.[project_id]:[password]@aws-0-[region].pooler.supabase.com:5432/postgres"
 
 # Run inline SQL
 psql "$DB_URL" -c "ALTER TABLE public.charts ADD COLUMN description text;"

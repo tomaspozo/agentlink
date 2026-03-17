@@ -38,6 +38,7 @@ Check `CLAUDE.md` in the project root for the project mode (**cloud** or **local
 **Cloud mode:**
 - The database runs in the cloud — do NOT run `supabase start` or `supabase stop`.
 - There is no local MCP server. Use Supabase CLI commands directly.
+- DB URL uses the Supabase connection pooler (IPv4-compatible): `postgresql://postgres.[project_id]:[password]@aws-0-[region].pooler.supabase.com:5432/postgres` — stored in `.env.local`.
 - See `CLAUDE.md` for the cloud-specific commands and connection details.
 
 ### Diagnose with `check`
@@ -90,15 +91,14 @@ Use `npx @agentlinksh/cli@latest info <name>` to read the annotation docs for an
 | Task | Local | Cloud |
 | ---- | ----- | ----- |
 | Apply SQL (all schemas) | `npx @agentlinksh/cli@latest db apply` | `npx @agentlinksh/cli@latest db apply` |
-| Apply SQL (single statement) | `psql` — DB URL from `supabase status` | `psql` — remote connection string (see `CLAUDE.md`) |
-| Generate migration | `npx @agentlinksh/cli@latest db migrate name` | `npx @agentlinksh/cli@latest db migrate name` |
-| Push migration | N/A (applied locally) | `supabase db push` |
+| Apply SQL (single statement) | `psql` — DB URL from `supabase status` | `psql` — pooler URL from `.env.local` |
 | Generate types | `supabase gen types typescript --local` | `supabase gen types typescript --project-id <ref>` |
 | Edge functions (dev) | `supabase functions serve` | `supabase functions deploy` |
 | Set secrets | `supabase secrets set KEY=value` | `supabase secrets set KEY=value` |
 | Security review | `supabase:get_advisors` (MCP) | N/A |
 | Get connection info | `supabase status` | Read `.env.local` |
-| Create migration file | `supabase:apply_migration` (MCP) | Write file manually |
+| Generate migration (deployment) | `npx @agentlinksh/cli@latest db migrate name` | `npx @agentlinksh/cli@latest db migrate name` |
+| Push migration (deployment) | N/A (applied locally) | `supabase db push` |
 
 ---
 
@@ -148,14 +148,14 @@ Develop with the Supabase CLI — locally via Docker or against a cloud project.
 
 ### Database workflow
 
-All database changes follow this loop. **Never skip steps or create migration files manually.**
+The agent focuses on development. Write SQL, apply it, keep building. Migrations are a separate deployment concern — not part of the build loop.
 
 1. **Write SQL** to schema files in `supabase/schemas/` (not to migration files)
-2. **Apply live** — `npx @agentlinksh/cli@latest db apply`
+2. **Apply** — `npx @agentlinksh/cli@latest db apply`
 3. **Fix errors** with more SQL — never reset the database
-4. **Generate migration** — `npx @agentlinksh/cli@latest db migrate descriptive_name`
+4. **Iterate** until the feature is complete
 
-Schema files are the source of truth. Migrations are generated, never hand-written.
+Schema files are the source of truth. The live database is the working copy. Both must always reflect the same state.
 
 ```
 supabase/schemas/
@@ -172,7 +172,7 @@ supabase/schemas/
     └── chart.sql              # agent builds — api.chart_* functions + grants
 ```
 
-**Migration naming:** Always use `npx @agentlinksh/cli@latest db migrate name`. Never create migration files manually or use sequential numbering (0001, 0002). The CLI generates timestamped filenames automatically.
+**Migrations** are generated only when the user explicitly asks, or as part of a deployment workflow. Use `npx @agentlinksh/cli@latest db migrate name` — never create migration files manually.
 
 Load the `database` skill for the full workflow, schema file conventions, and worked examples.
 
