@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Language matching** — builder agent now responds in the user's language (chat, planning, explanations) while keeping all code in English
+
 ## [0.8.1] - 2026-03-16
 
 ### Changed
