@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-03-22
+
 ### Changed
 
 - Rename package references from `@agentlinksh/cli` to `@agentlink.sh/cli`
