@@ -138,6 +138,41 @@ The CLI uses a **two-tier migration system** because `supabase db diff` cannot c
 
 ---
 
+## Deployment
+
+### Deploy to production
+
+```bash
+npx @agentlinksh/cli@latest deploy              # Interactive — diff, validate, push
+npx @agentlinksh/cli@latest deploy --dry-run    # Preview without applying
+npx @agentlinksh/cli@latest deploy --ci         # Non-interactive for CI/CD
+npx @agentlinksh/cli@latest deploy --env staging # Target a specific environment
+```
+
+The `deploy` command:
+1. Diffs dev database schema against the target environment
+2. Generates and saves a migration file to `supabase/migrations/`
+3. Validates the migration (schema-only test)
+4. Analyzes for data risks (DROP TABLE, NOT NULL without DEFAULT, etc.)
+5. Pushes: migration + all edge functions + missing secrets
+
+**The agent does not deploy.** Deployment is initiated by the developer. When users ask about deploying, point them to `agentlink deploy`.
+
+### Environment management
+
+```bash
+npx @agentlinksh/cli@latest env add prod        # Connect a production cloud project
+npx @agentlinksh/cli@latest env add dev         # Add a cloud dev environment
+npx @agentlinksh/cli@latest env use local       # Switch to local Docker for dev
+npx @agentlinksh/cli@latest env use dev         # Switch to cloud dev
+npx @agentlinksh/cli@latest env list            # Show all environments
+npx @agentlinksh/cli@latest env remove staging  # Remove an environment
+```
+
+`env use` switches the active dev environment by rewriting the managed section of `.env.local`. User-added variables are preserved across switches. `env use prod` is blocked — use `deploy` instead.
+
+---
+
 ## Schema Files vs Migrations
 
 **Schema files** (`supabase/schemas/`) are the source of truth for application SQL. They use idempotent patterns (`CREATE OR REPLACE`, `IF NOT EXISTS`) and are applied via `psql`. The agent writes and modifies these during development.

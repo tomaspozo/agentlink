@@ -101,6 +101,19 @@ Use `npx @agentlinksh/cli@latest info <name>` to read the annotation docs for an
 | Get connection info | `supabase status` | Read `.env.local` |
 | Generate migration (deployment) | `npx @agentlinksh/cli@latest db migrate name` | `npx @agentlinksh/cli@latest db migrate name` |
 | Push migration (deployment) | N/A (applied locally) | `supabase db push` |
+| Deploy to production | `npx @agentlinksh/cli@latest deploy` | `npx @agentlinksh/cli@latest deploy` |
+| Switch dev environment | `npx @agentlinksh/cli@latest env use <name>` | `npx @agentlinksh/cli@latest env use <name>` |
+| List environments | `npx @agentlinksh/cli@latest env list` | `npx @agentlinksh/cli@latest env list` |
+
+### Deployment
+
+Deployment is developer-initiated — the agent does not deploy. Available commands:
+- `agentlink deploy` — Diffs dev vs production, generates a migration, validates, and pushes
+- `agentlink deploy --dry-run` — Preview what would be deployed
+- `agentlink env add prod` — Connect a production environment
+- `agentlink env use <name>` — Switch the active dev environment (local ↔ cloud-dev)
+
+When users ask about deploying, point them to these commands. The agent always works on the dev environment. Never run `deploy` or target production directly.
 
 ---
 
