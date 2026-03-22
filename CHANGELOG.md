@@ -26,8 +26,8 @@ Replace `supabase db diff` with `pgdelta` for migration generation. The CLI now 
 
 ### Added
 
-- `npx @agentlinksh/cli@latest db apply` — applies all schema files with `pgdelta declarative apply`, resolving statement ordering automatically
-- `npx @agentlinksh/cli@latest db migrate name` — generates migrations by comparing catalog snapshots (no shadow DB needed)
+- `npx @agentlink.sh/cli@latest db apply` — applies all schema files with `pgdelta declarative apply`, resolving statement ordering automatically
+- `npx @agentlink.sh/cli@latest db migrate name` — generates migrations by comparing catalog snapshots (no shadow DB needed)
 - `pgdelta` documentation in CLI migration system reference: how it works, why it replaces `db diff`, limitations (cron/storage schema filtering)
 - Idempotent policy pattern: `DROP POLICY IF EXISTS` + `CREATE POLICY` (policies don't support `CREATE OR REPLACE`)
 - Guidance to use `record` type in `DECLARE` blocks instead of `%rowtype` to avoid `pgdelta` ordering issues
@@ -91,13 +91,13 @@ Cloud mode support — the plugin now works with both local Docker development a
 
 ## [0.6.0] - 2026-03-01
 
-The agent no longer sets up your project — the CLI does. This is a fundamental shift in how Agent Link works: infrastructure setup with `npx @agentlinksh/cli@latest` and the agent spends zero tokens verifying prerequisites, copying asset files, or scaffolding directories. Every token goes toward building your app.
+The agent no longer sets up your project — the CLI does. This is a fundamental shift in how Agent Link works: infrastructure setup with `npx @agentlink.sh/cli@latest` and the agent spends zero tokens verifying prerequisites, copying asset files, or scaffolding directories. Every token goes toward building your app.
 
 This aligns with the Agent Link philosophy: **tools for agents, not agents as tools.** The CLI is purpose-built tooling that gives the agent a ready environment. The agent is a builder that assumes a working environment and gets to work. Each does what it's best at.
 
 ### Added
 
-- `npx @agentlinksh/cli@latest check` — CLI validation command for setup issues (extensions, internal functions, vault secrets, api schema)
+- `npx @agentlink.sh/cli@latest check` — CLI validation command for setup issues (extensions, internal functions, vault secrets, api schema)
 - CORS headers now imported from `@supabase/supabase-js/cors` (SDK v2.95.0+) — no more local `cors.ts` file
 
 ### Changed
@@ -124,7 +124,7 @@ This aligns with the Agent Link philosophy: **tools for agents, not agents as to
 
 ### Changed
 
-- Update README Install section with real installation methods — CLI (`npx @agentlinksh/cli@latest`), marketplace, and local directory
+- Update README Install section with real installation methods — CLI (`npx @agentlink.sh/cli@latest`), marketplace, and local directory
 
 ## [0.4.1] - 2026-02-28
 

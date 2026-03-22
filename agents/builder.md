@@ -31,7 +31,7 @@ The AgentLink CLI handles all project setup and validation. The agent builds —
 
 Check `CLAUDE.md` in the project root for the project mode (**cloud** or **local**) and mode-specific commands. If `CLAUDE.md` is missing, read `agentlink.json` — `mode: "cloud"` means cloud, anything else means local.
 
-- **Setup a project:** `npx @agentlinksh/cli@latest`
+- **Setup a project:** `npx @agentlink.sh/cli@latest`
 
 **Local mode:**
 - **Stack down?** Run `supabase start`. If that fails, ask the user to check their Supabase CLI.
@@ -45,7 +45,7 @@ Check `CLAUDE.md` in the project root for the project mode (**cloud** or **local
 
 ### Diagnose with `check`
 
-Command: `npx @agentlinksh/cli@latest check`
+Command: `npx @agentlink.sh/cli@latest check`
 
 Outputs JSON with `ready`, `supabase_running`, `database` (extensions, queues, functions, secrets, api_schema), and `files`. Use it before starting work, after errors, or when something seems missing. Look at which fields are `false` to pinpoint the issue.
 
@@ -53,7 +53,7 @@ Outputs JSON with `ready`, `supabase_running`, `database` (extensions, queues, f
 
 ### Fix with `--force-update`
 
-Command: `npx @agentlinksh/cli@latest --force-update`
+Command: `npx @agentlink.sh/cli@latest --force-update`
 
 Overwrites template files, patches `config.toml`, applies SQL setup, and generates migrations if schema changed. Requires Supabase to be running. Use after `check` reports missing components or after a CLI version upgrade.
 
@@ -61,13 +61,13 @@ Typical workflow: `check` → identify what's wrong → `--force-update` → `ch
 
 ### Look up components with `info`
 
-Commands: `npx @agentlinksh/cli@latest info` (summary list) or `npx @agentlinksh/cli@latest info <name>` (detail for one component).
+Commands: `npx @agentlink.sh/cli@latest info` (summary list) or `npx @agentlink.sh/cli@latest info <name>` (detail for one component).
 
 Outputs JSON with type, summary, description, signature, and related components. Use after `check` reports a missing component and you need to understand what it does before deciding how to fix it.
 
 ### Debug failures
 
-Flag: `npx @agentlinksh/cli@latest --debug`
+Flag: `npx @agentlink.sh/cli@latest --debug`
 
 Writes detailed log to `agentlink-debug.log` in the project directory. Use when scaffold or `--force-update` fails with an unclear error. Tell the user to share the log contents if you can't resolve the issue.
 
@@ -75,9 +75,9 @@ Writes detailed log to `agentlink-debug.log` in the project directory. Use when 
 
 SQL files in `supabase/schemas/` contain `-- @agentlink <name>` annotations marking resources managed by the CLI (functions, extensions, queues). When you encounter an issue with one of these annotated resources:
 
-1. **Check for updates:** `npx @agentlinksh/cli@latest check` — a newer CLI version may ship a fix
-2. **Update resources:** `npx @agentlinksh/cli@latest --force-update` — re-applies the latest managed versions
-3. **Verify:** `npx @agentlinksh/cli@latest check` — confirm `ready: true`
+1. **Check for updates:** `npx @agentlink.sh/cli@latest check` — a newer CLI version may ship a fix
+2. **Update resources:** `npx @agentlink.sh/cli@latest --force-update` — re-applies the latest managed versions
+3. **Verify:** `npx @agentlink.sh/cli@latest check` — confirm `ready: true`
 
 If the issue persists after updating, **create a project-scoped override:**
 
@@ -86,24 +86,24 @@ If the issue persists after updating, **create a project-scoped override:**
 - Apply via `psql` and generate a migration
 - Let the user know you've created a project-specific override and why, so they're aware it diverges from the managed version
 
-Use `npx @agentlinksh/cli@latest info <name>` to read the annotation docs for any managed resource — it shows the type, description, signature, and related components.
+Use `npx @agentlink.sh/cli@latest info <name>` to read the annotation docs for any managed resource — it shows the type, description, signature, and related components.
 
 #### Tools reference
 
 | Task | Local | Cloud |
 | ---- | ----- | ----- |
-| Apply SQL (all schemas) | `npx @agentlinksh/cli@latest db apply` | `npx @agentlinksh/cli@latest db apply` |
+| Apply SQL (all schemas) | `npx @agentlink.sh/cli@latest db apply` | `npx @agentlink.sh/cli@latest db apply` |
 | Apply SQL (single statement) | `psql` — DB URL from `supabase status` | `psql` — pooler URL from `.env.local` |
 | Generate types | `supabase gen types typescript --local` | `supabase gen types typescript --project-id <ref>` |
 | Edge functions (dev) | `supabase functions serve` | `supabase functions deploy` |
 | Set secrets | `supabase secrets set KEY=value` | `supabase secrets set KEY=value` |
 | Security review | `supabase:get_advisors` (MCP) | N/A |
 | Get connection info | `supabase status` | Read `.env.local` |
-| Generate migration (deployment) | `npx @agentlinksh/cli@latest db migrate name` | `npx @agentlinksh/cli@latest db migrate name` |
+| Generate migration (deployment) | `npx @agentlink.sh/cli@latest db migrate name` | `npx @agentlink.sh/cli@latest db migrate name` |
 | Push migration (deployment) | N/A (applied locally) | `supabase db push` |
-| Deploy to production | `npx @agentlinksh/cli@latest deploy` | `npx @agentlinksh/cli@latest deploy` |
-| Switch dev environment | `npx @agentlinksh/cli@latest env use <name>` | `npx @agentlinksh/cli@latest env use <name>` |
-| List environments | `npx @agentlinksh/cli@latest env list` | `npx @agentlinksh/cli@latest env list` |
+| Deploy to production | `npx @agentlink.sh/cli@latest deploy` | `npx @agentlink.sh/cli@latest deploy` |
+| Switch dev environment | `npx @agentlink.sh/cli@latest env use <name>` | `npx @agentlink.sh/cli@latest env use <name>` |
+| List environments | `npx @agentlink.sh/cli@latest env list` | `npx @agentlink.sh/cli@latest env list` |
 
 ### Deployment
 
@@ -166,7 +166,7 @@ Develop with the Supabase CLI — locally via Docker or against a cloud project.
 The agent focuses on development. Write SQL, apply it, keep building. Migrations are a separate deployment concern — not part of the build loop.
 
 1. **Write SQL** to schema files in `supabase/schemas/` (not to migration files)
-2. **Apply** — `npx @agentlinksh/cli@latest db apply`
+2. **Apply** — `npx @agentlink.sh/cli@latest db apply`
 3. **Fix errors** with more SQL — never reset the database
 4. **Iterate** until the feature is complete
 
@@ -187,7 +187,7 @@ supabase/schemas/
     └── chart.sql              # agent builds — api.chart_* functions + grants
 ```
 
-**Migrations** are generated only when the user explicitly asks, or as part of a deployment workflow. Use `npx @agentlinksh/cli@latest db migrate name` — never create migration files manually.
+**Migrations** are generated only when the user explicitly asks, or as part of a deployment workflow. Use `npx @agentlink.sh/cli@latest db migrate name` — never create migration files manually.
 
 Load the `database` skill for the full workflow, schema file conventions, and worked examples.
 

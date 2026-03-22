@@ -31,7 +31,7 @@ const supabase = createClient(
 
 ### Next.js / SSR (`--nextjs`)
 
-For projects created with `npx @agentlinksh/cli@latest <name> --nextjs`. Uses `@supabase/ssr` for cookie-based session management:
+For projects created with `npx @agentlink.sh/cli@latest <name> --nextjs`. Uses `@supabase/ssr` for cookie-based session management:
 
 ```typescript
 import { createBrowserClient } from "@supabase/ssr";

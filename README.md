@@ -14,7 +14,7 @@ Agent Link is a [Claude Code plugin](https://docs.anthropic.com/en/docs/claude-c
 
 ```bash
 # New project (recommended)
-npx @agentlinksh/cli@latest
+npx @agentlink.sh/cli@latest
 
 # From the marketplace
 /plugin marketplace add agentlinksh/agent
@@ -77,8 +77,8 @@ The app development agent ships with opinionated defaults:
 
 The CLI handles all project setup. The agent builds — it does not scaffold.
 
-- **New project:** `npx @agentlinksh/cli@latest` — scaffolds Supabase, schemas, shared utilities, vault secrets
-- **Validate setup:** `npx @agentlinksh/cli@latest check` — verifies extensions, internal functions, vault secrets, api schema
+- **New project:** `npx @agentlink.sh/cli@latest` — scaffolds Supabase, schemas, shared utilities, vault secrets
+- **Validate setup:** `npx @agentlink.sh/cli@latest check` — verifies extensions, internal functions, vault secrets, api schema
 - **Stack down?** `supabase start`
 
 ### MCP Server

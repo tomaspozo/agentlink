@@ -9,7 +9,7 @@ metadata:
 
 # CLI
 
-The `@agentlinksh/cli` CLI scaffolds new Supabase projects and updates existing ones. It handles infrastructure setup, template files, database configuration, and migration generation.
+The `@agentlink.sh/cli` CLI scaffolds new Supabase projects and updates existing ones. It handles infrastructure setup, template files, database configuration, and migration generation.
 
 ---
 
@@ -18,7 +18,7 @@ The `@agentlinksh/cli` CLI scaffolds new Supabase projects and updates existing 
 ### Scaffold a new project
 
 ```bash
-npx @agentlinksh/cli@latest <name> [prompt]
+npx @agentlink.sh/cli@latest <name> [prompt]
 ```
 
 Interactive wizard that: checks prerequisites, starts Supabase (or creates a cloud project with `--cloud`), sets up the database (extensions, schemas, functions, queues, auth triggers), scaffolds a React + Vite + React Router v7 frontend (default) or Next.js (`--nextjs`), writes template files, generates migrations, configures Claude Code, installs MCP + plugin + companion skills, then launches Claude Code with the prompt.
@@ -26,7 +26,7 @@ Interactive wizard that: checks prerequisites, starts Supabase (or creates a clo
 ### Scaffold in an existing project
 
 ```bash
-cd my-project && npx @agentlinksh/cli@latest
+cd my-project && npx @agentlink.sh/cli@latest
 ```
 
 Detects the existing directory and integrates AgentLink into it. Requires a clean git working tree.
@@ -34,7 +34,7 @@ Detects the existing directory and integrates AgentLink into it. Requires a clea
 ### Update an existing project
 
 ```bash
-npx @agentlinksh/cli@latest --force-update
+npx @agentlink.sh/cli@latest --force-update
 ```
 
 Re-applies template files, patches `config.toml`, runs SQL setup, and regenerates migrations if schemas changed. Use after a CLI version upgrade or when `check` reports missing components.
@@ -42,7 +42,7 @@ Re-applies template files, patches `config.toml`, runs SQL setup, and regenerate
 ### Diagnose
 
 ```bash
-npx @agentlinksh/cli@latest check
+npx @agentlink.sh/cli@latest check
 ```
 
 Outputs JSON with `ready`, `supabase_running`, `database` (extensions, queues, functions, secrets, api_schema), and `files`. Read-only — reports problems but does not fix them.
@@ -50,8 +50,8 @@ Outputs JSON with `ready`, `supabase_running`, `database` (extensions, queues, f
 ### Component info
 
 ```bash
-npx @agentlinksh/cli@latest info          # Summary list
-npx @agentlinksh/cli@latest info <name>   # Detail for one component
+npx @agentlink.sh/cli@latest info          # Summary list
+npx @agentlink.sh/cli@latest info <name>   # Detail for one component
 ```
 
 Shows type, summary, description, signature, and related components. Use to understand what a missing component does.
@@ -82,10 +82,10 @@ Shows type, summary, description, signature, and related components. Use to unde
 
 ```bash
 # Development — the agent's loop
-npx @agentlinksh/cli@latest db apply
+npx @agentlink.sh/cli@latest db apply
 
 # Deployment — when the user asks for a migration
-npx @agentlinksh/cli@latest db migrate descriptive_name
+npx @agentlink.sh/cli@latest db migrate descriptive_name
 
 # Cloud deployment — push after generating
 supabase db push
@@ -143,10 +143,10 @@ The CLI uses a **two-tier migration system** because `supabase db diff` cannot c
 ### Deploy to production
 
 ```bash
-npx @agentlinksh/cli@latest deploy              # Interactive — diff, validate, push
-npx @agentlinksh/cli@latest deploy --dry-run    # Preview without applying
-npx @agentlinksh/cli@latest deploy --ci         # Non-interactive for CI/CD
-npx @agentlinksh/cli@latest deploy --env staging # Target a specific environment
+npx @agentlink.sh/cli@latest deploy              # Interactive — diff, validate, push
+npx @agentlink.sh/cli@latest deploy --dry-run    # Preview without applying
+npx @agentlink.sh/cli@latest deploy --ci         # Non-interactive for CI/CD
+npx @agentlink.sh/cli@latest deploy --env staging # Target a specific environment
 ```
 
 The `deploy` command:
@@ -161,12 +161,12 @@ The `deploy` command:
 ### Environment management
 
 ```bash
-npx @agentlinksh/cli@latest env add prod        # Connect a production cloud project
-npx @agentlinksh/cli@latest env add dev         # Add a cloud dev environment
-npx @agentlinksh/cli@latest env use local       # Switch to local Docker for dev
-npx @agentlinksh/cli@latest env use dev         # Switch to cloud dev
-npx @agentlinksh/cli@latest env list            # Show all environments
-npx @agentlinksh/cli@latest env remove staging  # Remove an environment
+npx @agentlink.sh/cli@latest env add prod        # Connect a production cloud project
+npx @agentlink.sh/cli@latest env add dev         # Add a cloud dev environment
+npx @agentlink.sh/cli@latest env use local       # Switch to local Docker for dev
+npx @agentlink.sh/cli@latest env use dev         # Switch to cloud dev
+npx @agentlink.sh/cli@latest env list            # Show all environments
+npx @agentlink.sh/cli@latest env remove staging  # Remove an environment
 ```
 
 `env use` switches the active dev environment by rewriting the managed section of `.env.local`. User-added variables are preserved across switches. `env use prod` is blocked — use `deploy` instead.

@@ -37,7 +37,7 @@ Client → api.chart_get_by_id()  → RLS filters by user → returns only allow
 
 ### Profile creation on sign-up
 
-> **Scaffolded by the CLI.** Profiles, tenants, and memberships are created automatically on signup via the `_internal_admin_handle_new_user` trigger. The SQL below is for reference — it already exists in your project. If missing, run `npx @agentlinksh/cli@latest --force-update` — do not recreate manually.
+> **Scaffolded by the CLI.** Profiles, tenants, and memberships are created automatically on signup via the `_internal_admin_handle_new_user` trigger. The SQL below is for reference — it already exists in your project. If missing, run `npx @agentlink.sh/cli@latest --force-update` — do not recreate manually.
 
 User metadata belongs in a `profiles` table, not in Supabase Auth metadata. The trigger creates the profile, a default tenant, an owner membership, and sets JWT claims:
 
@@ -243,7 +243,7 @@ USING (public._auth_chart_can_read(id));
 
 ## Multi-Tenancy Overview
 
-> **Scaffolded by the CLI.** The CLI scaffolds a complete multi-tenancy model including tables, RLS policies, auth helpers, and API RPCs. If missing, run `npx @agentlinksh/cli@latest --force-update` — do not recreate manually. The agent builds application-specific tables on top of this foundation.
+> **Scaffolded by the CLI.** The CLI scaffolds a complete multi-tenancy model including tables, RLS policies, auth helpers, and API RPCs. If missing, run `npx @agentlink.sh/cli@latest --force-update` — do not recreate manually. The agent builds application-specific tables on top of this foundation.
 
 The multi-tenancy model uses three tables (all in `supabase/schemas/public/multitenancy.sql`):
 

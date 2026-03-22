@@ -12,7 +12,7 @@
 [db.migrations]
 schema_paths = ["./schemas/_schemas.sql", "./schemas/_extensions.sql", "./schemas/**/*.sql"]
 ```
-Also verify `supabase/schemas/_schemas.sql` exists on disk. Run `npx @agentlinksh/cli@latest --force-update` to regenerate it.
+Also verify `supabase/schemas/_schemas.sql` exists on disk. Run `npx @agentlink.sh/cli@latest --force-update` to regenerate it.
 
 ---
 
@@ -91,7 +91,7 @@ supabase migration repair <new_version> --status applied --local
 **Fix:** Fix the ordering (see above) or merge the problematic migrations. As a last resort, delete all migrations and regenerate:
 ```bash
 rm supabase/migrations/*.sql
-npx @agentlinksh/cli@latest --force-update
+npx @agentlink.sh/cli@latest --force-update
 ```
 
 ---
@@ -158,10 +158,10 @@ rm supabase/migrations/<version>_name.sql
 
 | Situation | Action |
 |-----------|--------|
-| Missing component reported by `check` | `npx @agentlinksh/cli@latest --force-update` |
+| Missing component reported by `check` | `npx @agentlink.sh/cli@latest --force-update` |
 | `db diff` produces wrong output | Edit the generated migration file manually |
 | Need a migration for auth schema changes | Write migration file + repair |
 | Timestamp collision | Rename file + repair |
-| CLI version is outdated | `npx @agentlinksh/cli@latest --force-update` |
+| CLI version is outdated | `npx @agentlink.sh/cli@latest --force-update` |
 | Migration references non-existent object | Fix ordering or merge migrations |
 | Need to undo a migration | `repair --status reverted` + delete file |

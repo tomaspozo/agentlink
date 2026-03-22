@@ -293,7 +293,7 @@ interface SupabaseContext {
 
 ### Implementation
 
-Do not rewrite this from scratch. The `_shared/` utilities are installed by the CLI. If missing, run `npx @agentlinksh/cli@latest`.
+Do not rewrite this from scratch. The `_shared/` utilities are installed by the CLI. If missing, run `npx @agentlink.sh/cli@latest`.
 
 The wrapper handles:
 - CORS preflight (`OPTIONS` requests) automatically — uses `corsHeaders` from `@supabase/supabase-js/cors`

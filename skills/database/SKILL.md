@@ -76,7 +76,7 @@ CREATE OR REPLACE FUNCTION api.chart_create(...)
 ## Development Loop
 
 1. **Write SQL** to the appropriate schema file (see organization above)
-2. **Apply** — `npx @agentlinksh/cli@latest db apply`
+2. **Apply** — `npx @agentlink.sh/cli@latest db apply`
 3. **Fix errors** with more SQL — never reset the database
 4. **Iterate** until the feature is complete
 
@@ -147,19 +147,19 @@ GRANT EXECUTE ON FUNCTION public._internal_admin_get_secret(text) TO service_rol
 
 If something is missing or broken, use `check` to diagnose and `--force-update` to fix:
 
-1. **Diagnose:** `npx @agentlinksh/cli@latest check` → read the JSON output, look at which fields are `false`
-2. **Fix:** `npx @agentlinksh/cli@latest --force-update` → re-applies all setup (templates, config, SQL, migrations)
-3. **Verify:** `npx @agentlinksh/cli@latest check` → confirm `ready: true`
+1. **Diagnose:** `npx @agentlink.sh/cli@latest check` → read the JSON output, look at which fields are `false`
+2. **Fix:** `npx @agentlink.sh/cli@latest --force-update` → re-applies all setup (templates, config, SQL, migrations)
+3. **Verify:** `npx @agentlink.sh/cli@latest check` → confirm `ready: true`
 
 | Issue | Diagnose with `check` | Fix |
 |-------|----------------------|-----|
-| Missing `_internal_admin_*` functions | `database.functions: false` | `npx @agentlinksh/cli@latest --force-update` |
-| Missing extensions (`pg_net`, `supabase_vault`) | `database.extensions: false` | `npx @agentlinksh/cli@latest --force-update` |
-| Missing vault secrets | `database.secrets: false` | `npx @agentlinksh/cli@latest --force-update` |
-| Missing `api` schema or grants | `database.api_schema: false` | `npx @agentlinksh/cli@latest --force-update` |
-| Missing `supabase/schemas/` structure | `files: false` | `npx @agentlinksh/cli@latest --force-update` |
+| Missing `_internal_admin_*` functions | `database.functions: false` | `npx @agentlink.sh/cli@latest --force-update` |
+| Missing extensions (`pg_net`, `supabase_vault`) | `database.extensions: false` | `npx @agentlink.sh/cli@latest --force-update` |
+| Missing vault secrets | `database.secrets: false` | `npx @agentlink.sh/cli@latest --force-update` |
+| Missing `api` schema or grants | `database.api_schema: false` | `npx @agentlink.sh/cli@latest --force-update` |
+| Missing `supabase/schemas/` structure | `files: false` | `npx @agentlink.sh/cli@latest --force-update` |
 
-Use `npx @agentlinksh/cli@latest info <component>` to understand what a missing component does before fixing it.
+Use `npx @agentlink.sh/cli@latest info <component>` to understand what a missing component does before fixing it.
 
 ---
 
