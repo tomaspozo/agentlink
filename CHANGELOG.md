@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Rename package references from `@agentlinksh/cli` to `@agentlink.sh/cli`
+
 ### Added
 
 - **Language matching** — builder agent now responds in the user's language (chat, planning, explanations) while keeping all code in English
