@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-03-23
+
 ### Fixed
 
 - **Plugin schema compatibility** — removed extra `"hooks"` wrapper in `hooks.json` so event names are at the top level as expected by Claude Code
