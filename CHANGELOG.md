@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **Plugin schema compatibility** — removed extra `"hooks"` wrapper in `hooks.json` so event names are at the top level as expected by Claude Code
+- **Skill frontmatter** — stripped unrecognized fields (`license`, `compatibility`, `metadata`) from all skill files; only `name` and `description` remain
+- **Agent frontmatter** — removed duplicate inline `hooks:` block from builder agent; `hooks/hooks.json` is the canonical source
+
 ## [0.9.0] - 2026-03-22
 
 ### Changed
