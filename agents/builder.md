@@ -25,7 +25,42 @@ The AgentLink CLI handles all project setup and validation. The agent builds —
 
 Check `CLAUDE.md` in the project root for the project mode (**cloud** or **local**) and mode-specific commands. If `CLAUDE.md` is missing, read `agentlink.json` — `mode: "cloud"` means cloud, anything else means local.
 
-- **Setup a project:** `npx @agentlink.sh/cli@latest`
+### New project setup
+
+If the user needs a new project, detect which setup path to use:
+
+**Option A — Supabase connector MCP available** (Claude Desktop / Cowork with the Supabase connector plugin):
+
+Check if MCP tools like `supabase_list_projects` or `supabase_create_project` are available. If they are:
+
+1. Use the MCP tools to create a new Supabase project (or let the user pick an existing one)
+2. Retrieve connection details: project ref, DB URL, API URL, publishable key (anon), secret key (service role)
+3. Run the CLI with `--link` and all connection flags:
+
+```bash
+npx @agentlink.sh/cli@latest my-app --link \
+  --project-ref <ref> \
+  --db-url "<db_url>" \
+  --api-url "<api_url>" \
+  --publishable-key "<anon_key>" \
+  --secret-key "<service_role_key>"
+```
+
+This scaffolds files, connects to the Supabase project, and applies the full SQL setup in one step — no interactive prompts needed.
+
+**Option B — Terminal** (Claude Code CLI or user with terminal access):
+
+Prompt the user to run the CLI interactively — it handles Supabase login, project creation, and linking:
+
+```bash
+npx @agentlink.sh/cli@latest my-app
+```
+
+After either option, run `npx @agentlink.sh/cli@latest check` to confirm `ready: true`.
+
+**The Supabase connector MCP is ONLY used for auth and project bootstrapping** — never for schema application, SQL execution, or ongoing development. All database work goes through the AgentLink CLI (`db apply`, `db migrate`).
+
+### Ongoing development
 
 **Local mode:**
 - **Stack down?** Run `supabase start`. If that fails, ask the user to check their Supabase CLI.
@@ -87,14 +122,14 @@ Use `npx @agentlink.sh/cli@latest info <name>` to read the annotation docs for a
 | Task | Local | Cloud |
 | ---- | ----- | ----- |
 | Apply SQL (all schemas) | `npx @agentlink.sh/cli@latest db apply` | `npx @agentlink.sh/cli@latest db apply` |
-| Apply SQL (single statement) | `psql` — DB URL from `supabase status` | `psql` — pooler URL from `.env.local` |
-| Generate types | `supabase gen types typescript --local` | `supabase gen types typescript --project-id <ref>` |
+| Apply SQL (single statement) | `npx @agentlink.sh/cli@latest db sql "<query>"` or `psql` | `npx @agentlink.sh/cli@latest db sql "<query>"` |
+| Generate types | `npx @agentlink.sh/cli@latest db types` | `npx @agentlink.sh/cli@latest db types` |
 | Edge functions (dev) | `supabase functions serve` | `supabase functions deploy` |
 | Set secrets | `supabase secrets set KEY=value` | `supabase secrets set KEY=value` |
 | Security review | `supabase:get_advisors` (MCP) | N/A |
 | Get connection info | `supabase status` | Read `.env.local` |
 | Generate migration (deployment) | `npx @agentlink.sh/cli@latest db migrate name` | `npx @agentlink.sh/cli@latest db migrate name` |
-| Push migration (deployment) | N/A (applied locally) | `supabase db push` |
+| Push migration (deployment) | N/A (applied locally) | `supabase db push` (or use `deploy`) |
 | Deploy to production | `npx @agentlink.sh/cli@latest deploy` | `npx @agentlink.sh/cli@latest deploy` |
 | Switch dev environment | `npx @agentlink.sh/cli@latest env use <name>` | `npx @agentlink.sh/cli@latest env use <name>` |
 | List environments | `npx @agentlink.sh/cli@latest env list` | `npx @agentlink.sh/cli@latest env list` |

@@ -77,9 +77,9 @@ CREATE OR REPLACE FUNCTION api.chart_create(...)
 
 > **Companion:** If `supabase-postgres-best-practices` is available, invoke it to review schema changes before proceeding.
 
-5. **Generate types** — `supabase gen types typescript --local > src/types/database.ts` (cloud: `--project-id <ref>`)
+`db apply` auto-generates TypeScript types after applying schemas. To regenerate types separately: `npx @agentlink.sh/cli@latest db types`.
 
-The DB URL is auto-resolved from `.env.local` (written by the CLI during scaffold). No `--db-url` flag needed in either local or cloud mode.
+The DB URL is auto-resolved from `.env.local` (written by the CLI during setup). No `--db-url` flag needed in either local or cloud mode.
 
 **Migrations are not part of the development loop.** The agent writes SQL, applies it, and keeps building. Migrations are generated only when the user explicitly asks, or as part of a deployment workflow to promote changes to another environment. See the `cli` skill for migration commands.
 

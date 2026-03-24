@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Desktop/Cowork support** — builder agent now detects Supabase connector MCP and uses `--link` flag for non-interactive project setup from Claude Desktop and Cowork apps
+- **`--local` flag** documented in CLI skill flags table (cloud is default, `--local` opts into Docker mode)
+- **`db sql` command** added to builder agent tools table for single SQL statements (works in both local and cloud mode)
+
+### Changed
+
+- **Tools table updated** — `db types` CLI command replaces raw `supabase gen types` references (works in both modes); `db sql` replaces `psql` for single statements in cloud
+- **`db apply` auto-generates types** — database skill development loop updated; no separate type generation step needed
+- **Type generation references** updated across frontend skill and database workflow reference to use `db types`
+- **CLI skill scaffold flow** updated with interactive and `--link` variants; update flow now references pgdelta/CLI commands instead of psql/db-diff
+- **Environment setup** — builder agent restructured with "New project setup" (Option A: Supabase connector MCP, Option B: terminal) and "Ongoing development" sections
+
 ## [0.10.0] - 2026-03-23
 
 ### Fixed

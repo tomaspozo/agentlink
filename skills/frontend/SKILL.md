@@ -132,12 +132,10 @@ const { data, error } = await supabase.rpc("chart_list");
 Generate TypeScript types from your database schema:
 
 ```bash
-# Local
-supabase gen types typescript --local > src/types/database.ts
-
-# Cloud (project ref from agentlink.json or CLAUDE.md)
-supabase gen types typescript --project-id <ref> > src/types/database.ts
+npx @agentlink.sh/cli@latest db types
 ```
+
+This works in both local and cloud mode. Types are written to `src/types/database.types.ts` (Vite) or `types/database.types.ts` (Next.js). `db apply` auto-generates types, so you usually don't need to run this separately.
 
 Use the generated types with the Supabase client:
 
@@ -155,7 +153,7 @@ const supabase = createClient<Database>(
 const { data } = await supabase.rpc("chart_get_by_id", { p_chart_id: id });
 ```
 
-Re-run `supabase gen types` after schema changes to keep types in sync.
+Types are regenerated automatically by `db apply`. To regenerate manually: `npx @agentlink.sh/cli@latest db types`.
 
 ---
 
