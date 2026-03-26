@@ -2,71 +2,95 @@
 
 Client-side authentication UI — sign-in/sign-up forms, OAuth redirect flows, and protected routes.
 
-> **Vite projects:** Auth forms are scaffolded — check `src/components/` and `src/pages/` before building from scratch.
+> **Vite projects:** The scaffold provides auth infrastructure (`AuthProvider`, `_auth.tsx` guard) but not auth pages. Build login/sign-up pages based on the project's auth strategy.
 
 ## Contents
-- Vite Auth Patterns (scaffolded)
+- Vite Auth Infrastructure
 - Sign-In / Sign-Up Forms
 - OAuth Redirect Flow
 - Protected Routes
 
 ---
 
-## Vite Auth Patterns (scaffolded)
+## Vite Auth Infrastructure
+
+### Auth context
+
+The scaffold provides `AuthProvider` and `useAuth()` in `src/contexts/auth-context.tsx`:
+
+```typescript
+import { useAuth } from "@/contexts/auth-context";
+
+function MyComponent() {
+  const { user, session, loading } = useAuth();
+  // user: User | null, session: Session | null, loading: boolean
+}
+```
+
+The `AuthProvider` wraps the app in `main.tsx` and manages a single Supabase auth subscription. All components share the same auth state — no duplicate subscriptions.
+
+### Protected routes (TanStack Router layout)
+
+The scaffold uses a `_auth.tsx` layout route that guards all child routes via `beforeLoad`:
+
+```typescript
+// src/routes/_auth.tsx
+import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
+import { supabase } from "@/lib/supabase";
+import { ErrorBoundary } from "@/components/error-boundary";
+
+export const Route = createFileRoute("/_auth")({
+  beforeLoad: async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) throw redirect({ to: "/login" });
+    return { session };
+  },
+  component: AuthLayout,
+});
+
+function AuthLayout() {
+  return (
+    <main className="min-h-dvh bg-background">
+      <ErrorBoundary>
+        <Outlet />
+      </ErrorBoundary>
+    </main>
+  );
+}
+```
+
+All routes under `src/routes/_auth/` are automatically protected. No wrapper component needed — the router handles it before the page even renders.
 
 ### Auth callback (PKCE flow)
 
-The Vite scaffold handles auth callbacks via `onAuthStateChange`. This is used for OAuth redirects, magic links, and email confirmations:
+For OAuth redirects, magic links, and email confirmations, `onAuthStateChange` handles the token exchange automatically. Create a dedicated route if you need custom post-auth logic:
 
 ```typescript
-// src/pages/AuthCallback.tsx (scaffolded)
+// src/routes/auth-callback.tsx
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
-import { useNavigate } from "react-router";
 import { supabase } from "@/lib/supabase";
 
-export function AuthCallback() {
+export const Route = createFileRoute("/auth-callback")({
+  component: AuthCallbackPage,
+});
+
+function AuthCallbackPage() {
   const navigate = useNavigate();
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event) => {
         if (event === "SIGNED_IN") {
-          navigate("/dashboard", { replace: true });
+          navigate({ to: "/", replace: true });
         }
       }
     );
-
     return () => subscription.unsubscribe();
   }, [navigate]);
 
   return <div>Completing sign in...</div>;
 }
-```
-
-### AuthGuard (protected routes)
-
-The Vite scaffold includes an `AuthGuard` component for protecting routes:
-
-```typescript
-// src/components/AuthGuard.tsx (scaffolded)
-import { useAuth } from "@/hooks/useAuth";
-import { Navigate } from "react-router";
-
-export function AuthGuard({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
-
-  if (loading) return null;
-  if (!user) return <Navigate to="/login" replace />;
-
-  return <>{children}</>;
-}
-```
-
-Used in route definitions:
-```typescript
-<Route element={<AuthGuard><DashboardLayout /></AuthGuard>}>
-  <Route path="/dashboard" element={<Dashboard />} />
-</Route>
 ```
 
 ---
@@ -280,9 +304,11 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 };
 ```
 
-### Client-side guard (SPA fallback)
+### Client-side guard (Vite SPA)
 
-For apps without SSR, guard in client components:
+For Vite projects, the `_auth.tsx` layout route handles this automatically via `beforeLoad`. No separate guard component is needed — see the "Vite Auth Patterns" section above.
+
+For Next.js projects without SSR, guard in client components:
 
 ```typescript
 "use client";
@@ -313,10 +339,23 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 ### Sign-out
 
+Call `supabase.auth.signOut()` directly — no wrapper needed:
+
 ```typescript
-async function handleSignOut() {
-  const supabase = createClient();
-  await supabase.auth.signOut();
-  window.location.href = "/login";
+import { supabase } from "@/lib/supabase";
+import { useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
+
+function SignOutButton() {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    queryClient.clear(); // clear cached data
+    navigate({ to: "/login" });
+  };
+
+  return <button onClick={handleSignOut}>Sign out</button>;
 }
 ```

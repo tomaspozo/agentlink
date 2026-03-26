@@ -4,6 +4,17 @@
 
 ### Added
 
+- **Routing reference** — new `references/routing.md` covering TanStack Router file-based routing, router setup, conventions, auth-protected layout routes, route decomposition, navigation config, and search params
+- **Data fetching reference** — new `references/data_fetching.md` covering TanStack Query setup, query factory pattern, mutation hooks, query key structure, `typedRpc()` helper with `RpcReturnMap`, cache invalidation strategies, loading/error states, and provider nesting order
+- **Form patterns reference** — new `references/forms.md` covering React Hook Form + Zod, schema definition, `register()` vs `Controller`, `FormField` component, form modal pattern, grid layouts, and centralized label maps
+- **`typedRpc()` helper** section in frontend SKILL.md — wraps `supabase.rpc()` with `RpcReturnMap` for real return types instead of `Json`
+- **Data fetching** section in frontend SKILL.md — TanStack Query overview with query options factories and mutation hooks
+- **Forms** section in frontend SKILL.md — React Hook Form + Zod overview with basic pattern
+- **Route architecture** section in frontend SKILL.md — TanStack Router file-based routing conventions, directory structure, and `-components/` co-location
+- **Shared components** table in frontend SKILL.md — `PageShell`, `ListSkeleton`, `EmptyState`, `ErrorBoundary`, `FormField`
+- **Config patterns** section in frontend SKILL.md — navigation config and centralized label maps
+- **Provider nesting order** — documented `QueryClientProvider → AuthProvider → RouterProvider + Toaster` hierarchy
+- **Auth strategy planning** — checklist for clarifying auth flow during planning (self-registration, auth method, password recovery, redirect)
 - **Dependencies & Deployment reference** — new `references/dependencies.md` covering per-function `deno.json` import maps, bare specifiers, sub-path mapping, version pinning, `--use-api` deployment isolation, and anti-patterns
 - **`@supabase/server` as npm package** — `withSupabase` now imports from `@supabase/server` via bare specifier instead of local `_shared/withSupabase.ts`
 - **Per-function `deno.json` requirement** — added to IMPORTANT rules, project structure, and new function checklist in SKILL.md
@@ -11,6 +22,13 @@
 
 ### Changed
 
+- **Frontend stack** — default scaffold changed from React Router v7 to TanStack Router (file-based routing) with TanStack Query for data fetching
+- **Frontend SKILL.md** — expanded from client initialization + RPC calling to full frontend patterns covering routing, data fetching, forms, shared components, and config
+- **Auth UI reference** — rewritten for TanStack Router: `_auth.tsx` layout route with `beforeLoad` guard replaces `AuthGuard` wrapper component; auth callback uses `createFileRoute`; sign-out now clears query cache
+- **Protected route pattern** — updated from `AuthGuard` component + React Router `<Navigate>` to TanStack Router `beforeLoad` redirect
+- **Scaffolded auth description** — clarified that scaffold provides auth infrastructure (`AuthProvider`, `_auth.tsx` guard) but not auth pages; agent builds pages based on auth strategy
+- **RPC parameter naming** — fixed documentation to show parameters keep the `p_` prefix in RPC calls (was incorrectly saying "without the `p_` prefix")
+- **Companion skills** — removed `next-best-practices` from the list; marked companion skills as optional
 - **Edge functions SKILL.md** — updated project structure to show `deno.json` per function, expanded new function checklist with `deno.json` and `config.toml` steps, added Dependencies & Deployment reference link
 - **edge_functions.md** — updated folder structure, shared utilities setup, and code examples to use `@supabase/server` import
 - **with_supabase.md** — implementation section now references `@supabase/server` npm package and `deno.json` setup
