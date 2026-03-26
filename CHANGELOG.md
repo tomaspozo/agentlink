@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.13.1] - 2026-03-26
+
 ### Fixed
 
 - **Plugin hooks loading** — restored `"hooks"` wrapper in `hooks.json`; Claude Code's plugin schema requires event definitions nested inside a top-level `"hooks"` key
