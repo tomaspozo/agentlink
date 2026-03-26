@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-03-26
+
 ### Changed
 
 - **RPC-first rule is now universal** — reframed from "client-side: never direct table access" to "never use `.from()` — all data goes through `.rpc()`" across builder agent, RPC skill, edge-functions skill, and frontend skill. Applies to all code (frontend, edge functions, webhooks, cron jobs), not just client-side.
