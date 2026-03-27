@@ -35,7 +35,7 @@ Client → api.chart_get_by_id()  → RLS filters by user → returns only allow
 
 > **Scaffolded by the CLI.** Profiles, tenants, and memberships are created automatically on signup via the `_internal_admin_handle_new_user` trigger. The SQL below is for reference — it already exists in your project. If missing, run `npx @agentlink.sh/cli@latest --force-update` — do not recreate manually.
 
-User metadata belongs in a `profiles` table, not in Supabase Auth metadata. The trigger creates the profile, a default tenant, an owner membership, and sets JWT claims:
+User metadata belongs in a `profiles` table, not in Supabase Auth metadata. The trigger creates the profile and — for direct signups — a default tenant, owner membership, and JWT claims. Invited users (created via `generateLink({ type: 'invite' })`) only get a profile; `invitation_accept()` handles adding them to the inviter's tenant:
 
 ```sql
 -- supabase/schemas/public/profiles.sql
@@ -72,7 +72,7 @@ BEGIN
     split_part(NEW.email, '@', 1)
   );
 
-  -- Create profile
+  -- Create profile (always — every user needs one)
   INSERT INTO public.profiles (id, email, display_name, avatar_url)
   VALUES (
     NEW.id,
@@ -84,25 +84,27 @@ BEGIN
     )
   );
 
-  -- Create default tenant
-  v_slug := regexp_replace(lower(split_part(NEW.email, '@', 1)), '[^a-z0-9]', '-', 'g')
-    || '-' || substr(replace(gen_random_uuid()::text, '-', ''), 1, 8);
+  -- Only create a default tenant for direct signups.
+  -- Invited users (invited_at IS NOT NULL, set by generateLink) join
+  -- the inviter's tenant via invitation_accept().
+  IF NEW.invited_at IS NULL THEN
+    v_slug := regexp_replace(lower(split_part(NEW.email, '@', 1)), '[^a-z0-9]', '-', 'g')
+      || '-' || substr(replace(gen_random_uuid()::text, '-', ''), 1, 8);
 
-  INSERT INTO public.tenants (name, slug)
-  VALUES (v_display_name || '''s Workspace', v_slug)
-  RETURNING id INTO v_tenant_id;
+    INSERT INTO public.tenants (name, slug)
+    VALUES (v_display_name || '''s Workspace', v_slug)
+    RETURNING id INTO v_tenant_id;
 
-  -- Create owner membership
-  INSERT INTO public.memberships (tenant_id, user_id, role)
-  VALUES (v_tenant_id, NEW.id, 'owner');
+    INSERT INTO public.memberships (tenant_id, user_id, role)
+    VALUES (v_tenant_id, NEW.id, 'owner');
 
-  -- Set JWT claims
-  UPDATE auth.users
-  SET raw_app_meta_data = COALESCE(raw_app_meta_data, '{}'::jsonb) || jsonb_build_object(
-    'tenant_id', v_tenant_id,
-    'tenant_role', 'owner'
-  )
-  WHERE id = NEW.id;
+    UPDATE auth.users
+    SET raw_app_meta_data = COALESCE(raw_app_meta_data, '{}'::jsonb) || jsonb_build_object(
+      'tenant_id', v_tenant_id,
+      'tenant_role', 'owner'
+    )
+    WHERE id = NEW.id;
+  END IF;
 
   RETURN NEW;
 END;
