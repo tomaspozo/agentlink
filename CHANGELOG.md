@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- **`config apply` command** — added to builder agent tools reference table
+- **Function-level `@agentlink` override system** — documented how `--force-update` merges at the individual function level; agent can remove the `@agentlink` annotation block and modify a function body while the CLI preserves that override and still updates other annotated functions in the same file
+  - `builder.md` — rewritten "managed resources" section with step-by-step override instructions, concrete example, and merge mechanics
+  - `database/SKILL.md` — added override guidance to annotations section
+  - `auth/SKILL.md` — added note on customizing `_internal_admin_handle_new_user`
+
 ## [0.13.1] - 2026-03-26
 
 ### Fixed
