@@ -73,9 +73,9 @@ const supabase = createServerClient(
 
 ### Finding connection values
 
-**Local:** Run `supabase status` — prints the local API URL, publishable key, and secret key. Use these in your `.env.local` for development.
+**Local:** Run `npx supabase status` — prints the local API URL, publishable key, and secret key. Use these in your `.env.local` for development.
 
-**Cloud:** Read from `.env.local` — values are pre-configured by the CLI scaffold. Do not use `supabase status`.
+**Cloud:** Read from `.env.local` — values are pre-configured by the CLI scaffold. Do not use `npx supabase status`.
 
 ---
 

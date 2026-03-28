@@ -71,7 +71,7 @@ Deno.serve(
    enabled = true
    verify_jwt = false
    ```
-6. **Test** — Local: `supabase functions serve` / Deploy: `npx supabase functions deploy --use-api`
+6. **Test** — Local: `npx supabase functions serve` / Deploy: `npx supabase functions deploy --use-api`
 
 ---
 
@@ -103,8 +103,8 @@ SB_PUBLISHABLE_KEY=sb_publishable_...
 SB_SECRET_KEY=sb_secret_...
 
 # Cloud / Production — set via CLI (already configured by scaffold)
-supabase secrets set SB_PUBLISHABLE_KEY=sb_publishable_...
-supabase secrets set SB_SECRET_KEY=sb_secret_...
+npx supabase secrets set SB_PUBLISHABLE_KEY=sb_publishable_...
+npx supabase secrets set SB_SECRET_KEY=sb_secret_...
 ```
 
 `SUPABASE_URL` is available by default and does not need to be set.

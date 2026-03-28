@@ -79,18 +79,18 @@ The CLI handles all project setup. The agent builds — it does not scaffold.
 
 - **New project:** `npx @agentlink.sh/cli@latest` — scaffolds Supabase, schemas, shared utilities, vault secrets
 - **Validate setup:** `npx @agentlink.sh/cli@latest check` — verifies extensions, internal functions, vault secrets, api schema
-- **Stack down?** `supabase start`
+- **Stack down?** `npx supabase start`
 
 ### MCP Server
 
-The agent requires a Supabase MCP server connected to `http://localhost:54321/mcp` — the native endpoint exposed by `supabase start`. MCP is used for `supabase:apply_migration` and `supabase:get_advisors`. All SQL execution goes through `psql` using the DB URL from `supabase status`.
+The agent requires a Supabase MCP server connected to `http://localhost:54321/mcp` — the native endpoint exposed by `npx supabase start`. MCP is used for `supabase:apply_migration` and `supabase:get_advisors`. All SQL execution goes through `psql` using the DB URL from `npx supabase status`.
 
 ### Blocked Commands
 
 The agent is blocked from running destructive database commands:
 
-- `supabase db reset` — destroys and recreates the local database
-- `supabase db push --force` / `-f` — overwrites remote schema without diffing
+- `npx supabase db reset` — destroys and recreates the local database
+- `npx supabase db push --force` / `-f` — overwrites remote schema without diffing
 
 If you need to run these, run them manually in your terminal.
 

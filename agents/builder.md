@@ -63,11 +63,11 @@ After either option, run `npx @agentlink.sh/cli@latest check` to confirm `ready:
 ### Ongoing development
 
 **Local mode:**
-- **Stack down?** Run `supabase start`. If that fails, ask the user to check their Supabase CLI.
+- **Stack down?** Run `npx supabase start`. If that fails, ask the user to check their Supabase CLI.
 - **MCP missing?** `supabase:apply_migration` should be available. If not, configure: name `supabase`, type HTTP, URL `http://localhost:54321/mcp`.
 
 **Cloud mode:**
-- The database runs in the cloud — do NOT run `supabase start` or `supabase stop`.
+- The database runs in the cloud — do NOT run `npx supabase start` or `npx supabase stop`.
 - There is no local MCP server. Use Supabase CLI commands directly.
 - DB URL uses the Supabase connection pooler (IPv4-compatible): `postgresql://postgres.[project_id]:[password]@aws-0-[region].pooler.supabase.com:5432/postgres` — stored in `.env.local`.
 - See `CLAUDE.md` for the cloud-specific commands and connection details.
@@ -153,12 +153,12 @@ Use `npx @agentlink.sh/cli@latest info <name>` to read the annotation docs for a
 | Apply SQL (all schemas) | `npx @agentlink.sh/cli@latest db apply` | `npx @agentlink.sh/cli@latest db apply` |
 | Apply SQL (single statement) | `npx @agentlink.sh/cli@latest db sql "<query>"` or `psql` | `npx @agentlink.sh/cli@latest db sql "<query>"` |
 | Generate types | `npx @agentlink.sh/cli@latest db types` | `npx @agentlink.sh/cli@latest db types` |
-| Edge functions (dev) | `supabase functions serve` | `supabase functions deploy` |
-| Set secrets | `supabase secrets set KEY=value` | `supabase secrets set KEY=value` |
+| Edge functions (dev) | `npx supabase functions serve` | `npx supabase functions deploy` |
+| Set secrets | `npx supabase secrets set KEY=value` | `npx supabase secrets set KEY=value` |
 | Security review | `supabase:get_advisors` (MCP) | N/A |
-| Get connection info | `supabase status` | Read `.env.local` |
+| Get connection info | `npx supabase status` | Read `.env.local` |
 | Generate migration (deployment) | `npx @agentlink.sh/cli@latest db migrate name` | `npx @agentlink.sh/cli@latest db migrate name` |
-| Push migration (deployment) | N/A (applied locally) | `supabase db push` (or use `deploy`) |
+| Push migration (deployment) | N/A (applied locally) | `npx supabase db push` (or use `deploy`) |
 | Deploy to production | `npx @agentlink.sh/cli@latest deploy` | `npx @agentlink.sh/cli@latest deploy` |
 | Switch dev environment | `npx @agentlink.sh/cli@latest env use <name>` | `npx @agentlink.sh/cli@latest env use <name>` |
 | List environments | `npx @agentlink.sh/cli@latest env list` | `npx @agentlink.sh/cli@latest env list` |

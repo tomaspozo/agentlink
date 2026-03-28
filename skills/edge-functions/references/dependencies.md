@@ -38,7 +38,7 @@ supabase/functions/
 
 ## Per-Function `deno.json` (Required)
 
-The global `supabase/functions/deno.json` works during local development (`supabase functions serve`), but **is not included** when deploying with `--use-api`. The deploy process bundles each function in isolation — only files inside the function's directory are available.
+The global `supabase/functions/deno.json` works during local development (`npx supabase functions serve`), but **is not included** when deploying with `--use-api`. The deploy process bundles each function in isolation — only files inside the function's directory are available.
 
 Every function directory needs its own `deno.json` with the dependencies that function actually uses. Keep it minimal — a function that only uses `@supabase/server` doesn't need `hono` entries.
 
@@ -151,7 +151,7 @@ Always pin versions in `deno.json`. Unversioned specifiers can pull in breaking 
 
 ## Global `deno.json`
 
-Keep the global `supabase/functions/deno.json` as a local development convenience. During `supabase functions serve`, Deno falls back to it if a per-function `deno.json` doesn't exist. But don't depend on it for deployment — only per-function `deno.json` files are included in the deploy bundle.
+Keep the global `supabase/functions/deno.json` as a local development convenience. During `npx supabase functions serve`, Deno falls back to it if a per-function `deno.json` doesn't exist. But don't depend on it for deployment — only per-function `deno.json` files are included in the deploy bundle.
 
 Keep the global file in sync with per-function files, but always ensure each function has its own copy.
 
@@ -163,14 +163,14 @@ Local dev and deployment resolve dependencies differently:
 
 | Environment | Dependency source |
 |-------------|-------------------|
-| `supabase functions serve` | Per-function `deno.json` first, then global fallback |
-| `supabase functions deploy --use-api` | Per-function `deno.json` only — global is excluded |
+| `npx supabase functions serve` | Per-function `deno.json` first, then global fallback |
+| `npx supabase functions deploy --use-api` | Per-function `deno.json` only — global is excluded |
 
 Always test both paths:
 
 ```bash
 # Local development
-supabase functions serve --env-file ./.env.local
+npx supabase functions serve --env-file ./.env.local
 
 # Deploy (identical to production bundling)
 npx supabase functions deploy --use-api
@@ -242,7 +242,7 @@ The import map is only for external packages. Relative imports (`../_shared/resp
    enabled = true
    verify_jwt = false
    ```
-5. Test locally: `supabase functions serve`
+5. Test locally: `npx supabase functions serve`
 6. Deploy: `npx supabase functions deploy --use-api`
 
 ---

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **`npx supabase` prefix across all skills** — replaced bare `supabase` CLI command invocations with `npx supabase` in builder agent, skills, references, README, and hook messages. The CLI installs `supabase` as a local devDependency, so `npx` is required to resolve it.
+
 ## [0.14.0] - 2026-03-27
 
 ### Added

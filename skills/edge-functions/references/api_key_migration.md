@@ -99,8 +99,8 @@ SB_PUBLISHABLE_KEY=sb_publishable_...
 SB_SECRET_KEY=sb_secret_...
 
 # Production
-supabase secrets set SB_PUBLISHABLE_KEY=sb_publishable_...
-supabase secrets set SB_SECRET_KEY=sb_secret_...
+npx supabase secrets set SB_PUBLISHABLE_KEY=sb_publishable_...
+npx supabase secrets set SB_SECRET_KEY=sb_secret_...
 ```
 
 ### 4. Rewrite each function to use `withSupabase`
@@ -181,7 +181,7 @@ Store vault secrets via `psql` using `vault.create_secret()`.
 
 ### Seed file
 
-Vault secrets are wiped on every `supabase db reset`. Add the secrets to `supabase/seed.sql` so they persist:
+Vault secrets are wiped on every `npx supabase db reset`. Add the secrets to `supabase/seed.sql` so they persist:
 
 ```sql
 -- Vault secrets for local development (re-created on every db reset)
@@ -190,7 +190,7 @@ SELECT vault.create_secret('sb_publishable_...', 'SB_PUBLISHABLE_KEY');
 SELECT vault.create_secret('sb_secret_...', 'SB_SECRET_KEY');
 ```
 
-Replace placeholders with actual local keys from `supabase status`. If the seed file already has legacy vault secrets, replace them — don't duplicate.
+Replace placeholders with actual local keys from `npx supabase status`. If the seed file already has legacy vault secrets, replace them — don't duplicate.
 
 ---
 
@@ -207,7 +207,7 @@ Update environment variables in your hosting platform's dashboard:
 
 ### Supabase dashboard
 
-1. Set edge function secrets in production: `supabase secrets set SB_PUBLISHABLE_KEY=... SB_SECRET_KEY=...`
+1. Set edge function secrets in production: `npx supabase secrets set SB_PUBLISHABLE_KEY=... SB_SECRET_KEY=...`
 2. Store vault secrets in production via the SQL Editor
 3. Once everything is confirmed working, disable legacy keys in the Supabase Dashboard under Project Settings > API
 
@@ -220,7 +220,7 @@ After completing all steps, run through this checklist:
 - [ ] No references to `SUPABASE_ANON_KEY` or `SUPABASE_SERVICE_ROLE_KEY` in codebase
 - [ ] No references to `NEXT_PUBLIC_SUPABASE_ANON_KEY` in codebase
 - [ ] `verify_jwt = false` set for all functions in `config.toml`
-- [ ] Edge function secrets configured (`supabase secrets list`)
+- [ ] Edge function secrets configured (`npx supabase secrets list`)
 - [ ] Vault secrets present (`npx @agentlink.sh/cli@latest check` passes)
 - [ ] Seed file updated with new vault secret names
 - [ ] All edge functions use `withSupabase` wrapper (no manual `createClient`)

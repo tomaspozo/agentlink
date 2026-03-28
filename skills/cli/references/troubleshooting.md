@@ -18,7 +18,7 @@ Also verify `supabase/schemas/_schemas.sql` exists on disk. Run `npx @agentlink.
 
 ### `function already exists with same argument types` during migration
 
-**Cause:** Running `supabase migration up` or `supabase db reset` on a database where objects already exist. Schema files use `CREATE OR REPLACE` (idempotent), but generated migrations may use plain `CREATE`.
+**Cause:** Running `npx supabase migration up` or `npx supabase db reset` on a database where objects already exist. Schema files use `CREATE OR REPLACE` (idempotent), but generated migrations may use plain `CREATE`.
 
 **Fix:** Don't use `migration up` to apply SQL on a running local DB where objects exist. Use `psql` to apply schema files directly:
 ```bash
@@ -39,7 +39,7 @@ ls supabase/migrations/ | sort
 # Rename one — change the timestamp (increment by 1 second)
 mv supabase/migrations/20240101120000_foo.sql supabase/migrations/20240101120001_foo.sql
 # Repair if needed
-supabase migration repair 20240101120001 --status applied --local
+npx supabase migration repair 20240101120001 --status applied --local
 # Cloud: use --linked instead of --local
 ```
 
@@ -59,7 +59,7 @@ supabase migration repair 20240101120001 --status applied --local
 
 ### Migration ordering issues
 
-**Symptom:** `supabase db reset` or `supabase start` fails because a migration references an object that doesn't exist yet.
+**Symptom:** `npx supabase db reset` or `npx supabase start` fails because a migration references an object that doesn't exist yet.
 
 **Common causes:**
 - Post-setup migrations have timestamps *before* the `agentlink_setup` migration (they must come after)
@@ -72,8 +72,8 @@ supabase migration repair 20240101120001 --status applied --local
 
 If ordering is wrong, rename files to fix timestamps and repair:
 ```bash
-supabase migration repair <old_version> --status reverted --local
-supabase migration repair <new_version> --status applied --local
+npx supabase migration repair <old_version> --status reverted --local
+npx supabase migration repair <new_version> --status applied --local
 # Cloud: use --linked instead of --local
 ```
 
@@ -122,7 +122,7 @@ Fetches the correct pooler URL from the Supabase Management API and updates `.en
 
 ### Duplicate migration files from repeated scaffold runs
 
-**Symptom:** Multiple `agentlink_setup.sql` files in `supabase/migrations/` with different timestamps. `supabase db push` may fail.
+**Symptom:** Multiple `agentlink_setup.sql` files in `supabase/migrations/` with different timestamps. `npx supabase db push` may fail.
 
 **Cause:** Each scaffold run created a new setup migration instead of detecting the existing one. Fixed in v0.11.1+, but if you already have duplicates:
 
@@ -134,7 +134,7 @@ Deletes all migration files, re-applies schemas, and regenerates a single clean 
 
 ---
 
-### `supabase db push` fails with "Remote migration versions not found"
+### `npx supabase db push` fails with "Remote migration versions not found"
 
 **Symptom:** `Remote migration versions not found in local migrations directory` — the cloud database has migration versions that don't exist locally.
 
@@ -146,7 +146,7 @@ Deletes all migration files, re-applies schemas, and regenerates a single clean 
 npx @agentlink.sh/cli@latest db rebuild
 
 # Option 2: Manual repair (if you need to keep specific migrations)
-supabase migration repair --status reverted <version1> <version2> ...
+npx supabase migration repair --status reverted <version1> <version2> ...
 ```
 
 ---
@@ -200,7 +200,7 @@ cat > supabase/migrations/${TIMESTAMP}_my_fix.sql << 'EOF'
 EOF
 
 # Mark as applied (if the SQL was already run on the local DB)
-supabase migration repair ${TIMESTAMP} --status applied --local
+npx supabase migration repair ${TIMESTAMP} --status applied --local
 # Cloud: use --linked instead of --local
 ```
 
@@ -208,7 +208,7 @@ supabase migration repair ${TIMESTAMP} --status applied --local
 
 ```bash
 # Local — get the DB URL from supabase status
-DB_URL=$(supabase status -o json | jq -r '.DB_URL // .db_url')
+DB_URL=$(npx supabase status -o json | jq -r '.DB_URL // .db_url')
 
 # Cloud — use the pooler URL from .env.local (IPv4-compatible)
 # DB_URL="postgresql://postgres.[project_id]:[password]@aws-0-[region].pooler.supabase.com:5432/postgres"
@@ -225,11 +225,11 @@ psql "$DB_URL" -f supabase/schemas/public/charts.sql
 1. Edit the migration file in `supabase/migrations/`
 2. If the migration was already applied, you need to revert and re-apply:
 ```bash
-supabase migration repair <version> --status reverted --local
+npx supabase migration repair <version> --status reverted --local
 # Fix the SQL in the file
 # Re-apply by running the SQL via psql
 psql "$DB_URL" -f supabase/migrations/<version>_name.sql
-supabase migration repair <version> --status applied --local
+npx supabase migration repair <version> --status applied --local
 # Cloud: use --linked instead of --local
 ```
 
@@ -237,7 +237,7 @@ supabase migration repair <version> --status applied --local
 
 ```bash
 # Mark as reverted
-supabase migration repair <version> --status reverted --local
+npx supabase migration repair <version> --status reverted --local
 # Delete the file
 rm supabase/migrations/<version>_name.sql
 ```

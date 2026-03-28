@@ -15,20 +15,20 @@ This means re-running the CLI won't duplicate template migrations.
 
 ### How `repairMigrations()` works
 
-Calls `supabase migration repair <version> --status applied --local` for each version. This tells the local Supabase instance "this migration has already been applied, don't run it again." Used for post-setup migrations that were applied via `runSQL` before the migration file existed.
+Calls `npx supabase migration repair <version> --status applied --local` for each version. This tells the local Supabase instance "this migration has already been applied, don't run it again." Used for post-setup migrations that were applied via `runSQL` before the migration file existed.
 
 ---
 
 ## Pre-Start Migrations
 
-**Purpose:** Infrastructure that must exist before `supabase start` runs the DB. Infrastructure migrations contain ONLY extensions, schema creation, and grants. Tables, functions, and policies belong in schema files and are captured by `db diff`.
+**Purpose:** Infrastructure that must exist before `npx supabase start` runs the DB. Infrastructure migrations contain ONLY extensions, schema creation, and grants. Tables, functions, and policies belong in schema files and are captured by `db diff`.
 
 **Contents:**
 - `agentlink_infrastructure` — Creates `api` schema + grants, extensions (`pg_net`, `pg_cron`, `pgmq`)
 
 **Why hand-crafted:** `db diff` mangles `CREATE EXTENSION` statements. Extensions need specific schemas (`pg_catalog` for `pg_cron`, `extensions` for `pg_net`) and version pinning (`pgmq` needs `VERSION '1.5.1'`). A diff-generated migration would produce incorrect or incomplete SQL.
 
-**Applied by:** `supabase start` — it runs all migrations in `supabase/migrations/` in timestamp order.
+**Applied by:** `npx supabase start` — it runs all migrations in `supabase/migrations/` in timestamp order.
 
 ---
 
@@ -50,9 +50,9 @@ Calls `supabase migration repair <version> --status applied --local` for each ve
 
 ---
 
-## Why `pgdelta` Instead of `supabase db diff`
+## Why `pgdelta` Instead of `npx supabase db diff`
 
-`supabase db diff` (including `--use-pg-delta`) applies schema files **alphabetically** to a shadow database. This breaks when schema files have cross-file FK references — e.g., `animals.sql` creates a table that `birth_records.sql` references, but `birth_records.sql` sorts first alphabetically. The shadow DB build fails.
+`npx supabase db diff` (including `--use-pg-delta`) applies schema files **alphabetically** to a shadow database. This breaks when schema files have cross-file FK references — e.g., `animals.sql` creates a table that `birth_records.sql` references, but `birth_records.sql` sorts first alphabetically. The shadow DB build fails.
 
 **Solution:** We use `pgdelta` (bundled with the CLI) via two subcommands:
 
@@ -80,7 +80,7 @@ Unified flow for both local and cloud:
 2. Applies schemas via `pgdelta declarative apply`
 3. Exports desired state catalog
 4. Diffs baseline vs desired (`pgdelta plan`) → writes migration file
-5. (Cloud only) User pushes with `supabase db push`
+5. (Cloud only) User pushes with `npx supabase db push`
 
 Non-destructive — no `db reset`, no data backup/restore.
 
