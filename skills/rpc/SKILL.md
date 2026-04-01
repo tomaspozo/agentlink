@@ -19,8 +19,8 @@ const { data } = await admin.from("charts").select("*");
 const { data } = await supabase.rpc("chart_get_by_user");
 
 // ✅ CORRECT — within withSupabase context
-const { data } = await ctx.client.rpc("chart_get_by_user");
-const { data } = await ctx.adminClient.rpc("chart_admin_cleanup");
+const { data } = await ctx.supabase.rpc("chart_get_by_user");
+const { data } = await ctx.supabaseAdmin.rpc("chart_admin_cleanup");
 ```
 
 ## Function Anatomy

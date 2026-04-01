@@ -5,7 +5,7 @@ The `withSupabase` wrapper is the **only** way to initialize Supabase clients in
 ## Contents
 - Rules
 - Clients
-- Allow Types (user, public, private, array)
+- Allow Types (user, public, secret, array)
 - Selection Guide
 - Function Configuration
 - Anti-Patterns
@@ -16,7 +16,7 @@ The `withSupabase` wrapper is the **only** way to initialize Supabase clients in
 ## Rules
 
 1. **ALWAYS use `withSupabase`** — never call `createClient()` in function code, never parse JWTs manually.
-2. **ALWAYS use `ctx.client` and `ctx.adminClient`** — they are provided by the wrapper. Never create your own clients.
+2. **ALWAYS use `ctx.supabase` and `ctx.supabaseAdmin`** — they are provided by the wrapper. Never create your own clients.
 3. **ALWAYS set `verify_jwt = false`** in `config.toml` for every function — the wrapper handles auth.
 
 ---
@@ -27,18 +27,18 @@ Both clients are **always available** regardless of `allow` type:
 
 | Client | Behavior | Use for |
 |--------|----------|---------|
-| `ctx.client` | Respects RLS | Default choice. User data operations, queries that should be scoped by policies. |
-| `ctx.adminClient` | Bypasses RLS | Service-level operations that need full access. Use deliberately. |
+| `ctx.supabase` | Respects RLS | Default choice. User data operations, queries that should be scoped by policies. |
+| `ctx.supabaseAdmin` | Bypasses RLS | Service-level operations that need full access. Use deliberately. |
 
-How `ctx.client` is initialized depends on `allow`:
+How `ctx.supabase` is initialized depends on `allow`:
 
-| Allow | `ctx.client` is... |
+| Allow | `ctx.supabase` is... |
 |-------|---------------------|
 | `user` | User-scoped — carries the caller's JWT, so RLS filters by user identity |
 | `public` | Public — publishable key, no JWT. RLS `anon` role policies apply |
-| `private` | Public — publishable key, no JWT. RLS `anon` role policies apply |
+| `secret` | Public — publishable key, no JWT. RLS `anon` role policies apply |
 
-**Default to `ctx.client`.** Reserve `ctx.adminClient` for operations where the function acts as the system, not on behalf of a user -- e.g., processing webhook payloads, cron jobs, writing to service-only tables. If RLS is blocking a user-facing operation, fix the RLS policy; do not switch to `adminClient` to work around it.
+**Default to `ctx.supabase`.** Reserve `ctx.supabaseAdmin` for operations where the function acts as the system, not on behalf of a user -- e.g., processing webhook payloads, cron jobs, writing to service-only tables. If RLS is blocking a user-facing operation, fix the RLS policy; do not switch to `supabaseAdmin` to work around it.
 
 ---
 
@@ -48,15 +48,15 @@ How `ctx.client` is initialized depends on `allow`:
 
 For functions called from the app by a logged-in user. The wrapper validates the JWT and rejects the request if the user is not authenticated.
 
-**Provides:** `ctx.user`, `ctx.claims`, `ctx.client` (user-scoped), `ctx.adminClient`
+**Provides:** `ctx.user`, `ctx.claims`, `ctx.supabase` (user-scoped), `ctx.supabaseAdmin`
 
 ```typescript
-Deno.serve(
-  withSupabase({ allow: "user" }, async (_req, ctx) => {
+export default {
+  fetch: withSupabase({ allow: "user", db: { schema: "api" } }, async (_req, ctx) => {
     try {
       // ctx.user.id, ctx.user.email — user identity
-      // ctx.client — queries scoped to this user via RLS
-      const { data, error } = await ctx.client.rpc("profile_get_by_user");
+      // ctx.supabase — queries scoped to this user via RLS
+      const { data, error } = await ctx.supabase.rpc("profile_get_by_user");
 
       if (error) return errorResponse(error.message);
       return jsonResponse(data);
@@ -65,7 +65,7 @@ Deno.serve(
       return errorResponse("Internal server error", 500);
     }
   }),
-);
+};
 ```
 
 ### `public` — Webhooks, Public Endpoints, External Services
@@ -79,12 +79,12 @@ For functions that receive no Supabase JWT. Use this for:
 
 No auth enforcement — the request passes through to the handler.
 
-**Provides:** `ctx.client` (public), `ctx.adminClient`
+**Provides:** `ctx.supabase` (public), `ctx.supabaseAdmin`
 
 ```typescript
-// Stripe webhook — validates its own signature, uses adminClient for DB writes
-Deno.serve(
-  withSupabase({ allow: "public" }, async (req, ctx) => {
+// Stripe webhook — validates its own signature, uses supabaseAdmin for DB writes
+export default {
+  fetch: withSupabase({ allow: "public", db: { schema: "api" } }, async (req, ctx) => {
     try {
       const signature = req.headers.get("stripe-signature");
       if (!signature) return errorResponse("Missing signature", 401);
@@ -92,7 +92,7 @@ Deno.serve(
       const body = await req.json();
       // Webhook-specific validation here...
 
-      const { error } = await ctx.adminClient.rpc("payment_process_webhook", {
+      const { error } = await ctx.supabaseAdmin.rpc("payment_process_webhook", {
         p_event: body,
       });
 
@@ -103,10 +103,10 @@ Deno.serve(
       return errorResponse("Internal server error", 500);
     }
   }),
-);
+};
 ```
 
-### `private` — Internal / Service-to-Service
+### `secret` — Internal / Service-to-Service
 
 For functions called with the secret key. The wrapper validates that the `apikey` header contains the correct secret key and rejects the request otherwise.
 
@@ -115,14 +115,14 @@ Use this for:
 - Database-triggered calls via `_internal_admin_call_edge_function`
 - Internal service-to-service calls
 
-**Provides:** `ctx.client` (public), `ctx.adminClient`
+**Provides:** `ctx.supabase` (public), `ctx.supabaseAdmin`
 
 ```typescript
 // Cron job — only callable with the secret key
-Deno.serve(
-  withSupabase({ allow: "private" }, async (_req, ctx) => {
+export default {
+  fetch: withSupabase({ allow: "secret", db: { schema: "api" } }, async (_req, ctx) => {
     try {
-      const { data, error } = await ctx.adminClient.rpc(
+      const { data, error } = await ctx.supabaseAdmin.rpc(
         "cleanup_expired_sessions",
       );
 
@@ -133,7 +133,7 @@ Deno.serve(
       return errorResponse("Internal server error", 500);
     }
   }),
-);
+};
 ```
 
 ### Array — Dual-Auth Functions
@@ -142,14 +142,14 @@ Some functions are called from multiple contexts — e.g., by a logged-in user f
 
 ```typescript
 // Called by users (JWT) and by admin-regenerate (secret key)
-Deno.serve(
-  withSupabase({ allow: ["user", "private"] }, async (req, ctx) => {
+export default {
+  fetch: withSupabase({ allow: ["user", "secret"], db: { schema: "api" } }, async (req, ctx) => {
     try {
       // ctx.user exists → called by a logged-in user (JWT auth succeeded)
       // ctx.user is undefined → called with secret key (internal/service)
       const userId = ctx.user?.id ?? (await req.json()).user_id;
 
-      const { data, error } = await ctx.adminClient.rpc("birth_chart_generate", {
+      const { data, error } = await ctx.supabaseAdmin.rpc("birth_chart_generate", {
         p_user_id: userId,
       });
 
@@ -160,13 +160,13 @@ Deno.serve(
       return errorResponse("Internal server error", 500);
     }
   }),
-);
+};
 ```
 
 **How it works:**
 - The wrapper tries each type in order — first successful auth wins
-- If `user` succeeds: `ctx.user`, `ctx.claims`, and user-scoped `ctx.client` are set
-- If `private` succeeds: `ctx.user` is `undefined`, `ctx.client` is the public client
+- If `user` succeeds: `ctx.user`, `ctx.claims`, and user-scoped `ctx.supabase` are set
+- If `secret` succeeds: `ctx.user` is `undefined`, `ctx.supabase` is the public client
 - If none succeed: returns 401
 - If the array includes `public`: no auth is required (short-circuits)
 
@@ -182,12 +182,12 @@ Deno.serve(
 | External webhook (Stripe, GitHub) | `public` | No Supabase JWT; validate webhook signature yourself |
 | Supabase Auth Hook | `public` | Called by Supabase Auth, not a user session |
 | Public API / health check | `public` | Open access, no auth needed |
-| Cron job / scheduled function | `private` | No user context; needs secret key validation |
-| Called from another edge function | `private` | Internal service-to-service; uses secret key |
-| Called from DB via `_internal_admin_call_edge_function` | `private` | DB calls with secret key |
-| Called by users AND by other edge functions | `["user", "private"]` | Dual-auth — accepts either credential |
+| Cron job / scheduled function | `secret` | No user context; needs secret key validation |
+| Called from another edge function | `secret` | Internal service-to-service; uses secret key |
+| Called from DB via `_internal_admin_call_edge_function` | `secret` | DB calls with secret key |
+| Called by users AND by other edge functions | `["user", "secret"]` | Dual-auth — accepts either credential |
 
-**When in doubt:** if there's a logged-in user, use `user`. If it's an external service, use `public`. If it's internal infrastructure, use `private`. If it's called from multiple contexts, use an array.
+**When in doubt:** if there's a logged-in user, use `user`. If it's an external service, use `public`. If it's internal infrastructure, use `secret`. If it's called from multiple contexts, use an array.
 
 ---
 
@@ -202,7 +202,7 @@ Every function using `withSupabase` must disable built-in JWT verification since
 verify_jwt = false
 ```
 
-This is **required** for `public` and `private` (they don't send a Supabase JWT), and **required** for `user` because the wrapper validates tokens using the newer `getClaims` pattern.
+This is **required** for `public` and `secret` (they don't send a Supabase JWT), and **required** for `user` because the wrapper validates tokens using the newer `getClaims` pattern.
 
 ---
 
@@ -212,14 +212,14 @@ This is **required** for `public` and `private` (they don't send a Supabase JWT)
 
 ```typescript
 // ❌ WRONG — .from() cannot reach tables (public schema is not exposed)
-const { data } = await ctx.client.from("charts").select("*");
+const { data } = await ctx.supabase.from("charts").select("*");
 
-// ❌ ALSO WRONG — even adminClient.from() targets the exposed schema, which has no tables
-const { data } = await ctx.adminClient.from("charts").select("*");
+// ❌ ALSO WRONG — even supabaseAdmin.from() targets the exposed schema, which has no tables
+const { data } = await ctx.supabaseAdmin.from("charts").select("*");
 
 // ✅ CORRECT — .rpc() calls functions in the api schema
-const { data } = await ctx.client.rpc("chart_list");
-const { data } = await ctx.adminClient.rpc("chart_admin_cleanup");
+const { data } = await ctx.supabase.rpc("chart_list");
+const { data } = await ctx.supabaseAdmin.rpc("chart_admin_cleanup");
 ```
 
 All data access goes through `.rpc()` — in edge functions, frontend, and everywhere else. The `api` schema exposes only functions, never tables.
@@ -228,65 +228,65 @@ All data access goes through `.rpc()` — in edge functions, frontend, and every
 
 ```typescript
 // ❌ WRONG — manual client creation inside the handler
-Deno.serve(
-  withSupabase({ allow: "user" }, async (req, ctx) => {
+export default {
+  fetch: withSupabase({ allow: "user", db: { schema: "api" } }, async (req, ctx) => {
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SB_PUBLISHABLE_KEY")!,
+      Deno.env.get("SUPABASE_PUBLISHABLE_KEY")!,
     );
     const { data } = await supabase.rpc("some_function");
     // ...
   }),
-);
+};
 
-// ✅ CORRECT — use ctx.client
-Deno.serve(
-  withSupabase({ allow: "user" }, async (_req, ctx) => {
-    const { data } = await ctx.client.rpc("some_function");
+// ✅ CORRECT — use ctx.supabase
+export default {
+  fetch: withSupabase({ allow: "user", db: { schema: "api" } }, async (_req, ctx) => {
+    const { data } = await ctx.supabase.rpc("some_function");
     // ...
   }),
-);
+};
 ```
 
-### Using `adminClient` when `client` would suffice
+### Using `supabaseAdmin` when `supabase` would suffice
 
 ```typescript
 // ❌ WRONG — bypasses RLS unnecessarily
-Deno.serve(
-  withSupabase({ allow: "user" }, async (_req, ctx) => {
-    const { data } = await ctx.adminClient.rpc("profile_get_by_user");
+export default {
+  fetch: withSupabase({ allow: "user", db: { schema: "api" } }, async (_req, ctx) => {
+    const { data } = await ctx.supabaseAdmin.rpc("profile_get_by_user");
     // ...
   }),
-);
+};
 
 // ✅ CORRECT — let RLS scope the query to the user
-Deno.serve(
-  withSupabase({ allow: "user" }, async (_req, ctx) => {
-    const { data } = await ctx.client.rpc("profile_get_by_user");
+export default {
+  fetch: withSupabase({ allow: "user", db: { schema: "api" } }, async (_req, ctx) => {
+    const { data } = await ctx.supabase.rpc("profile_get_by_user");
     // ...
   }),
-);
+};
 ```
 
 ### Using `user` for a webhook
 
 ```typescript
 // ❌ WRONG — Stripe doesn't send a Supabase JWT, this will always 401
-Deno.serve(
-  withSupabase({ allow: "user" }, async (req, ctx) => {
+export default {
+  fetch: withSupabase({ allow: "user", db: { schema: "api" } }, async (req, ctx) => {
     const signature = req.headers.get("stripe-signature");
     // ...
   }),
-);
+};
 
 // ✅ CORRECT — use public, validate the webhook signature yourself
-Deno.serve(
-  withSupabase({ allow: "public" }, async (req, ctx) => {
+export default {
+  fetch: withSupabase({ allow: "public", db: { schema: "api" } }, async (req, ctx) => {
     const signature = req.headers.get("stripe-signature");
     if (!signature) return errorResponse("Missing signature", 401);
     // ...
   }),
-);
+};
 ```
 
 ---
@@ -298,8 +298,8 @@ interface SupabaseContext {
   req: Request;
 
   // Always available
-  client: SupabaseClient;       // Respects RLS
-  adminClient: SupabaseClient;  // Bypasses RLS
+  supabase: SupabaseClient;       // Respects RLS
+  supabaseAdmin: SupabaseClient;  // Bypasses RLS
 
   // Available when allow includes 'user' and auth succeeds
   user?: Record<string, unknown>;   // { id, email, role, ...claims }
@@ -311,14 +311,14 @@ interface SupabaseContext {
 
 The `withSupabase` wrapper comes from the `@supabase/server` npm package — import it via bare specifier (`import { withSupabase } from "@supabase/server"`) and map it in each function's `deno.json`. See [Dependencies & Deployment](./dependencies.md) for import map setup.
 
-The `_shared/` local utilities (`responses.ts`, `types.ts`) are installed by the CLI. If missing, run `npx @agentlink.sh/cli@latest`.
+The `_shared/` local utilities (`responses.ts`) are installed by the CLI. If missing, run `npx @agentlink.sh/cli@latest`.
 
 The wrapper handles:
 - CORS preflight (`OPTIONS` requests) automatically — uses `corsHeaders` from `@supabase/supabase-js/cors`
-- Resolution of `SB_PUBLISHABLE_KEY` and `SB_SECRET_KEY` from environment
+- Resolution of `SUPABASE_PUBLISHABLE_KEY` and `SUPABASE_SECRET_KEY` from environment
 - Clear error messages if secrets are missing
 - JWT validation via `getClaims` for `allow: "user"`
-- Secret key validation via `apikey` header for `allow: "private"`
+- Secret key validation via `apikey` header for `allow: "secret"`
 - User-scoped client creation with the caller's JWT for `allow: "user"` (created per-request)
-- Reusable public and admin clients for `allow: "public"` and `allow: "private"` (created once, shared across requests)
+- Reusable public and admin clients for `allow: "public"` and `allow: "secret"` (created once, shared across requests)
 - Array allow for dual-auth — tries each type in order, first match wins

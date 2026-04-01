@@ -9,7 +9,7 @@ Edge Functions handle everything that needs to talk to the outside world — web
 
 ## IMPORTANT!
 
-- **All database access uses `.rpc()` — never `.from()`.** The `public` schema is not exposed via the Data API, so `.from()` cannot reach tables. Use `ctx.client.rpc()` or `ctx.adminClient.rpc()` to call functions in the `api` schema.
+- **All database access uses `.rpc()` — never `.from()`.** The `public` schema is not exposed via the Data API, so `.from()` cannot reach tables. Use `ctx.supabase.rpc()` or `ctx.supabaseAdmin.rpc()` to call functions in the `api` schema.
 - Every edge function uses the `withSupabase` wrapper. No exceptions.
 - Every edge function needs its own `deno.json` with pinned dependency versions — the global one is excluded during deployment.
 - Every edge function must have `verify_jwt = false` in `supabase/config.toml`:
@@ -25,7 +25,7 @@ This is required because the `withSupabase` wrapper handles auth itself. If `ver
 
 ### First edge function in a project?
 
-The `_shared/` utilities (`responses.ts`, `types.ts`) should already exist in `supabase/functions/_shared/` — the CLI sets these up. If missing, run `npx @agentlink.sh/cli@latest`.
+The `_shared/` utilities (`responses.ts`) should already exist in `supabase/functions/_shared/` — the CLI sets these up. If missing, run `npx @agentlink.sh/cli@latest`.
 
 The `withSupabase` wrapper comes from the `@supabase/server` npm package, resolved via per-function `deno.json` import maps.
 
@@ -50,10 +50,10 @@ The `withSupabase` wrapper comes from the `@supabase/server` npm package, resolv
 import { withSupabase } from "@supabase/server";
 import { jsonResponse, errorResponse } from "../_shared/responses.ts";
 
-Deno.serve(
-  withSupabase({ allow: "user" }, async (_req, ctx) => {
+export default {
+  fetch: withSupabase({ allow: "user", db: { schema: "api" } }, async (_req, ctx) => {
     try {
-      const { data, error } = await ctx.client.rpc("my_rpc_function");
+      const { data, error } = await ctx.supabase.rpc("my_rpc_function");
 
       if (error) return errorResponse(error.message);
       return jsonResponse(data);
@@ -62,7 +62,7 @@ Deno.serve(
       return errorResponse("Internal server error", 500);
     }
   }),
-);
+};
 ```
 
 5. **Add to `config.toml`**:
@@ -83,11 +83,11 @@ Deno.serve(
 | External webhook (Stripe, GitHub)                 | `"public"`            | No Supabase JWT — validate webhook signature yourself |
 | Supabase Auth Hook                                | `"public"`            | Called by Supabase Auth, not a user session           |
 | Public API / health check                         | `"public"`            | Open access, no auth needed                           |
-| Cron job / scheduled function                     | `"private"`           | No user context — needs secret key validation         |
-| Called from DB via `_internal_admin_call_edge_function` | `"private"`           | DB calls use the secret key                           |
-| Called by users AND by other services             | `["user", "private"]` | Dual-auth — accepts either credential                 |
+| Cron job / scheduled function                     | `"secret"`            | No user context — needs secret key validation         |
+| Called from DB via `_internal_admin_call_edge_function` | `"secret"`            | DB calls use the secret key                           |
+| Called by users AND by other services             | `["user", "secret"]`  | Dual-auth — accepts either credential                 |
 
-**When in doubt:** logged-in user → `"user"`. External service → `"public"`. Internal infrastructure → `"private"`.
+**When in doubt:** logged-in user → `"user"`. External service → `"public"`. Internal infrastructure → `"secret"`.
 
 > **For the full wrapper API, dual-auth patterns, anti-patterns, and context reference, load [withSupabase Reference](./references/with_supabase.md).**
 
@@ -95,16 +95,16 @@ Deno.serve(
 
 ## Secrets
 
-Edge functions need `SB_PUBLISHABLE_KEY` and `SB_SECRET_KEY` configured as secrets — they are **not** available by default.
+Edge functions need `SUPABASE_PUBLISHABLE_KEY` and `SUPABASE_SECRET_KEY` configured as secrets — they are **not** available by default.
 
 ```bash
 # Local development — add to supabase/.env or .env.local
-SB_PUBLISHABLE_KEY=sb_publishable_...
-SB_SECRET_KEY=sb_secret_...
+SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
+SUPABASE_SECRET_KEY=sb_secret_...
 
 # Cloud / Production — set via CLI (already configured by scaffold)
-npx supabase secrets set SB_PUBLISHABLE_KEY=sb_publishable_...
-npx supabase secrets set SB_SECRET_KEY=sb_secret_...
+npx supabase secrets set SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
+npx supabase secrets set SUPABASE_SECRET_KEY=sb_secret_...
 ```
 
 `SUPABASE_URL` is available by default and does not need to be set.
@@ -116,8 +116,7 @@ npx supabase secrets set SB_SECRET_KEY=sb_secret_...
 ```
 supabase/functions/
 ├── _shared/                    # Shared utilities (NOT deployed)
-│   ├── responses.ts            # Response helpers
-│   └── types.ts                # Shared types
+│   └── responses.ts            # Response helpers
 ├── _feature-name/              # Feature-specific shared modules (NOT deployed)
 │   └── helpers.ts
 ├── my-function/

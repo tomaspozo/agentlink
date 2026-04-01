@@ -300,8 +300,8 @@ const { data } = await admin.from("charts").select("*");
 const { data } = await supabase.rpc("chart_create", { p_name: "My Chart" });
 
 // ✅ CORRECT — within withSupabase context
-const { data } = await ctx.client.rpc("chart_get_by_id", { p_chart_id: id });
-const { data } = await ctx.adminClient.rpc("chart_admin_cleanup");
+const { data } = await ctx.supabase.rpc("chart_get_by_id", { p_chart_id: id });
+const { data } = await ctx.supabaseAdmin.rpc("chart_admin_cleanup");
 ```
 
 Load the `rpc` skill for function patterns. Load the `frontend` skill for client setup and auth state.

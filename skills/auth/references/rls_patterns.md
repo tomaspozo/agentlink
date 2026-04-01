@@ -480,7 +480,7 @@ WITH CHECK (user_id = auth.uid());
 
 ### Service-role bypass
 
-Service role bypasses RLS by default — no special policy needed. This is used by `_internal_admin_*` functions and edge functions with `ctx.adminClient`.
+Service role bypasses RLS by default — no special policy needed. This is used by `_internal_admin_*` functions and edge functions with `ctx.supabaseAdmin`.
 
 If you need a function to explicitly act as service role, use `SECURITY DEFINER` and document why.
 

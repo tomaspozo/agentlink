@@ -21,8 +21,7 @@ Every Edge Function uses the `withSupabase` wrapper. **See [withSupabase Referen
 ```
 supabase/functions/
 ├── _shared/                    # Global shared utilities (NOT deployed)
-│   ├── responses.ts            # Response helpers
-│   └── types.ts                # Shared TypeScript types
+│   └── responses.ts            # Response helpers
 ├── _feature-name/              # Feature-specific shared modules (NOT deployed)
 │   ├── someHelper.ts           # Shared logic for this feature
 │   └── types.ts                # Feature-specific types
@@ -49,7 +48,7 @@ The `withSupabase` wrapper comes from the `@supabase/server` npm package — it'
 
 ## Required Secrets
 
-Edge Functions need the new `SB_` prefixed API keys. These are **NOT** available by default in the Edge Functions environment — they must be manually configured as secrets.
+Edge Functions need the new `SUPABASE_` prefixed API keys. These are **NOT** available by default in the Edge Functions environment — they must be manually configured as secrets.
 
 **Before writing any edge function**, verify these secrets exist. If they don't, prompt the user to set them up:
 
@@ -58,15 +57,15 @@ Edge Functions need the new `SB_` prefixed API keys. These are **NOT** available
 npx supabase secrets list
 
 # Set secrets locally (in supabase/.env or .env.local)
-SB_PUBLISHABLE_KEY=sb_publishable_...
-SB_SECRET_KEY=sb_secret_...
+SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
+SUPABASE_SECRET_KEY=sb_secret_...
 
 # Set secrets in production
-npx supabase secrets set SB_PUBLISHABLE_KEY=sb_publishable_...
-npx supabase secrets set SB_SECRET_KEY=sb_secret_...
+npx supabase secrets set SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
+npx supabase secrets set SUPABASE_SECRET_KEY=sb_secret_...
 ```
 
-> **Note:** `SUPABASE_URL` is available by default. `SB_PUBLISHABLE_KEY` and `SB_SECRET_KEY` must be set manually.
+> **Note:** `SUPABASE_URL` is available by default. `SUPABASE_PUBLISHABLE_KEY` and `SUPABASE_SECRET_KEY` must be set manually.
 >
 > **Migrating from legacy keys?** See [API Key Migration](./api_key_migration.md) for the full migration scope — env vars, edge function rewrites, config.toml, vault secrets, and deployment.
 
@@ -74,7 +73,7 @@ npx supabase secrets set SB_SECRET_KEY=sb_secret_...
 
 ## Function Configuration (`config.toml`)
 
-**Every edge function must have `verify_jwt = false` in `supabase/config.toml`.** The `withSupabase` wrapper handles auth itself — it validates JWTs for `allow: "user"` and secret keys for `allow: "private"`. If `verify_jwt` is left as `true` (the default), Supabase's gateway will reject requests before they reach the wrapper, breaking `public` and `private` functions entirely and conflicting with the wrapper's own validation for `user` functions.
+**Every edge function must have `verify_jwt = false` in `supabase/config.toml`.** The `withSupabase` wrapper handles auth itself — it validates JWTs for `allow: "user"` and secret keys for `allow: "secret"`. If `verify_jwt` is left as `true` (the default), Supabase's gateway will reject requests before they reach the wrapper, breaking `public` and `secret` functions entirely and conflicting with the wrapper's own validation for `user` functions.
 
 When creating a new function, add its entry to `config.toml`:
 
@@ -113,11 +112,11 @@ Always wrap handler logic in a try-catch. Without it, thrown exceptions (e.g., f
 import { withSupabase } from "@supabase/server";
 import { jsonResponse, errorResponse } from "../_shared/responses.ts";
 
-Deno.serve(
-  withSupabase({ allow: "user" }, async (req, ctx) => {
+export default {
+  fetch: withSupabase({ allow: "user", db: { schema: "api" } }, async (req, ctx) => {
     try {
       const body = await req.json();
-      const { data, error } = await ctx.client.rpc("some_function", body);
+      const { data, error } = await ctx.supabase.rpc("some_function", body);
 
       if (error) return errorResponse(error.message, 400);
       return jsonResponse(data);
@@ -126,7 +125,7 @@ Deno.serve(
       return errorResponse("Internal server error", 500);
     }
   }),
-);
+};
 ```
 
 - Use the right HTTP status code: `400` for bad input, `401` for unauthorized, `404` for not found, `500` for unexpected errors
@@ -203,12 +202,12 @@ import { jsonResponse, errorResponse } from "../_shared/responses.ts";
 import { buildPrompt } from "../_ai/prompts.ts";
 import { callOpenAI } from "../_ai/openai.ts";
 
-Deno.serve(
-  withSupabase({ allow: "user" }, async (req, ctx) => {
+export default {
+  fetch: withSupabase({ allow: "user", db: { schema: "api" } }, async (req, ctx) => {
     try {
       const { document_id } = await req.json();
 
-      const { data: doc, error } = await ctx.client.rpc("document_get_by_id", {
+      const { data: doc, error } = await ctx.supabase.rpc("document_get_by_id", {
         p_document_id: document_id,
       });
 
@@ -216,7 +215,7 @@ Deno.serve(
 
       const summary = await callOpenAI(buildPrompt("summarize", doc.content));
 
-      const { error: updateError } = await ctx.adminClient.rpc(
+      const { error: updateError } = await ctx.supabaseAdmin.rpc(
         "document_update_summary",
         { p_document_id: document_id, p_summary: summary },
       );
@@ -228,5 +227,5 @@ Deno.serve(
       return errorResponse("Internal server error", 500);
     }
   }),
-);
+};
 ```

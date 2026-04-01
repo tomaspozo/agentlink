@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **`@supabase/server` API naming** — updated all edge-functions skill docs, builder agent, RPC skill, and auth skill to match the official `@supabase/server` package API: `ctx.client` → `ctx.supabase`, `ctx.adminClient` → `ctx.supabaseAdmin`, `allow: "private"` → `allow: "secret"`, `Deno.serve(withSupabase(...))` → `export default { fetch: withSupabase(...) }` with `db: { schema: "api" }` config.
+- **Vault secret names** — `SB_PUBLISHABLE_KEY` → `SUPABASE_PUBLISHABLE_KEY`, `SB_SECRET_KEY` → `SUPABASE_SECRET_KEY` across edge-functions secrets docs and api_key_migration reference.
+- **Shared utilities** — removed `_shared/types.ts` from project structure listings; types now come from the `@supabase/server` package.
+
 ### Fixed
 
 - **`npx supabase` prefix across all skills** — replaced bare `supabase` CLI command invocations with `npx supabase` in builder agent, skills, references, README, and hook messages. The CLI installs `supabase` as a local devDependency, so `npx` is required to resolve it.
