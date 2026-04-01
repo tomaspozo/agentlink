@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-04-01
+
 ### Changed
 
 - **`@supabase/server` API naming** — updated all edge-functions skill docs, builder agent, RPC skill, and auth skill to match the official `@supabase/server` package API: `ctx.client` → `ctx.supabase`, `ctx.adminClient` → `ctx.supabaseAdmin`, `allow: "private"` → `allow: "secret"`, `Deno.serve(withSupabase(...))` → `export default { fetch: withSupabase(...) }` with `db: { schema: "api" }` config.
