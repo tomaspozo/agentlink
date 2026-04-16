@@ -52,7 +52,7 @@ For functions called from the app by a logged-in user. The wrapper validates the
 
 ```typescript
 export default {
-  fetch: withSupabase({ allow: "user", db: { schema: "api" } }, async (_req, ctx) => {
+  fetch: withSupabase({ allow: "user", supabaseOptions: { db: { schema: "api" } } }, async (_req, ctx) => {
     try {
       // ctx.user.id, ctx.user.email — user identity
       // ctx.supabase — queries scoped to this user via RLS
@@ -84,7 +84,7 @@ No auth enforcement — the request passes through to the handler.
 ```typescript
 // Stripe webhook — validates its own signature, uses supabaseAdmin for DB writes
 export default {
-  fetch: withSupabase({ allow: "public", db: { schema: "api" } }, async (req, ctx) => {
+  fetch: withSupabase({ allow: "public", supabaseOptions: { db: { schema: "api" } } }, async (req, ctx) => {
     try {
       const signature = req.headers.get("stripe-signature");
       if (!signature) return errorResponse("Missing signature", 401);
@@ -120,7 +120,7 @@ Use this for:
 ```typescript
 // Cron job — only callable with the secret key
 export default {
-  fetch: withSupabase({ allow: "secret", db: { schema: "api" } }, async (_req, ctx) => {
+  fetch: withSupabase({ allow: "secret", supabaseOptions: { db: { schema: "api" } } }, async (_req, ctx) => {
     try {
       const { data, error } = await ctx.supabaseAdmin.rpc(
         "cleanup_expired_sessions",
@@ -143,7 +143,7 @@ Some functions are called from multiple contexts — e.g., by a logged-in user f
 ```typescript
 // Called by users (JWT) and by admin-regenerate (secret key)
 export default {
-  fetch: withSupabase({ allow: ["user", "secret"], db: { schema: "api" } }, async (req, ctx) => {
+  fetch: withSupabase({ allow: ["user", "secret"], supabaseOptions: { db: { schema: "api" } } }, async (req, ctx) => {
     try {
       // ctx.user exists → called by a logged-in user (JWT auth succeeded)
       // ctx.user is undefined → called with secret key (internal/service)
@@ -229,7 +229,7 @@ All data access goes through `.rpc()` — in edge functions, frontend, and every
 ```typescript
 // ❌ WRONG — manual client creation inside the handler
 export default {
-  fetch: withSupabase({ allow: "user", db: { schema: "api" } }, async (req, ctx) => {
+  fetch: withSupabase({ allow: "user", supabaseOptions: { db: { schema: "api" } } }, async (req, ctx) => {
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_PUBLISHABLE_KEY")!,
@@ -241,7 +241,7 @@ export default {
 
 // ✅ CORRECT — use ctx.supabase
 export default {
-  fetch: withSupabase({ allow: "user", db: { schema: "api" } }, async (_req, ctx) => {
+  fetch: withSupabase({ allow: "user", supabaseOptions: { db: { schema: "api" } } }, async (_req, ctx) => {
     const { data } = await ctx.supabase.rpc("some_function");
     // ...
   }),
@@ -253,7 +253,7 @@ export default {
 ```typescript
 // ❌ WRONG — bypasses RLS unnecessarily
 export default {
-  fetch: withSupabase({ allow: "user", db: { schema: "api" } }, async (_req, ctx) => {
+  fetch: withSupabase({ allow: "user", supabaseOptions: { db: { schema: "api" } } }, async (_req, ctx) => {
     const { data } = await ctx.supabaseAdmin.rpc("profile_get_by_user");
     // ...
   }),
@@ -261,7 +261,7 @@ export default {
 
 // ✅ CORRECT — let RLS scope the query to the user
 export default {
-  fetch: withSupabase({ allow: "user", db: { schema: "api" } }, async (_req, ctx) => {
+  fetch: withSupabase({ allow: "user", supabaseOptions: { db: { schema: "api" } } }, async (_req, ctx) => {
     const { data } = await ctx.supabase.rpc("profile_get_by_user");
     // ...
   }),
@@ -273,7 +273,7 @@ export default {
 ```typescript
 // ❌ WRONG — Stripe doesn't send a Supabase JWT, this will always 401
 export default {
-  fetch: withSupabase({ allow: "user", db: { schema: "api" } }, async (req, ctx) => {
+  fetch: withSupabase({ allow: "user", supabaseOptions: { db: { schema: "api" } } }, async (req, ctx) => {
     const signature = req.headers.get("stripe-signature");
     // ...
   }),
@@ -281,7 +281,7 @@ export default {
 
 // ✅ CORRECT — use public, validate the webhook signature yourself
 export default {
-  fetch: withSupabase({ allow: "public", db: { schema: "api" } }, async (req, ctx) => {
+  fetch: withSupabase({ allow: "public", supabaseOptions: { db: { schema: "api" } } }, async (req, ctx) => {
     const signature = req.headers.get("stripe-signature");
     if (!signature) return errorResponse("Missing signature", 401);
     // ...

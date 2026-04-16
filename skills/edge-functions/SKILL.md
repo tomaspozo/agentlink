@@ -51,7 +51,7 @@ import { withSupabase } from "@supabase/server";
 import { jsonResponse, errorResponse } from "../_shared/responses.ts";
 
 export default {
-  fetch: withSupabase({ allow: "user", db: { schema: "api" } }, async (_req, ctx) => {
+  fetch: withSupabase({ allow: "user", supabaseOptions: { db: { schema: "api" } } }, async (_req, ctx) => {
     try {
       const { data, error } = await ctx.supabase.rpc("my_rpc_function");
 

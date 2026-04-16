@@ -136,7 +136,7 @@ import { withSupabase } from "@supabase/server";
 import { jsonResponse, errorResponse } from "../_shared/responses.ts";
 
 export default {
-  fetch: withSupabase({ allow: "user", db: { schema: "api" } }, async (_req, ctx) => {
+  fetch: withSupabase({ allow: "user", supabaseOptions: { db: { schema: "api" } } }, async (_req, ctx) => {
     const { data, error } = await ctx.supabase.rpc("profile_get_by_user");
 
     if (error) return errorResponse(error.message);

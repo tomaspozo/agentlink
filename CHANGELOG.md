@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **`withSupabase` config shape** — `db: { schema: "api" }` was at the top level of the config object; the correct shape nests it under `supabaseOptions`. Updated all edge-functions skill docs (SKILL.md, edge_functions.md, with_supabase.md, api_key_migration.md) to use `{ allow: "...", supabaseOptions: { db: { schema: "api" } } }`.
+
 ## [0.16.0] - 2026-04-14
 
 ### Changed

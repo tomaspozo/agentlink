@@ -113,7 +113,7 @@ import { withSupabase } from "@supabase/server";
 import { jsonResponse, errorResponse } from "../_shared/responses.ts";
 
 export default {
-  fetch: withSupabase({ allow: "user", db: { schema: "api" } }, async (req, ctx) => {
+  fetch: withSupabase({ allow: "user", supabaseOptions: { db: { schema: "api" } } }, async (req, ctx) => {
     try {
       const body = await req.json();
       const { data, error } = await ctx.supabase.rpc("some_function", body);
@@ -203,7 +203,7 @@ import { buildPrompt } from "../_ai/prompts.ts";
 import { callOpenAI } from "../_ai/openai.ts";
 
 export default {
-  fetch: withSupabase({ allow: "user", db: { schema: "api" } }, async (req, ctx) => {
+  fetch: withSupabase({ allow: "user", supabaseOptions: { db: { schema: "api" } } }, async (req, ctx) => {
     try {
       const { document_id } = await req.json();
 
