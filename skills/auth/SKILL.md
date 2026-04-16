@@ -21,6 +21,32 @@ Client → api.chart_get_by_id()  → RLS filters by user → returns only allow
                               _auth_chart_can_read()  ← called by RLS policy
 ```
 
+### Grants on the `api` schema
+
+`USAGE` on the `api` schema is granted to `anon`, `authenticated`, and
+`service_role`. That is NOT the security boundary — it just lets each
+role resolve the schema name so PostgREST can find the function you're
+calling. Pages that render before the session attaches (public home,
+marketing content) need `anon` to have USAGE or every RPC reply is
+`permission denied for schema api`.
+
+`EXECUTE` on each function IS the security boundary. The scaffold
+defaults are:
+
+- `GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA api TO authenticated, service_role;`
+- `ALTER DEFAULT PRIVILEGES IN SCHEMA api GRANT EXECUTE ON FUNCTIONS TO authenticated, service_role;`
+
+`anon` never receives EXECUTE by default. When a function is
+intentionally public (a status page, public metrics, an unauthenticated
+signup-adjacent RPC), grant it explicitly:
+
+```sql
+GRANT EXECUTE ON FUNCTION api.public_metrics() TO anon;
+```
+
+Think of it this way: USAGE opens the door; EXECUTE decides who walks
+through per function.
+
 ---
 
 ## Auth Patterns
@@ -115,6 +141,23 @@ CREATE TRIGGER trg_auth_users_new_user
   FOR EACH ROW
   EXECUTE FUNCTION public._internal_admin_handle_new_user();
 ```
+
+> **Post-signup JWT race.** This trigger writes `tenant_id` into
+> `raw_app_meta_data` AFTER Supabase issues the first JWT. The session
+> returned from `supabase.auth.signUp()` therefore has a stale token —
+> `_auth_tenant_id()` returns NULL and every tenant-scoped RPC fails
+> until the token refreshes. Two-part client fix:
+>
+> 1. In the sign-up handler, call `await supabase.auth.refreshSession()`
+>    right after `signUp()` succeeds and before navigating into the app.
+> 2. In gated pages that read tenant-scoped data, use the scaffolded
+>    `useTenantGuard` hook (`src/hooks/use-tenant-guard.ts`) as a
+>    safety net — when the JWT lacks `tenant_id`, it calls
+>    `tenant_list` → `tenant_select` → `refreshSession()` and exposes
+>    `{ ready, error }` so queries can gate on `ready`.
+>
+> See the frontend skill's "Post-signup & the useTenantGuard hook"
+> section for the TS side.
 
 **Need to customize signup logic?** If the app requires additional work on signup (e.g., creating rows in app-specific tables, syncing with external services), override `_internal_admin_handle_new_user` by removing its `-- @agentlink` annotation block in `supabase/schemas/public/_internal_admin.sql` and modifying the function body. Keep the same function name. The other managed functions in that file (`_internal_admin_get_secret`, `set_updated_at`, etc.) remain annotated and will continue receiving CLI updates. Apply with `npx create-agentlink@latest db apply`.
 
@@ -264,6 +307,30 @@ On signup, `_internal_admin_handle_new_user()` automatically creates a default t
 Tenant context comes from JWT custom claims (`auth.jwt() -> 'app_metadata' ->> 'tenant_id'`), **not** from request parameters. RLS policies use this claim to filter rows automatically.
 
 > **Load [RLS Patterns](./references/rls_patterns.md) for tenant-scoped RLS policies, RBAC, invitation flows, and patterns for new tenant-scoped tables.**
+
+### Tenancy UX: count tenants, don't assume
+
+The backend is always multi-tenant. The signup trigger mints a tenant
+for direct signups; `invitation_accept` adds invited users to the
+inviter's tenant. That's the invariant — don't try to strip, rewire,
+or "simplify" it per project.
+
+The UX rule falls out of counting `tenants.length`:
+
+- **One tenant** (the common case for internal tools, invited-only
+  portals, first-time signups, and solo users): never render a tenant
+  picker. Default to `tenants[0]`. `useTenantGuard` already does this
+  on mount, so most apps need nothing beyond what's scaffolded.
+- **More than one tenant** (a user genuinely belongs to multiple
+  workspaces): render a picker in chrome or on a dedicated switch
+  page. Call `api.tenant_select` on change, then
+  `await supabase.auth.refreshSession()` so the new JWT carries the
+  updated claim.
+
+When the user asks for "a signup form" or "allow signups", the
+scaffolded `/login` route and `useTenantGuard` cover it. Don't add a
+tenant selector to the signup flow — a new direct signup always
+lands in a tenant of one.
 
 ---
 

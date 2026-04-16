@@ -125,6 +125,17 @@ const { data, error } = await supabase.rpc("chart_list");
 // { items: [...], total_count: 42, has_more: true }
 ```
 
+### Don't use `.from()` — ever
+
+`public` is not exposed via the Data API; `api` has no tables, only
+functions. `supabase.from("charts").select()` fails with "permission
+denied" or returns nothing regardless of which key you use —
+publishable or secret. The rule is universal (frontend, edge
+functions, webhooks, cron handlers, Node scripts): every data access
+goes through `.rpc()`. If you're tempted to `.from()` for "quick
+reads", add the RPC instead — it's a six-line SQL function with RLS
+already carrying the weight.
+
 ---
 
 ## Type Safety
@@ -135,13 +146,14 @@ Generate TypeScript types from your database schema:
 npx create-agentlink@latest db types
 ```
 
-This works in both local and cloud mode. Types are written to `src/types/database.types.ts` (Vite) or `types/database.types.ts` (Next.js). `db apply` auto-generates types, so you usually don't need to run this separately.
-
-Use the generated types with the Supabase client:
+This works in both local and cloud mode. Types are written to
+`src/types/database.ts` (Vite) or `types/database.ts` (Next.js). The
+scaffolded Supabase client already imports from these paths — just
+run `db types` (or `db apply`, which runs it for you) to populate them.
 
 ```typescript
 import { createClient } from "@supabase/supabase-js";
-import type { Database } from "./types/database";
+import type { Database } from "@/types/database";
 
 const supabase = createClient<Database>(
   import.meta.env.VITE_SUPABASE_URL,
@@ -153,44 +165,59 @@ const supabase = createClient<Database>(
 const { data } = await supabase.rpc("chart_get_by_id", { p_chart_id: id });
 ```
 
-Types are regenerated automatically by `db apply`. To regenerate manually: `npx create-agentlink@latest db types`.
+`db apply` regenerates types automatically (non-fatal on failure). To
+regenerate manually: `npx create-agentlink@latest db types`.
 
 ---
 
 ## typedRpc() Helper
 
-Database-generated types return `Json` for all `jsonb` columns, which loses the shape of your data. The `typedRpc()` helper wraps `supabase.rpc()` and casts the return type using a manually maintained `RpcReturnMap` interface.
+Database-generated types return `Json` for every `jsonb` column, which
+loses the shape of RPC return values. The scaffold ships a `typedRpc()`
+helper that casts each RPC's return type using an `RpcReturnMap`
+interface you maintain by hand.
 
-### RpcReturnMap pattern
+### Where things live (scaffolded)
 
-Define the real return types for each RPC in `src/lib/typed-rpc.ts`:
+- **`typedRpc` function** → `src/lib/supabase.ts` (alongside the client).
+- **`RpcReturnMap` interface** → `src/types/models.ts`.
+
+So you always `import { typedRpc } from "@/lib/supabase"`, and extend
+the map by editing `src/types/models.ts`.
+
+### Extending the map
+
+`src/types/models.ts` already imports the generated `Database` type
+and exports helper types. Add each RPC's real return shape to
+`RpcReturnMap`:
 
 ```typescript
-import { supabase } from "./supabase";
+// src/types/models.ts
+import type { Database } from "./database";
 
-// Map RPC names to their actual return types
-interface RpcReturnMap {
+export interface RpcReturnMap {
   chart_get_by_id: { id: string; name: string; created_at: string };
-  chart_list: { items: Array<{ id: string; name: string }>; total_count: number; has_more: boolean };
+  chart_list: {
+    items: Array<{ id: string; name: string }>;
+    total_count: number;
+    has_more: boolean;
+  };
   chart_create: { id: string; name: string; created_at: string };
-}
-
-export async function typedRpc<T extends keyof RpcReturnMap>(
-  fn: T,
-  params?: Record<string, unknown>,
-): Promise<RpcReturnMap[T]> {
-  const { data, error } = await supabase.rpc(fn, params as any);
-  if (error) throw error;
-  return data as unknown as RpcReturnMap[T];
 }
 ```
 
 ### Usage
 
 ```typescript
+import { typedRpc } from "@/lib/supabase";
+
 // Fully typed — return type is { id: string; name: string; created_at: string }
 const chart = await typedRpc("chart_get_by_id", { p_chart_id: id });
 ```
+
+`typedRpc` derives argument types from `Database["api"]["Functions"]`,
+so the *parameters* are typed automatically once `db types` has run.
+Only the *return* shapes need to live in `RpcReturnMap`.
 
 > **Load [Data Fetching Patterns](./references/data_fetching.md) for the full `typedRpc()` implementation, `RpcReturnMap` conventions, and error handling patterns.**
 
@@ -207,7 +234,7 @@ Define query options in `src/queries/` — one file per entity:
 ```typescript
 // src/queries/chart.ts
 import { queryOptions } from "@tanstack/react-query";
-import { typedRpc } from "@/lib/typed-rpc";
+import { typedRpc } from "@/lib/supabase";
 
 export const chartQueries = {
   all: () => queryOptions({
@@ -228,7 +255,7 @@ Define mutations in `src/mutations/` — one file per entity:
 ```typescript
 // src/mutations/chart.ts
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { typedRpc } from "@/lib/typed-rpc";
+import { typedRpc } from "@/lib/supabase";
 
 export function useChartCreate() {
   const queryClient = useQueryClient();
@@ -288,7 +315,7 @@ function ChartCreateForm() {
       <FormField label="Name" error={errors.name?.message}>
         <Input {...register("name")} />
       </FormField>
-      <Button type="submit" loading={chartCreate.isPending}>Create</Button>
+      <Button type="submit" disabled={chartCreate.isPending}>Create</Button>
     </form>
   );
 }
@@ -308,23 +335,39 @@ TanStack Router with file-based routing. Route files in `src/routes/` map direct
 
 ```
 src/routes/
-├── __root.tsx              # Root layout — QueryClientProvider, AuthProvider, Toaster
-├── _auth.tsx               # Auth layout — beforeLoad guard, sidebar, tenant context
-├── _auth/
-│   ├── index.tsx           # Dashboard (/)
-│   ├── animals/
-│   │   ├── index.tsx       # Animal list (/animals)
-│   │   ├── $animalId.tsx   # Animal detail (/animals/:animalId)
-│   │   └── -components/    # Route-scoped components (not a route)
-│   │       └── AnimalCard.tsx
-│   └── settings.tsx        # Settings (/settings)
-└── login.tsx               # Auth pages — built by the agent based on auth strategy
+├── __root.tsx                # Root layout — QueryClientProvider, AuthProvider, Toaster
+├── index.tsx                 # PUBLIC /  (auth-aware landing page)
+├── login.tsx                 # Public /login (sign-in + sign-up)
+├── _auth.tsx                 # Pathless gate — beforeLoad redirects to /login when no session
+└── _auth/                    # Everything here is gated
+    ├── dashboard.tsx         # /dashboard
+    ├── animals/
+    │   ├── index.tsx         # /animals
+    │   ├── $animalId.tsx     # /animals/:animalId
+    │   └── -components/      # Route-scoped components (ignored by router)
+    │       └── AnimalCard.tsx
+    └── settings.tsx          # /settings
 ```
 
-- `__root.tsx` — Root layout, wraps the entire app. Provider nesting happens here.
-- `_auth.tsx` — Layout route with `beforeLoad` guard. All child routes require authentication.
-- `$param` — Dynamic route segments.
-- `-components/` — Folders prefixed with `-` are ignored by the router. Use for route-scoped components.
+**Per-section gating is the whole API.** A file in `src/routes/*` is
+public; a file in `src/routes/_auth/*` is gated. Drop a file in the
+right folder and you're done — no wrappers, no hooks, no state
+machines. Specifically, do not:
+
+- build a `<RequireAuth>` / `<AuthGate>` wrapper — the pathless
+  `_auth` layout already gates at the route level before the tree
+  mounts;
+- hand-gate with `useState` / `useEffect` inside individual pages —
+  you'll introduce flicker and a client-only race;
+- put the app's only page under `_auth/` unless the app is genuinely
+  fully gated end to end (no public landing, no public marketing,
+  no public anything). Customer portals, SaaS apps, and most
+  products want a public `/` and gated `/dashboard`.
+
+- `__root.tsx` — root providers (QueryClient, Auth, Toaster). No auth logic.
+- `_auth.tsx` — pathless layout with `beforeLoad` `throw redirect({ to: "/login" })`.
+- `$param` — dynamic route segments.
+- `-components/` — folders prefixed with `-` are ignored by the router.
 
 > **Load [Routing Patterns](./references/routing.md) for full patterns including navigation, search params, route loaders, and pending UI.**
 
@@ -353,8 +396,10 @@ Centralized configuration keeps display logic out of components and makes update
 `src/config/navigation.ts` defines sidebar and header navigation items:
 
 ```typescript
+// Rendered inside the gated chrome (authed sidebar / header).
+// `/` is the public landing page, so it does not belong here.
 export const navigationItems = [
-  { label: "Dashboard", to: "/", icon: LayoutDashboard },
+  { label: "Dashboard", to: "/dashboard", icon: LayoutDashboard },
   { label: "Animals", to: "/animals", icon: Beef },
   { label: "Settings", to: "/settings", icon: Settings },
 ];
@@ -449,18 +494,67 @@ await supabase.auth.refreshSession();
 
 Without this, RLS policies use stale claims until the token naturally expires.
 
+### Post-signup & the `useTenantGuard` hook
+
+Direct signup has a JWT-timing race: the
+`_internal_admin_handle_new_user` trigger writes `tenant_id` into
+`raw_app_meta_data` AFTER Supabase issues the first JWT. The session
+returned from `signUp()` is stale — every tenant-scoped RPC returns
+NULL until the token refreshes. The scaffold handles this in two
+places:
+
+1. The scaffolded `/login` route calls
+   `await supabase.auth.refreshSession()` immediately after `signUp()`
+   succeeds. Keep this whenever you replace or extend the login flow.
+
+2. `useTenantGuard` is the safety net. When a gated page reads
+   tenant-scoped data and the JWT lacks `tenant_id`, the hook calls
+   `tenant_list` → `tenant_select` → `refreshSession()`:
+
+   ```typescript
+   import { useTenantGuard } from "@/hooks/use-tenant-guard";
+
+   function Dashboard() {
+     const { user } = useAuth();
+     const { ready, error } = useTenantGuard();
+
+     const { data } = useQuery({
+       ...myQueries.list(),
+       enabled: ready && !!user, // gate tenant-scoped queries on ready
+     });
+
+     if (!ready) return <ListSkeleton />;
+     if (error) return <EmptyState title="No workspace" description={error} />;
+     return <List items={data} />;
+   }
+   ```
+
+   Use it on every gated page that depends on `_auth_tenant_id()`.
+   Skip it on purely personal pages (profile, account settings) where
+   `auth.uid()` alone drives the policy.
+
+`useTenantGuard` defaults to `tenants[0]` on mount. If the user only
+belongs to one tenant (the common case — see the auth skill's
+"Tenancy UX" block), that's the whole story: no picker, no selection
+state.
+
 ### Scaffolded auth infrastructure (Vite projects)
 
-The scaffold provides the auth **infrastructure** but not the auth **pages**. Auth pages (login, sign-up, forgot-password) are built by the agent during planning based on the project's auth strategy.
+The scaffold ships a working auth entry point plus the hooks to extend
+it. You are not starting from zero.
 
 **What the scaffold provides:**
-- **`useAuth` hook** — From `@/contexts/auth-context.tsx`. Provides `{ user, session, loading }` and manages auth state via `onAuthStateChange`.
-- **`_auth.tsx` layout route** — Protects all child routes with a `beforeLoad` guard. The redirect target (`/login`) needs to be uncommented once the login route is created.
-- **`ErrorBoundary`** — Wraps the auth layout's `<Outlet />` to catch render errors.
+- **`useAuth` hook** — `@/contexts/auth-context.tsx`. `{ user, session, loading }`; manages auth state via `onAuthStateChange`.
+- **`useTenantGuard` hook** — `@/hooks/use-tenant-guard.ts`. Gates tenant-scoped reads on a fresh JWT (see the previous subsection).
+- **`_auth.tsx` layout route** — pathless gate. Throws `redirect({ to: "/login" })` when no session; all child routes are protected.
+- **`login.tsx` route** — minimal email/password page with sign-in ⇄ sign-up toggle. Calls `supabase.auth.refreshSession()` right after `signUp` so `tenant_id` lands on the first JWT. Post-auth redirects to `/dashboard`.
+- **Public `index.tsx`** — auth-aware landing with a CTA that flips between "Sign in" and "Go to dashboard" based on `useAuth().user`.
+- **`ErrorBoundary`** — wraps the auth layout's `<Outlet />` to catch render errors.
 
-**What the agent builds:**
-- Auth pages (login, sign-up, forgot-password, update-password) — depends on auth strategy
-- The redirect in `_auth.tsx` — uncomment and point to the login route once it exists
+**What the agent extends:** richer auth surface (OAuth buttons, magic
+links, forgot-password, sign-out button placement, post-auth
+onboarding). The building blocks are in place — add routes and pages,
+don't rewrite the gate.
 
 ### Auth strategy — clarify during planning
 
