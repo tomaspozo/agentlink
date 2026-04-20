@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.17.2] - 2026-04-20
+
 ### Added
 
 - **Snake_case policy-naming rule surfaced in auth `SKILL.md`.** Mirrors the rule added to `database/references/naming_conventions.md` in 0.17.1 so agents hit the guardrail whether they consult the auth or database skill first.
