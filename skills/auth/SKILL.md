@@ -217,6 +217,20 @@ $$;
 
 RLS is always enabled on every table. Policies filter rows based on who's asking.
 
+### Policy naming — snake_case only, never quoted
+
+Always name policies with bare snake_case identifiers following `{role}_{action}_{scope}` (e.g., `users_read_own_charts`, `admins_delete_memberships`). Never wrap a policy name in double quotes, never include spaces, mixed case, or reserved words.
+
+```sql
+-- ❌ NOT THIS — quoted name with spaces breaks `agentlink db apply`
+CREATE POLICY "Members can read own tenant" ON public.tenants ...
+
+-- ✅ THIS
+CREATE POLICY members_read_own_tenant ON public.tenants ...
+```
+
+Reason: `db apply` routes every statement through `pg-delta` → `pg-topo` → libpg_query's deparser, which strips surrounding double quotes when re-serializing identifiers. The resulting SQL reaches Postgres unquoted and fails with a syntax error on the spaces. Snake_case bare identifiers round-trip cleanly.
+
 ### Choosing a policy pattern
 
 | Scenario | Pattern | Example |

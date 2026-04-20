@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Policy-naming guardrail in auth skill.** `skills/auth/SKILL.md` now opens the `## RLS Policies` section with a dedicated `### Policy naming — snake_case only, never quoted` subsection (❌ quoted-name-with-spaces example, ✅ snake_case `{role}_{action}_{scope}` example, one-line reason pointing at the pg-delta / pg-topo deparser). The rule already existed in `database/references/naming_conventions.md` as of 0.17.1, but an agent writing RLS goes to the auth skill first — the guardrail needs to be on the path the agent actually reads. Same wording both places, so the agent gets the same answer whichever skill it consults.
+
 ## [0.17.1] - 2026-04-17
 
 ### Added
