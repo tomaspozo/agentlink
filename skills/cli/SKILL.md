@@ -201,17 +201,19 @@ Fetches the real pooler DB URL from the Supabase Management API (Supavisor, IPv4
 
 **During development**, the agent only uses `db apply`. Schema files are the source of truth — the agent writes SQL, applies it, and keeps building. No migrations are generated during development.
 
-**For deployment**, migrations capture changes for promotion to production. They are generated only when the user explicitly asks (or implicitly when `agentlink deploy` runs its diff step).
+**For deployment**, `env deploy` runs `db apply` + `functions deploy` against the chosen env — no migration file is generated. Migrations are a separate concern: they are a deployment *artifact* you create explicitly when you want an auditable change record (e.g., for change review, rollback planning, or CI that replays migration history).
 
 ```bash
 # Development — the agent's loop
 npx create-agentlink@latest db apply
 
-# Deployment — when the user asks for a migration
-npx create-agentlink@latest db migrate descriptive_name
+# Deployment — apply current schemas + edge functions to a cloud env
+npx create-agentlink@latest env deploy dev
+npx create-agentlink@latest env deploy prod      # Prompts y/N confirm
 
-# Cloud deployment — push after generating
-npx supabase db push
+# Optional — when the user explicitly asks for a migration artifact
+npx create-agentlink@latest db migrate descriptive_name
+npx supabase db push                              # Push the generated migration
 ```
 
 ### How migrations work
@@ -281,26 +283,26 @@ Output is a complete scaffolded repo with no env yet — the user's browser OAut
 ### Deploy
 
 ```bash
-npx create-agentlink@latest deploy                          # → targets dev (the default)
-npx create-agentlink@latest deploy --prod                   # → targets prod
-npx create-agentlink@latest deploy --dry-run                # Preview without applying
-npx create-agentlink@latest deploy --prod --ci              # Non-interactive for CI/CD
-npx create-agentlink@latest deploy --prod --ci --allow-warnings  # CI: proceed past data-risk warnings
-npx create-agentlink@latest deploy --allow-dirty            # Bypass the clean-tree check
+npx create-agentlink@latest env deploy                      # Interactive picker — preselects cloud.default
+npx create-agentlink@latest env deploy dev                  # → targets dev
+npx create-agentlink@latest env deploy prod                 # → targets prod (requires y/N confirm)
+npx create-agentlink@latest env deploy prod --yes           # Skip the prod confirm (CI)
+npx create-agentlink@latest env deploy prod --yes --non-interactive  # Full CI form
+npx create-agentlink@latest env deploy dev --dry-run        # Print target without applying
 ```
 
-Default target is **dev** — `deploy` alone pushes the current working schema + edge functions to the dev cloud env. To push to production, pass `--prod`. The legacy `--env dev|prod` flag still works for CI back-compat (the allowlist enforces only `dev`/`prod`), but `--prod` is the recommended form; mixing `--prod` with a conflicting `--env X` errors out.
+`env deploy` is a **thin two-step operation**: (1) apply local schemas to the target env's database via `db apply`, (2) deploy `supabase/functions/*` to that env. It is idempotent (re-running is safe), does NOT generate a migration file, and does NOT mutate `manifest.cloud.default` (deploy is a one-shot action — `env use dev && env deploy prod` stays on dev afterwards).
 
-The `deploy` command:
+Things `env deploy` deliberately does NOT do (belong elsewhere):
 
-0. **Aborts if the git working tree is dirty** (use `--allow-dirty` to bypass; `--dry-run` skips the gate since it only prints). Uncommitted changes would make the diff impossible to review or roll back.
-1. Diffs the local schema against the target environment
-2. Generates and saves a migration file to `supabase/migrations/`
-3. Validates the migration (schema-only test)
-4. Analyzes for data risks (DROP TABLE, NOT NULL without DEFAULT, etc.)
-5. Pushes: migration + all edge functions + missing secrets
+- **Vault secrets / PostgREST config / auth config.** These are applied during `env add` (initial bootstrap). If any of those changed, use `env add <name>` → "Re-apply full setup" or `agentlink config apply`.
+- **Migration file generation.** Use `db migrate <name>` explicitly when you want an auditable artifact.
+- **Clean-tree gate.** `db apply` is idempotent, so running against a dirty tree is safe; the only reviewability loss is at the migration-diff level, which `env deploy` doesn't generate anyway.
+- **Data-risk analysis.** That was tied to the migration diff; use `db migrate` + review the generated SQL when you want it.
 
-**The agent does not deploy.** Deployment is initiated by the developer. When users ask to deploy, point them to `agentlink deploy` (dev) or `agentlink deploy --prod` (prod).
+**The top-level `agentlink deploy` command has been removed.** The CLI intercepts `agentlink deploy` and `agentlink retry-deploy` with an error pointing at the new verb. CI workflows using `deploy --prod` / `deploy --ci` must migrate to `env deploy <name> --yes --non-interactive` (the `env add --setup-ci` generator emits the new form).
+
+**The agent does not deploy.** Deployment is initiated by the developer. When users ask to deploy, point them to `agentlink env deploy` (interactive picker) or `agentlink env deploy <dev|prod>` (explicit target).
 
 ### Environment management
 
@@ -309,32 +311,50 @@ AgentLink enforces a **fixed three-environment model**: `local`, `dev`, `prod`. 
 | Env | Meaning | Created by |
 |-----|---------|-----------|
 | `local` | Local Docker Supabase | `agentlink env use local` (switches to it; the Docker stack itself is `supabase start`) |
-| `dev` | Single cloud development env | `agentlink env add dev` |
-| `prod` | Deploy-only cloud env | `agentlink env add prod` |
+| `dev` | The cloud development env | `agentlink env add dev` |
+| `prod` | The cloud production env | `agentlink env add prod` |
 
 Attempts to add `staging`, `dev2`, `production`, etc. fail with a clear error. Legacy manifests carrying off-model names are blocked at command entry with an `env remove` hint. Inspection commands (`env list`, `env remove`) remain permissive so users can see and clean up legacy entries.
 
 ```bash
-# Interactive
+# Interactive pickers — all three accept no-name and show a selector
+npx create-agentlink@latest env add                         # Picker: dev / prod (linked / not linked)
+npx create-agentlink@latest env use                         # Picker: local (if relevant) / dev / prod
+npx create-agentlink@latest env deploy                      # Picker: registered cloud envs, preselects cloud.default
+
+# Explicit
 npx create-agentlink@latest env add dev                     # Add/relink the cloud dev env
-npx create-agentlink@latest env add prod                    # Add/relink the prod env (the only way to get prod)
-npx create-agentlink@latest env use local                   # Switch active dev env to local Docker
-npx create-agentlink@latest env use dev                     # Switch active dev env to cloud dev
+npx create-agentlink@latest env add prod                    # Add the prod env
+npx create-agentlink@latest env use local                   # Switch active env to local Docker
+npx create-agentlink@latest env use dev                     # Switch active env to cloud dev
+npx create-agentlink@latest env use prod                    # Switch to prod (y/N confirm required)
 npx create-agentlink@latest env list                        # Show all environments + their orgs
 npx create-agentlink@latest env remove <name>               # Remove an env (offers to forget its DB password too)
 
 # Non-interactive (for agents / CI)
 npx create-agentlink@latest env add prod --project-ref <ref> --non-interactive
 npx create-agentlink@latest env add dev  --project-ref <ref> --non-interactive   # Relinks dev if it exists
+npx create-agentlink@latest env deploy prod --yes --non-interactive              # CI-friendly deploy
 npx create-agentlink@latest env remove staging -y                                # Legacy cleanup allowed
 
 # Recovery
-npx create-agentlink@latest env add dev --retry             # Re-run bootstrap if a previous deploy died mid-way
+npx create-agentlink@latest env add dev --retry             # Re-apply full setup (schemas, functions, secrets, PostgREST + auth) if a previous deploy died mid-way
 ```
 
-`env use <name>` rewrites the managed block of `.env.local` so downstream `db apply` / `functions serve` hit the right env. User-added variables outside the block are preserved. `env use prod` is **blocked** — prod is deploy-only; the CLI points at `agentlink deploy --prod` instead.
+`env use <name>` rewrites the managed block of `.env.local` so downstream `db apply` / `functions serve` / `db sql` hit the right env, and persists `manifest.cloud.default` so every subsequent command resolves the same target. User-added variables outside the block are preserved.
 
-`env add <name>` handles both new environments and relinking existing ones. When the env already exists, a recovery prompt offers three actions: **Retry deploy** (re-run bootstrap against the same project; for mid-deploy failures), **Relink to a different Supabase project** (for deleted/wrong projects), or **Cancel**. `--retry` triggers the retry path non-interactively; `--project-ref <ref>` triggers relink.
+`env use prod` is **allowed** but gated behind an amber warning + y/N confirmation (defaults to No):
+
+```
+▲ Using prod as your active dev environment is NOT recommended.
+  Your .env.local will point at production — any app or test you run
+  locally will hit real data.
+? Continue? (y/N)
+```
+
+After confirming, every subsequent `env deploy` / `db apply` / `db sql` / `db rebuild` prints an `▲ Active env: prod` banner at the top as a persistent reminder across terminals and agent sessions.
+
+`env add <name>` handles both new environments and relinking existing ones. When the env already exists, a recovery prompt offers three actions: **Re-apply full setup** (re-runs bootstrap — schemas, functions, secrets, PostgREST + auth config — against the same project; for mid-deploy failures or config changes), **Relink to a different Supabase project** (for deleted/wrong projects), or **Cancel**. The picker shows a dim hint above: *"If you just changed schemas or functions, cancel and run `agentlink env deploy <name>` instead."* — steering users away from the heavier full-setup when the lighter deploy would do. `--retry` triggers the full-setup path non-interactively; `--project-ref <ref>` triggers relink.
 
 `env add` / `env relink` run an **org-first picker** — the user picks the Supabase organization BEFORE the connect-existing-vs-create-new choice, so both paths browse the correct org's projects. The picker merges API-visible orgs with cached orgs from previous logins and offers "+ Authorize a different organization…" to add a new one. On token validation failure (401/403 — org membership revoked, integration restrictions), the CLI surfaces "▲ Stored credentials for \<org\> are no longer accepted" and kicks off re-auth automatically.
 
@@ -342,9 +362,17 @@ Initial project link can also be done during scaffold with the `--link` flag —
 
 > `env relink` still works as a deprecated alias and prints a warning. Prefer `env add`.
 
+### Picker visibility rules
+
+The three env pickers behave slightly differently:
+
+- **`env add` picker** lists `dev` and `prod`. Each row is annotated `— linked to <projectRef>` or `— not linked`. Selecting a linked env cascades into the 3-way recovery prompt (Re-apply / Relink / Cancel).
+- **`env use` picker** lists cloud envs in the manifest with a ✓ next to the active one. Envs not yet in the manifest are disabled with a `run env add <name> first` hint. **`local` only appears when relevant**: it shows up when (a) local is already the active env, or (b) the project was scaffolded in local mode. Cloud-only projects won't see `local` as an option (explicit `agentlink env use local` still works if forced).
+- **`env deploy` picker** lists every registered cloud env and preselects `cloud.default` (when it's a cloud env). Throws a clear error with an `env add` hint if no cloud env is registered.
+
 ### Clean-tree gate
 
-`env add`, `env relink`, `deploy`, and `--force-update` all abort if the git working tree is dirty. Rollback on a dirty tree mixes user changes with AgentLink's writes and is painful to untangle. Bypass with `--allow-dirty` when needed.
+`env add`, `env relink`, and `--force-update` abort if the git working tree is dirty — rollback on a dirty tree mixes user changes with AgentLink's writes and is painful to untangle. Bypass with `--allow-dirty` when needed. **`env deploy` does NOT gate on a clean tree** — `db apply` is idempotent, so re-running against a dirty tree is safe.
 
 ---
 
@@ -354,7 +382,7 @@ Supabase OAuth tokens are **scoped to a single organization** — the consent sc
 
 **Where credentials live**: `~/.config/agentlink/credentials.json`, with the active tokens keyed by org ID under `oauth_by_org`. Each entry carries its own access token, refresh token, expiry, and cached org name/slug. A legacy single-org `oauth` slot is still read for back-compat; a PAT (`supabase_access_token`) set via `agentlink sb token set` is the final fallback for CI.
 
-**Where org IDs live on disk**: each `CloudEnvironment` in `agentlink.json` carries an optional `orgId`. Populated on `env add`, lazily backfilled on older manifests when `env add`/`env relink`/`env use`/`env retry-deploy` runs — the CLI walks stored org tokens, probes `GET /v1/projects` for each, matches returned project IDs against envs missing `orgId`, and persists the match. Silent when nothing to do (no API calls if all envs already have `orgId`).
+**Where org IDs live on disk**: each `CloudEnvironment` in `agentlink.json` carries an optional `orgId`. Populated on `env add`, lazily backfilled on older manifests when `env add`/`env relink`/`env use` runs (and when `env add <name>` triggers the internal retry flow for recovery) — the CLI walks stored org tokens, probes `GET /v1/projects` for each, matches returned project IDs against envs missing `orgId`, and persists the match. Silent when nothing to do (no API calls if all envs already have `orgId`).
 
 **CI**: set `SUPABASE_ACCESS_TOKEN` as a repo secret — a static PAT with admin access to the relevant org. OAuth is never triggered in CI.
 

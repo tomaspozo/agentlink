@@ -104,26 +104,30 @@ Interactive flow:
 
 ## 3. Switch active dev environment
 
-**Trigger:** user says "work locally," "go offline," "switch to local Docker," "switch back to the cloud dev env," "use dev."
+**Trigger:** user says "work locally," "go offline," "switch to local Docker," "switch back to the cloud dev env," "use dev," "use prod locally for a quick check."
 
 **Questions to ask**
 
-- None usually — but if switching to `local`, confirm Docker is running.
+- None for `local` / `dev` — but if the user wants `prod`, double-check before running. The CLI's confirmation prompt handles it, but expectations matter.
+- If switching to `local`, confirm Docker is running.
 
 **Commands**
 
 ```bash
+npx create-agentlink@latest env use              # Interactive picker (✓ marks the current env)
 npx create-agentlink@latest env use local        # Local Docker
 npx create-agentlink@latest env use dev          # Cloud dev
+npx create-agentlink@latest env use prod         # Cloud prod — requires y/N confirm
 npx create-agentlink@latest env list             # See what's configured
 ```
 
-`env use` rewrites the managed block of `.env.local` so `db apply` / `supabase functions serve` / etc. hit the right env. User-added env vars outside the block are preserved.
+`env use` rewrites the managed block of `.env.local` so `db apply` / `supabase functions serve` / `db sql` hit the right env, and persists `manifest.cloud.default` so subsequent commands resolve consistently. User-added env vars outside the block are preserved.
 
 **Watch-outs**
 
-- `env use prod` is **blocked**. If the user asks "switch to prod," redirect: "Prod is deploy-only. Use `agentlink deploy --prod` to push changes."
-- Only `local` and `dev` are valid `env use` targets (prod is blocked; anything else is off-model).
+- `env use prod` is **allowed** but requires explicit confirmation — the CLI prints an amber warning (`▲ Using prod as your active dev environment is NOT recommended`) and prompts `Continue? (y/N)` with default No. If the user just wants to deploy to prod without making it their active env, suggest `agentlink env deploy prod` instead (a one-shot action that doesn't touch `.env.local` or `cloud.default`).
+- Once `cloud.default === "prod"`, every subsequent `env deploy` / `db apply` / `db sql` / `db rebuild` prints an `▲ Active env: prod` banner at the top. Tell users that's expected — it's a persistent reminder that their next data-touching command hits production.
+- The `env use` picker hides `local` on cloud-only projects (projects scaffolded without `--local`, where the active env isn't already local). If the user insists on jumping to local Docker anyway, explicit `agentlink env use local` still works.
 - If switching to `local`, the user still needs to run `supabase start` to bring up the Docker stack.
 
 ---
@@ -134,67 +138,91 @@ npx create-agentlink@latest env list             # See what's configured
 
 **Questions to ask**
 
-- **Is the working tree clean?** If not, stop and ask them to commit or stash first. The CLI enforces this, but catching it earlier saves a round-trip.
-- **Dev vs prod?** `agentlink deploy` targets DEV by default. Most "deploy" requests mean prod — confirm before running.
+- **Schema changes only, or does auth / PostgREST config / vault secrets also need to go?** Plain changes → `env deploy`. Config changes → `env add <name>` → "Re-apply full setup".
+- **Dev or prod?** `env deploy` prompts with a picker (preselects the active env), so this is low-stakes, but knowing the intent informs the answer if there's ambiguity.
 
 **Commands**
 
 ```bash
-# Confirm clean tree first
-git status
+# Interactive picker — preselects cloud.default
+npx create-agentlink@latest env deploy
 
-# Dev push (default target)
-npx create-agentlink@latest deploy
-
-# Prod push
-npx create-agentlink@latest deploy --prod
+# Explicit target
+npx create-agentlink@latest env deploy dev
+npx create-agentlink@latest env deploy prod       # y/N confirm required
 
 # Preview before shipping
-npx create-agentlink@latest deploy --prod --dry-run
+npx create-agentlink@latest env deploy prod --dry-run
+
+# CI-friendly
+npx create-agentlink@latest env deploy prod --yes --non-interactive
 ```
+
+What `env deploy` does:
+
+1. Apply local schemas (`db apply`) to the target env's DB (explicit pooler URL — works correctly even when `.env.local` points elsewhere).
+2. Deploy edge functions (`supabase functions deploy --project-ref <ref>`).
+
+What it does NOT do — belongs elsewhere:
+
+- **Vault secrets / PostgREST config / auth config.** If `supabase/config.toml` or auth providers changed, use `agentlink env add <name>` → "Re-apply full setup", or `agentlink config apply` for a targeted push.
+- **Generate a migration file.** Use `db migrate <name>` explicitly when you want an auditable artifact committed to `supabase/migrations/`.
+- **Clean-tree gate.** `env deploy` is safe on dirty trees — no migration diff is generated. (The clean-tree gate still applies to `env add` / `env relink` / `--force-update`.)
+- **Data-risk analysis.** If the user wants that, point them at `db migrate` + manual review of the generated SQL.
 
 **Watch-outs**
 
-- **Default target is `dev`, not `prod`.** If the user says "deploy" and means production, explicitly add `--prod`.
-- Clean-tree gate: `deploy` aborts on a dirty tree. `--allow-dirty` bypasses (don't recommend unless the user asks). `--dry-run` skips the gate.
-- Data-risk warnings (DROP TABLE, NOT NULL without DEFAULT, destructive column changes) block in interactive mode unless confirmed, and block in CI unless `--allow-warnings` is passed.
-- The agent never runs `deploy`. Point the user at the command; don't execute it yourself.
+- **Deploy does NOT change the active env.** `env use dev && env deploy prod` leaves the active env on dev. If the user wants to do follow-up queries against prod, they need `env use prod` explicitly.
+- The top-level `agentlink deploy` command has been removed — the CLI errors with a pointer at `agentlink env deploy` if someone tries the old form. Same for `agentlink retry-deploy`.
+- The agent never runs `env deploy` autonomously. Point the user at the command; don't execute it yourself.
 
 ---
 
 ## 5. Recover from a failed deploy / missing cloud project / wrong DB URL
 
-**Trigger:** user says "my deploy died halfway," "env add failed," "connection refused," "cloud project was deleted," "wrong DB URL."
+**Trigger:** user says "my deploy died halfway," "env add failed," "connection refused," "cloud project was deleted," "wrong DB URL," "auth config isn't taking."
 
 **Questions to ask** (decision tree)
 
-- **Did a previous `env add` / `env relink` / `deploy` fail mid-bootstrap?** (manifest has the env but the cloud project is partially set up) → `--retry`
-- **Was the cloud project deleted, or do you want to point at a different one?** → full relink (re-run `env add <name>`, pick "Relink to a different project")
-- **Is the DB URL in `.env.local` stale?** (connection errors but project exists) → `db url --fix`
+- **Did a previous `env add` / `env deploy` fail mid-bootstrap, or did auth providers / PostgREST config change?** (manifest has the env but the cloud project is partially set up, OR config drift) → full re-apply (`env add <name>` → "Re-apply full setup", or `--retry` non-interactively).
+- **Just schema / edge function drift** (config is fine, only the tables or functions need to catch up)? → `env deploy <name>` (lighter, idempotent).
+- **Was the cloud project deleted, or do you want to point at a different one?** → full relink (re-run `env add <name>`, pick "Relink to a different project").
+- **Is the DB URL in `.env.local` stale?** (connection errors but project exists) → `db url --fix`.
 - **Credentials no longer accepted** (`Forbidden` / 403)? — the CLI handles this automatically on newer versions; if on older, upgrade.
 
 **Commands**
 
 ```bash
-# Recovery A: mid-bootstrap failure against the SAME project
+# Recovery A: mid-bootstrap failure OR config drift against the SAME project
+# (Re-runs schemas + functions + vault + PostgREST + auth + verify)
 npx create-agentlink@latest env add dev --retry
 npx create-agentlink@latest env add prod --retry
 
-# Recovery B: relink to a different project (or the project was deleted)
+# Recovery B: just need to re-apply schemas + functions (lighter)
+npx create-agentlink@latest env deploy dev
+npx create-agentlink@latest env deploy prod
+
+# Recovery C: relink to a different project (or the project was deleted)
 npx create-agentlink@latest env add dev          # interactive — pick "Relink"
 npx create-agentlink@latest env add dev --project-ref <new-ref> --non-interactive
 
-# Recovery C: stale DB URL
+# Recovery D: stale DB URL
 npx create-agentlink@latest db url               # See current vs expected
 npx create-agentlink@latest db url --fix         # Rewrite .env.local with the right pooler URL
 
-# Recovery D: broken migration state (duplicates, timestamp conflicts)
+# Recovery E: just need to push config changes (no schema or function drift)
+npx create-agentlink@latest config apply --auth  # Only auth config
+npx create-agentlink@latest config apply --rest  # Only PostgREST config
+npx create-agentlink@latest config apply         # Both
+
+# Recovery F: broken migration state (duplicates, timestamp conflicts)
 npx create-agentlink@latest db rebuild
 ```
 
 **Watch-outs**
 
-- `--retry` requires the env to already exist in the manifest — it re-runs bootstrap against the stored `projectRef` without touching the manifest or `.env.local`.
+- `--retry` (or picking "Re-apply full setup" interactively) requires the env to already exist in the manifest — it re-runs the full bootstrap against the stored `projectRef` without touching the manifest or `.env.local`.
+- The "Re-apply full setup" path IS heavier than `env deploy`. For routine schema/function pushes, `env deploy` is the right call — the interactive menu hints at this above the options.
 - Full relink overwrites `.env.local`'s managed block — preserved user vars outside the block survive.
 - `db rebuild` deletes and regenerates migration files; safe on new projects, destructive if you've already pushed hand-edited migrations.
 
@@ -248,12 +276,47 @@ npx create-agentlink@latest db password "new-password-here"
 **Watch-outs**
 
 - Stores the password in `~/.config/agentlink/credentials.json` (per project ref, file mode 0600) — never in `.env.local`.
-- If `.env.local`'s `SUPABASE_DB_URL` embeds the old password, run `env use <env>` or `env add <env> --retry` afterward to rewrite it.
+- If `.env.local`'s `SUPABASE_DB_URL` embeds the old password, run `env use <env>` (for the active env) or `env add <env> --retry` (non-interactive re-bootstrap) afterward to rewrite it.
+
+---
+
+## 8. Deploy from CI
+
+**Trigger:** user asks for CI/CD setup, generates a GitHub Actions workflow, or wants to automate deploys.
+
+**Questions to ask**
+
+- **Which env(s)?** Usually prod on every main-branch push, sometimes dev on PRs.
+- **Are `SUPABASE_ACCESS_TOKEN` and `SUPABASE_DB_PASSWORD` set as repo secrets?**
+
+**Commands**
+
+```bash
+# Generate a GitHub Actions workflow for this env
+npx create-agentlink@latest env add prod --setup-ci
+npx create-agentlink@latest env add dev --setup-ci
+```
+
+The generator writes `.github/workflows/deploy-<env>.yml` using `env deploy <name> --yes --non-interactive`. Invoke exactly this form in custom CI workflows too:
+
+```yaml
+- name: Deploy to prod
+  run: npx create-agentlink@latest env deploy prod --yes --non-interactive
+  env:
+    SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+    SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+```
+
+**Watch-outs**
+
+- `--yes` skips the prod confirmation prompt; `--non-interactive` fails fast on missing input instead of waiting for stdin. Both are mandatory in CI.
+- `SUPABASE_ACCESS_TOKEN` must be a PAT (`sbp_...`) with admin access to the org — OAuth tokens from the user's laptop won't work in CI because they expire.
+- Old workflows using `deploy --prod` / `deploy --ci` no longer work. Regenerate via `env add <env> --setup-ci` or update manually.
 
 ---
 
 ## What the agent does NOT do
 
-- **Does not deploy.** Always point users at `agentlink deploy` / `deploy --prod`.
+- **Does not deploy.** Always point users at `agentlink env deploy` (interactive) or `agentlink env deploy <dev|prod>` (explicit).
 - **Does not install tooling.** If Claude Code / Supabase CLI / psql is missing, point at `https://agentlink.sh/start`.
 - **Does not create envs beyond dev/prod.** If the user asks for `staging`, explain the fixed model and ask what they actually need (usually a separate `prod` cloud project under a different org serves the "staging" role).

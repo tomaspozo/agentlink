@@ -2,14 +2,21 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **Skills sweep for the CLI restructure (top-level `deploy` → `env deploy`, `env use prod` now allowed).** Touches every skill that references CLI verbs:
+  - `skills/cli/SKILL.md` — rewrote the Deployment section around `env deploy`. `env deploy` does only `db apply` + `functions deploy` (not a migration-based diff/push). Added a Picker Visibility Rules subsection documenting how `env use` / `env add` / `env deploy` behave when no name is passed. `env use prod` is documented as **allowed** with warning + confirmation (previously "blocked"). Migration-system text no longer claims `deploy` generates migrations.
+  - `skills/cli/references/workflows.md` — rewrote "Switch active dev environment" (adds the prod confirmation + sticky `▲ Active env: prod` banner), "Ship changes to production" (now centered on `env deploy` with explicit callouts for what it does NOT do — vault/PostgREST/auth, migration file, clean-tree gate), "Recover from a failed deploy" (decision tree disambiguates `env deploy` vs `env add --retry`). New "Deploy from CI" playbook covering `--setup-ci` and the manual form.
+  - `skills/cli/references/troubleshooting.md` — recovery rows separate the "schema/function drift" path (`env deploy`) from the "config drift / mid-bootstrap failure" path (`env add --retry`). Added "`agentlink deploy` errors" row to the intervention matrix pointing at the new verb.
+  - `skills/edge-functions/SKILL.md` — step 6 of the "Add a new function" flow points at `agentlink env deploy` as the primary deploy path; direct `supabase functions deploy --use-api` kept as the functions-only escape hatch.
+  - `agents/builder.md` — Tools Reference table rebuilt: "Deploy to production" row now shows `env deploy <dev|prod>`, added a "Re-apply full setup" row for `env add --retry`, corrected the "Push migration" row (no more `deploy` suggestion). Deployment section rewritten — it enumerates `env deploy`, `env deploy --dry-run`, `env add --retry`, `env use` — and ends with a callout that the top-level `agentlink deploy` was removed.
+
+- **Builder agent's "New project setup" no longer asks the user to pick a mode.** The section in `agents/builder.md` now tells the agent to always scaffold a new Supabase cloud project via the CLI and auto-route between `--link` (Supabase connector MCP available) and interactive `create-agentlink` (no MCP). Local Docker and reusing an existing cloud project are no longer presented as default options — only used if the user explicitly asks. Fixes a regression where the agent presented a "Modo Supabase" picker (Cloud+MCP / Cloud existing / Local Docker) on greenfield projects.
+
 ### Added
 
 - **"Handling Supabase Auth Responses" section in frontend `auth_ui.md`.** Documents the reliable `data.session === null` branch for email-confirmation-pending state (not `email_confirmed_at` — that field can be written asynchronously), the `refreshSession()`-after-signup rationale for the `_internal_admin_handle_new_user` JWT race, where confirmation is configured (local `config.toml` vs. cloud `mailer_autoconfirm`), the `formatAuthError` pattern shipped in the scaffold's `lib/auth-errors.ts`, and known Supabase quirks (`User already registered` on unconfirmed emails, `refreshSession()` deadlock inside `onAuthStateChange`).
 - **Pointer from auth `SKILL.md` to the new section.** The post-signup JWT race note now points at `frontend/references/auth_ui.md` → Handling Supabase Auth Responses for the client-side flow.
-
-### Changed
-
-- **Builder agent's "New project setup" no longer asks the user to pick a mode.** The section in `agents/builder.md` now tells the agent to always scaffold a new Supabase cloud project via the CLI and auto-route between `--link` (Supabase connector MCP available) and interactive `create-agentlink` (no MCP). Local Docker and reusing an existing cloud project are no longer presented as default options — only used if the user explicitly asks. Fixes a regression where the agent presented a "Modo Supabase" picker (Cloud+MCP / Cloud existing / Local Docker) on greenfield projects.
 
 ## [0.17.2] - 2026-04-20
 

@@ -165,7 +165,9 @@ npx create-agentlink@latest env add dev --retry
 ```
 
 - **Relink** rewrites the env to point at a different cloud project and re-runs the full bootstrap. Use when the project was deleted, the DB URL is wrong, or you need to switch to a different project.
-- **`--retry`** re-runs the bootstrap against the stored `projectRef` without touching the manifest or `.env.local`. Use when the previous `env add` / `env relink` / `deploy` failed partway through — link, db push, vault upserts, functions deploy, or auth config died — and you want to resume without rewiring anything.
+- **`--retry`** (or the interactive "Re-apply full setup" option) re-runs the bootstrap against the stored `projectRef` without touching the manifest or `.env.local`. Use when a previous `env add` / `env relink` failed partway through — link, db push, vault upserts, functions deploy, or auth config died — and you want to resume without rewiring anything. Also applicable when auth providers / PostgREST config / vault secrets changed and need to be pushed.
+
+If you just need to re-apply schemas and functions (no config changes), `npx create-agentlink@latest env deploy <name>` is the lighter, idempotent option — it skips vault / PostgREST / auth.
 
 Both preserve existing migrations.
 
@@ -306,8 +308,10 @@ rm supabase/migrations/<version>_name.sql
 | Duplicate migration files | `npx create-agentlink@latest db rebuild` |
 | `db push` says remote versions not found | `npx create-agentlink@latest db rebuild` |
 | Cloud project deleted / need new project | `npx create-agentlink@latest env add dev` (prompts to relink) |
-| `env add` / `deploy` died partway (same project) | `npx create-agentlink@latest env add <name> --retry` |
+| `env add` died partway OR config drifted | `npx create-agentlink@latest env add <name> --retry` (re-apply full setup) |
+| Need to push schema / function changes (no config drift) | `npx create-agentlink@latest env deploy <name>` |
 | Broken migration state on new project | `npx create-agentlink@latest db rebuild` |
 | DB password was reset in dashboard | `npx create-agentlink@latest db password "newpass"` |
 | Claude Code not found on PATH | Install via `https://agentlink.sh/start`, open a new terminal |
 | `Forbidden` (403) on env add | Upgrade CLI; re-auth is automatic on v0.21+ |
+| `agentlink deploy` errors "no longer a top-level command" | Use `agentlink env deploy` (same functionality, under the env group) |
