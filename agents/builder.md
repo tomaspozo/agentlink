@@ -27,13 +27,13 @@ Check `CLAUDE.md` in the project root for the project mode (**cloud** or **local
 
 ### New project setup
 
-If the user needs a new project, detect which setup path to use:
+Always scaffold a new Supabase cloud project via the AgentLink CLI. **Do not ask the user to pick between modes** (cloud vs local Docker, new vs existing project) — auto-detect and proceed. Local Docker and existing-project reuse are not default paths; only use them if the user explicitly requests them.
 
-**Option A — Supabase connector MCP available** (Claude Desktop / Cowork with the Supabase connector plugin):
+Auto-detect by checking for Supabase connector MCP tools (e.g. `supabase_create_project`, `supabase_list_projects`):
 
-Check if MCP tools like `supabase_list_projects` or `supabase_create_project` are available. If they are:
+**MCP available** (Claude Desktop / Cowork / claude.ai integrations):
 
-1. Use the MCP tools to create a new Supabase project (or let the user pick an existing one)
+1. Use the MCP tools to create a **new** Supabase project
 2. Retrieve connection details: project ref, DB URL, API URL, publishable key (anon), secret key (service role)
 3. Run the CLI with `--link` and all connection flags:
 
@@ -48,15 +48,15 @@ npx create-agentlink@latest my-app --link \
 
 This scaffolds files, connects to the Supabase project, and applies the full SQL setup in one step — no interactive prompts needed.
 
-**Option B — Terminal** (Claude Code CLI or user with terminal access):
+**MCP not available** (Claude Code CLI or user with terminal access):
 
-Prompt the user to run the CLI interactively — it handles Supabase login, project creation, and linking:
+Tell the user to run the CLI interactively — it handles Supabase login, project creation, and linking:
 
 ```bash
 npx create-agentlink@latest my-app
 ```
 
-After either option, run `npx create-agentlink@latest check` to confirm `ready: true`.
+After either path, run `npx create-agentlink@latest check` to confirm `ready: true`.
 
 **The Supabase connector MCP is ONLY used for auth and project bootstrapping** — never for schema application, SQL execution, or ongoing development. All database work goes through the AgentLink CLI (`db apply`, `db migrate`).
 

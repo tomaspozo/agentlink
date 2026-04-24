@@ -7,6 +7,10 @@
 - **"Handling Supabase Auth Responses" section in frontend `auth_ui.md`.** Documents the reliable `data.session === null` branch for email-confirmation-pending state (not `email_confirmed_at` — that field can be written asynchronously), the `refreshSession()`-after-signup rationale for the `_internal_admin_handle_new_user` JWT race, where confirmation is configured (local `config.toml` vs. cloud `mailer_autoconfirm`), the `formatAuthError` pattern shipped in the scaffold's `lib/auth-errors.ts`, and known Supabase quirks (`User already registered` on unconfirmed emails, `refreshSession()` deadlock inside `onAuthStateChange`).
 - **Pointer from auth `SKILL.md` to the new section.** The post-signup JWT race note now points at `frontend/references/auth_ui.md` → Handling Supabase Auth Responses for the client-side flow.
 
+### Changed
+
+- **Builder agent's "New project setup" no longer asks the user to pick a mode.** The section in `agents/builder.md` now tells the agent to always scaffold a new Supabase cloud project via the CLI and auto-route between `--link` (Supabase connector MCP available) and interactive `create-agentlink` (no MCP). Local Docker and reusing an existing cloud project are no longer presented as default options — only used if the user explicitly asks. Fixes a regression where the agent presented a "Modo Supabase" picker (Cloud+MCP / Cloud existing / Local Docker) on greenfield projects.
+
 ## [0.17.2] - 2026-04-20
 
 ### Added
