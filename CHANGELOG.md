@@ -4,6 +4,11 @@
 
 ### Changed
 
+- **Docs swept for the `config apply` → `env config` rename.** CLI 0.23 removes the top-level `agentlink config apply` command and replaces it with `agentlink env config [secrets|db|auth|all]` — a superset that adds vault secrets (+ edge-function `SB_*` mirror) alongside the existing auth and PostgREST sections. Touches:
+  - `agents/builder.md` — truth-table rows for "Re-apply config" updated; added a dedicated row for "Re-apply vault + SB_* secrets."
+  - `skills/cli/SKILL.md` — `env deploy` section's "what it doesn't do" note now points at `env config` for targeted re-applies and `env add --retry` for the full reset.
+  - `skills/cli/references/workflows.md` — Recovery E (config drift) rewritten around the three new subcommands; top-of-deploy guidance updated to mention `env config` as the lighter alternative to `env add --retry` when only config drifted.
+
 - **Builder agent's "New project setup" no longer has an MCP branch.** The section in `agents/builder.md` had a dual path — "MCP available" (use `supabase_create_project` MCP tool + CLI with `--link`) vs "MCP not available" (tell user to run bare `create-agentlink`). The MCP path was creating a Supabase cloud project; the fallback instruction told the user to run `npx create-agentlink@latest <name>` which, without `--link`, triggered the CLI's interactive wizard and created a **second** Supabase project — leaving the first one orphaned. Replaced with a single agent-driven path: `npx create-agentlink@latest <name> --skip-env`, which scaffolds all files + deps + Claude Code config without touching Supabase. Agent hands off to the user for `agentlink env add dev` (browser OAuth). Aligns with `skills/cli/references/workflows.md` Workflow #1 and with `cli` 0.21.0's `--skip-env` "primary use case: AI agent running without browser access."
 - **`skills/cli/references/workflows.md` — "user has credentials from Supabase connector MCP" subsection reframed.** Renamed to "user pastes existing credentials (advanced)" with a one-liner guardrail: "User-driven only. Agents should use `--skip-env` above; never call MCP tools to fetch credentials themselves." Preserves the documentation of the escape hatch without inviting agents to take it.
 

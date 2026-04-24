@@ -167,7 +167,7 @@ What `env deploy` does:
 
 What it does NOT do — belongs elsewhere:
 
-- **Vault secrets / PostgREST config / auth config.** If `supabase/config.toml` or auth providers changed, use `agentlink env add <name>` → "Re-apply full setup", or `agentlink config apply` for a targeted push.
+- **Vault secrets / PostgREST config / auth config.** If `supabase/config.toml` or auth providers changed, use `agentlink env add <name>` → "Re-apply full setup" for the full reset, or `agentlink env config [secrets|db|auth|all]` for a targeted push of just the drifted subsystem. `env config` is cloud-only, idempotent, and works on bare projects.
 - **Generate a migration file.** Use `db migrate <name>` explicitly when you want an auditable artifact committed to `supabase/migrations/`.
 - **Clean-tree gate.** `env deploy` is safe on dirty trees — no migration diff is generated. (The clean-tree gate still applies to `env add` / `env relink` / `--force-update`.)
 - **Data-risk analysis.** If the user wants that, point them at `db migrate` + manual review of the generated SQL.
@@ -213,9 +213,13 @@ npx create-agentlink@latest db url               # See current vs expected
 npx create-agentlink@latest db url --fix         # Rewrite .env.local with the right pooler URL
 
 # Recovery E: just need to push config changes (no schema or function drift)
-npx create-agentlink@latest config apply --auth  # Only auth config
-npx create-agentlink@latest config apply --rest  # Only PostgREST config
-npx create-agentlink@latest config apply         # Both
+# `env config` is the replacement for the removed `config apply` command.
+# Three independent subsystems; pick the one that drifted or use `all`.
+npx create-agentlink@latest env config secrets   # Vault + edge-function SB_* mirror
+npx create-agentlink@latest env config auth      # Only auth config (hooks + signup)
+npx create-agentlink@latest env config db        # Only PostgREST (expose api schema)
+npx create-agentlink@latest env config all       # All three
+npx create-agentlink@latest env config           # Interactive picker
 
 # Recovery F: broken migration state (duplicates, timestamp conflicts)
 npx create-agentlink@latest db rebuild

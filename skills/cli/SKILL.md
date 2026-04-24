@@ -295,7 +295,7 @@ npx create-agentlink@latest env deploy dev --dry-run        # Print target witho
 
 Things `env deploy` deliberately does NOT do (belong elsewhere):
 
-- **Vault secrets / PostgREST config / auth config.** These are applied during `env add` (initial bootstrap). If any of those changed, use `env add <name>` → "Re-apply full setup" or `agentlink config apply`.
+- **Vault secrets / PostgREST config / auth config.** These are applied during `env add` (initial bootstrap). For targeted re-applies without the heavier schemas/functions path, use `agentlink env config [secrets|db|auth|all]` — same primitives, cloud-only, idempotent, works on bare projects. For a full reset (schemas + functions + config + verify) use `env add <name> --retry`.
 - **Migration file generation.** Use `db migrate <name>` explicitly when you want an auditable artifact.
 - **Clean-tree gate.** `db apply` is idempotent, so running against a dirty tree is safe; the only reviewability loss is at the migration-diff level, which `env deploy` doesn't generate anyway.
 - **Data-risk analysis.** That was tied to the migration diff; use `db migrate` + review the generated SQL when you want it.

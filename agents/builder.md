@@ -152,9 +152,10 @@ Use `npx create-agentlink@latest info <name>` to read the annotation docs for an
 | Set DB password | N/A | `npx create-agentlink@latest db password "value"` |
 | Fix DB URL | N/A | `npx create-agentlink@latest db url --fix` |
 | Rebuild migrations | `npx create-agentlink@latest db rebuild` | `npx create-agentlink@latest db rebuild` |
-| Re-apply config (all) | `npx create-agentlink@latest config apply` | `npx create-agentlink@latest config apply` |
-| Re-apply auth config | N/A (restart Supabase) | `npx create-agentlink@latest config apply --auth` |
-| Re-apply PostgREST config | N/A (restart Supabase) | `npx create-agentlink@latest config apply --rest` |
+| Re-apply config (all) | N/A | `npx create-agentlink@latest env config all` |
+| Re-apply vault + SB_* secrets | N/A | `npx create-agentlink@latest env config secrets` |
+| Re-apply auth config | N/A (restart Supabase) | `npx create-agentlink@latest env config auth` |
+| Re-apply PostgREST config | N/A (restart Supabase) | `npx create-agentlink@latest env config db` |
 
 ### Deployment
 
