@@ -413,6 +413,8 @@ npx create-agentlink@latest env add dev --retry             # Re-apply full setu
 
 `env use <name>` rewrites the managed block of `.env.local` so downstream `db apply` / `functions serve` / `db sql` hit the right env, and persists `manifest.cloud.default` so every subsequent command resolves the same target. User-added variables outside the block are preserved.
 
+`env use <same-env>` (running it on the env you're already on) is **not a no-op** — it re-fetches API keys via `getApiKeys`, re-resolves the pooler URL, and rewrites the managed block. This is the path users take after rotating the publishable / secret key in the Supabase dashboard, or whenever they suspect `.env.local` has drifted. Output reads `Refreshed <name>` instead of `Switched to <name>`. Prod confirmation is skipped on this path — the user is already on prod, and the persistent `▲ Active env: prod` banner on every data-touching command keeps the live-data risk visible.
+
 `env use prod` is **allowed** but gated behind an amber warning + y/N confirmation (defaults to No):
 
 ```

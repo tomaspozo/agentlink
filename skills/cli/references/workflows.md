@@ -126,6 +126,8 @@ npx create-agentlink@latest env list             # See what's configured
 
 `env use` rewrites the managed block of `.env.local` so `db apply` / `supabase functions serve` / `db sql` hit the right env, and persists `manifest.cloud.default` so subsequent commands resolve consistently. User-added env vars outside the block are preserved.
 
+**Refreshing `.env.local` for the active env**: `env use <same-env>` doubles as a refresh verb. Re-fetches API keys (after a key rotation in the Supabase dashboard), re-resolves the pooler URL, and rewrites the managed block. Output reads `Refreshed <name>` instead of `Switched to <name>`. No prod confirmation on this path — you're already on prod. Use this when `.env.local` looks stale or after the user resets the DB password / rotates a key.
+
 **Watch-outs**
 
 - `env use prod` is **allowed** but requires explicit confirmation — the CLI prints an amber warning (`▲ Using prod as your active dev environment is NOT recommended`) and prompts `Continue? (y/N)` with default No. If the user just wants to deploy to prod without making it their active env, suggest `agentlink env deploy prod` instead (a one-shot action that doesn't touch `.env.local` or `cloud.default`).
