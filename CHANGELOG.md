@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-04-24
+
 ### Added
 
 - **CLI skill documents `db backup`.** New "Snapshot the database" subsection under Database Operations in `skills/cli/SKILL.md` covering the three-file dump triplet (roles / schema / data), the timestamped per-env folder layout, the first-run gitignore append, and the read-only safety profile. New workflow #10 "Snapshot an env before a risky change" in `workflows.md` with trigger, env-resolution flow, what-it-does, and watch-outs (including a callout that no `db restore` command exists — restoration is a developer-initiated manual step). The agent never runs `db backup` autonomously before destructive changes; it's safe but reading prod data is still the user's call to make.
