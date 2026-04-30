@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.22.0] - 2026-04-30
+
 ### Changed
 
 - **Repository moved to `tomaspozo/agentlink`.** Updated `repository` field in `.claude-plugin/plugin.json`, the marketplace install command in `README.md`, and the release URL in `scripts/release.sh` to point at the new GitHub location.
