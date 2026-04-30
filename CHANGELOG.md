@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.23.0] - 2026-04-30
+
 ### Changed
 
 - **CLI npm package renamed from `create-agentlink` to `agentlink-sh`.** Install is now `npm install -g agentlink-sh@latest` (or `npx agentlink-sh@latest <name>` for a one-shot). Updated install commands in `README.md` and the CLI skill's opening line in `skills/cli/SKILL.md` to refer to "the `agentlink` CLI" instead of `create-agentlink`. The binary name (`agentlink`) is unchanged — only the package name moved.
