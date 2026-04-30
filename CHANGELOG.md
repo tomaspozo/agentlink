@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-04-30
+
 ### Added
 
 - **`internal-` prefix convention for system-only edge functions.** `skills/edge-functions/SKILL.md` adds a bare/internal naming table — bare names for client/external-facing (`stripe-webhook`, `chart-render`), `internal-` prefix for queue workers, auth hooks, cron-only handlers, and anything paired with `allow: "secret"`. Mirrors the SQL `_internal_admin_*` convention. Leading-underscore caveat noted (Supabase skips top-level `_*` dirs, so use the hyphenated form). Auth and database examples renamed to match: `send-email` → `internal-send-auth-email`, `invite-member` → `internal-invite-member`, `queue-worker` → `internal-queue-worker`.
