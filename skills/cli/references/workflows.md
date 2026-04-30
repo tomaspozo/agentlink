@@ -222,7 +222,7 @@ agentlink db url --fix         # Rewrite .env.local with the right pooler URL
 # `env config` is the replacement for the removed `config apply` command.
 # Three independent subsystems; pick the one that drifted or use `all`.
 # Shape: env config [subcommand] [env-name] — both positional, --env flag still accepted.
-agentlink env config secrets prod   # Vault + edge-function SB_* mirror on prod
+agentlink env config secrets prod   # Postgres Vault (SUPABASE_URL / publishable / secret) on prod
 agentlink env config auth dev       # Only auth config (hooks + signup) on dev
 agentlink env config db prod        # Only PostgREST (expose api schema) on prod
 agentlink env config all prod       # All three on prod (prompts for y/N)
