@@ -17,7 +17,7 @@ Agent Link is a [Claude Code plugin](https://docs.anthropic.com/en/docs/claude-c
 npx create-agentlink@latest
 
 # From the marketplace
-/plugin marketplace add agentlinksh/agent
+/plugin marketplace add tomaspozo/agentlink
 /plugin install link@agentlink
 
 # Local directory (development)

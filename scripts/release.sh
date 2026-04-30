@@ -121,4 +121,4 @@ gh release create "$TAG" \
   --notes "$UNRELEASED_CONTENT"
 
 echo ""
-echo "Done — https://github.com/agentlinksh/agent/releases/tag/$TAG"
+echo "Done — https://github.com/tomaspozo/agentlink/releases/tag/$TAG"
