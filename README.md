@@ -6,6 +6,8 @@ An opinionated way to build on Supabase with AI agents.
 
 Agent Link is a [Claude Code plugin](https://docs.anthropic.com/en/docs/claude-code/plugins) with composable skills and an app development agent. Each skill covers a specific domain — CLI, schema development, RPCs, edge functions, auth, frontend — and Claude loads whichever skills are relevant to the current task automatically. The agent bundles all skills together with architecture enforcement.
 
+It ships alongside the [`agentlink` CLI](https://www.npmjs.com/package/agentlink-sh) — the plugin's hands. The CLI scaffolds new Supabase projects (cloud or local Docker), manages multiple environments (`local` / `dev` / `prod`), applies schemas, generates migrations, and deploys schemas + edge functions to any cloud env. The agent reasons about *what* to build; the CLI does the work the agent shouldn't do itself — OAuth, project creation, environment switching, deploys.
+
 ---
 
 ## Install
@@ -35,18 +37,18 @@ After global install, every CLI command is just `agentlink <subcommand>` — `ag
 Describe what you want to build and tell Claude to use Agent Link. The agent handles the rest — prerequisites, architecture, and the right skills for the job.
 
 ```
-Build me an uptime monitor with Supabase. Use agent link to plan.
+Build me an uptime monitor that checks endpoints every 5 minutes.
 ```
 
 ```
-Review my schema and suggest improvements. Use agent link.
+Review my db schema and suggest improvements.
 ```
 
 ```
-Add a multi-tenant invitation flow to my app. Use agent link.
+Add a multi-tenant invitation flow to my app..
 ```
 
-The agent auto-triggers when you mention it in your prompt. You can also call it directly with `@link:builder`.
+You can also call it directly with `@link:builder`.
 
 ### Use skills directly
 
