@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Added
+
+- **`internal-` prefix convention for system-only edge functions.** `skills/edge-functions/SKILL.md` adds a bare/internal naming table — bare names for client/external-facing (`stripe-webhook`, `chart-render`), `internal-` prefix for queue workers, auth hooks, cron-only handlers, and anything paired with `allow: "secret"`. Mirrors the SQL `_internal_admin_*` convention. Leading-underscore caveat noted (Supabase skips top-level `_*` dirs, so use the hyphenated form). Auth and database examples renamed to match: `send-email` → `internal-send-auth-email`, `invite-member` → `internal-invite-member`, `queue-worker` → `internal-queue-worker`.
+
+### Changed
+
+- **`api.*` functions must be `SECURITY INVOKER` — no exceptions.** `skills/rpc/SKILL.md`, `rpc_patterns.md`, and `auth/references/rls_patterns.md` reframe DEFINER-in-`api` from "rare exception" to a linter-flagged anti-pattern (Supabase lints 0028/0029). New worked example for the INVOKER-wrapper-in-`api` → DEFINER-helper-in-`public._internal_admin_*` split with defense-in-depth `auth.uid() = p_user_id` checks. New "Where DEFINER is allowed" matrix and an `api._admin_*` carve-out requiring explicit `REVOKE … FROM PUBLIC, anon, authenticated; GRANT EXECUTE … TO service_role`. `tenant_select`, `invitation_create`, and `invitation_accept` rewritten to the wrapper pattern.
+
+- **Agent deploys to `local` / `dev` autonomously; prod requires explicit user approval.** `agents/builder.md` and `skills/cli/SKILL.md` reframe the deploy guardrail from "the agent does not deploy" — too broad, was leaving newly-written edge functions undeployed on cloud-dev. Agent can now run `db apply`, `supabase functions deploy`, `supabase secrets set`, `env deploy dev --yes`, and `db migrate` against the active dev env without asking. Hard line at prod: `env deploy prod`, `env use prod`, `db push` against a prod URL, `functions deploy` / `secrets set` while active env is prod, prod `env add` / `--retry`, and `destroy`. Signal is `manifest.cloud.default`; approval scope is one command, not a blanket pass.
+
 ## [0.20.0] - 2026-04-24
 
 ### Added

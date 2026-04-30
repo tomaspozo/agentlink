@@ -126,10 +126,10 @@ CREATE OR REPLACE FUNCTION _auth_chart_can_read(p_chart_id uuid) ...
 CREATE OR REPLACE FUNCTION public._auth_chart_can_read(p_chart_id uuid) ...
 
 -- ❌ NOT THIS — bare function call
-PERFORM _internal_admin_call_edge_function('queue-worker');
+PERFORM _internal_admin_call_edge_function('internal-queue-worker');
 
 -- ✅ THIS
-PERFORM public._internal_admin_call_edge_function('queue-worker');
+PERFORM public._internal_admin_call_edge_function('internal-queue-worker');
 
 -- ❌ NOT THIS — bare GRANT/REVOKE
 GRANT EXECUTE ON FUNCTION _internal_admin_get_secret(text) TO service_role;

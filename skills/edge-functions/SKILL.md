@@ -89,6 +89,24 @@ export default {
 
 **When in doubt:** logged-in user → `"user"`. External service → `"public"`. Internal infrastructure → `"secret"`.
 
+### Naming convention: `internal-` prefix for system-only functions
+
+Functions that are **never** called from client code — they're only enqueued via PGMQ, fired via `pg_net`, or invoked by an auth hook — get an `internal-` prefix in their directory name. Functions called by clients (frontend code, external webhooks, public APIs) get a bare name.
+
+| Pattern | Examples | When to use |
+|---|---|---|
+| Bare name | `stripe-webhook`, `share-image`, `chart-render` | Anything a client (or external service) might hit. |
+| `internal-` prefix | `internal-send-auth-email`, `internal-invite-member`, `internal-queue-worker` | Queue workers, auth-hook handlers, cron-only functions, anything wrapped with `allow: "secret"` and never exposed to users. |
+
+Three reasons:
+1. **Discoverability.** A reader scanning `supabase/functions/` sees the privilege boundary at a glance — no need to open `index.ts` to learn whether a function is user-facing.
+2. **Symmetry with the SQL convention.** `_internal_admin_*` (DEFINER helpers in `public`) and `internal-*` (system-only edge functions) share the same word for the same concept: "system, not client."
+3. **Safety net for routing accidents.** If the agent later writes `enqueue('send-email')` somewhere new, the missing `internal-` prefix won't match anything in the queue dispatcher — fails loudly instead of silently calling the wrong function.
+
+**Don't** use a leading underscore (`_internal-foo`) — Supabase treats top-level `_*` directories as non-deployable (which is why `_shared/` works as a non-deployed module). The hyphenated `internal-` prefix is the safe form.
+
+Edge function names beginning with `internal-` should always be paired with `allow: "secret"`. If you find yourself writing `allow: "user"` on an `internal-*` function, the prefix is wrong.
+
 > **For the full wrapper API, dual-auth patterns, anti-patterns, and context reference, load [withSupabase Reference](./references/with_supabase.md).**
 
 ---
@@ -115,20 +133,23 @@ npx supabase secrets set SUPABASE_SECRET_KEY=sb_secret_...
 
 ```
 supabase/functions/
-├── _shared/                    # Shared utilities (NOT deployed)
-│   └── responses.ts            # Response helpers
-├── _feature-name/              # Feature-specific shared modules (NOT deployed)
+├── _shared/                       # Shared utilities (NOT deployed — leading `_`)
+│   └── responses.ts               # Response helpers
+├── _feature-name/                 # Feature-specific shared modules (NOT deployed)
 │   └── helpers.ts
-├── my-function/
-│   ├── index.ts
-│   └── deno.json               # Per-function dependency map (REQUIRED)
-├── another-function/
+├── stripe-webhook/                # Client/external-facing — bare name
 │   ├── index.ts
 │   └── deno.json
-└── deno.json                   # Global — local dev fallback only
+├── internal-queue-worker/         # System-only (cron + pg_net) — `internal-` prefix
+│   ├── index.ts
+│   └── deno.json
+├── internal-send-auth-email/      # System-only (auth hook → queue) — `internal-` prefix
+│   ├── index.ts
+│   └── deno.json
+└── deno.json                      # Global — local dev fallback only
 ```
 
-Folders prefixed with `_` are shared modules — they are not deployed as edge functions. Every deployed function needs its own `deno.json` with its dependencies mapped — the global `deno.json` is excluded during deployment.
+Folders prefixed with `_` are shared modules — they are not deployed as edge functions. Folders prefixed with `internal-` ARE deployed but signal "system-only, never call from a client" by convention (paired with `allow: "secret"`). Every deployed function needs its own `deno.json` with its dependencies mapped — the global `deno.json` is excluded during deployment.
 
 ---
 

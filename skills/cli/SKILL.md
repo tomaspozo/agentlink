@@ -343,7 +343,7 @@ Things `env deploy` deliberately does NOT do (belong elsewhere):
 
 **The top-level `agentlink deploy` command has been removed.** The CLI intercepts `agentlink deploy` and `agentlink retry-deploy` with an error pointing at the new verb. CI workflows using `deploy --prod` / `deploy --ci` must migrate to `env deploy <name> --yes --non-interactive` (the `env add --setup-ci` generator emits the new form).
 
-**The agent does not deploy.** Deployment is initiated by the developer. When users ask to deploy, point them to `agentlink env deploy` (interactive picker) or `agentlink env deploy <dev|prod>` (explicit target).
+**The agent deploys to the active dev env (local or `dev`) freely; it does not target `prod` without explicit, in-message user approval.** Deploying edge functions to `dev` after writing them, applying schemas to `dev`, and setting `dev` edge-function secrets are all part of the agent's normal workflow — without those, the user can't actually test what the agent built. The hard boundary is production: `agentlink env deploy prod`, `supabase db push` against a prod URL, `supabase functions deploy` while the active env is `prod`, and `agentlink env use prod` are all developer-initiated. When users ask to deploy to prod, point them to `agentlink env deploy prod` (interactive y/N gate) or `agentlink env deploy prod --dry-run` (preview without applying).
 
 ### Server-side config (`env config`)
 

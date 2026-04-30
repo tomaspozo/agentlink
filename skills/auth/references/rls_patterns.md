@@ -310,43 +310,56 @@ CREATE POLICY admins_delete_memberships ON public.memberships
 
 ### Setting JWT claims
 
-When a user selects a tenant (at login or via tenant switching), set the custom claims in their JWT:
+When a user selects a tenant (at login or via tenant switching), set the custom claims in their JWT. The api wrapper is `SECURITY INVOKER` — it validates the caller and delegates the privileged `auth.users` write to a `_internal_admin_*` helper in `public`. This pattern silences linter 0028/0029 (DEFINER-in-exposed-schema) while keeping the same end behavior.
 
 ```sql
+-- Privileged helper — DEFINER in public, NOT in api. Linter doesn't see it.
+CREATE OR REPLACE FUNCTION public._internal_admin_set_tenant_claims(
+  p_user_id uuid, p_tenant_id uuid, p_role text
+) RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+BEGIN
+  -- Defense in depth: caller must match auth.uid()
+  IF (SELECT auth.uid()) IS DISTINCT FROM p_user_id THEN
+    RAISE EXCEPTION 'Cannot set claims for another user';
+  END IF;
+  UPDATE auth.users
+  SET raw_app_meta_data = COALESCE(raw_app_meta_data, '{}'::jsonb)
+    || jsonb_build_object('tenant_id', p_tenant_id, 'tenant_role', p_role)
+  WHERE id = p_user_id;
+END; $$;
+
+REVOKE ALL ON FUNCTION public._internal_admin_set_tenant_claims(uuid, uuid, text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public._internal_admin_set_tenant_claims(uuid, uuid, text) TO authenticated, service_role;
+
+-- API wrapper — INVOKER, validates membership, delegates privileged write
 CREATE OR REPLACE FUNCTION api.tenant_select(p_tenant_id uuid)
 RETURNS jsonb
 LANGUAGE plpgsql
-SECURITY DEFINER  -- required: updates auth.users metadata
+SECURITY INVOKER
 SET search_path = ''
 AS $$
 DECLARE
-  v_membership record;
+  v_user_id uuid := (SELECT auth.uid());
+  v_role text;
 BEGIN
-  -- Verify membership exists
-  SELECT * INTO v_membership
-  FROM public.memberships
-  WHERE tenant_id = p_tenant_id AND user_id = auth.uid();
+  -- Verify membership exists. Reads under RLS — relies on
+  -- users_read_own_memberships policy on public.memberships.
+  SELECT role INTO v_role FROM public.memberships
+   WHERE tenant_id = p_tenant_id AND user_id = v_user_id;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Not a member of this tenant'; END IF;
 
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'Not a member of this tenant';
-  END IF;
-
-  -- Set tenant context in JWT claims
-  UPDATE auth.users
-  SET raw_app_meta_data = raw_app_meta_data
-    || jsonb_build_object(
-      'tenant_id', p_tenant_id,
-      'tenant_role', v_membership.role
-    )
-  WHERE id = auth.uid();
+  PERFORM public._internal_admin_set_tenant_claims(v_user_id, p_tenant_id, v_role);
 
   RETURN jsonb_build_object(
     'success', true,
     'tenant_id', p_tenant_id,
-    'role', v_membership.role
+    'role', v_role
   );
-END;
-$$;
+END; $$;
 ```
 
 After calling this, the client must refresh the session to get a new JWT with the updated claims:
@@ -365,32 +378,48 @@ await supabase.auth.refreshSession();  // gets new JWT with tenant_id claim
 
 ### Invite (admin sends)
 
+The api wrapper is INVOKER. It resolves the caller's tenant from JWT claims and delegates the insert + email enqueue to a `_internal_admin_*` helper that bypasses RLS on `public.invitations`.
+
 ```sql
-CREATE OR REPLACE FUNCTION api.invitation_create(
-  p_email text,
-  p_role text DEFAULT 'member'
-)
-RETURNS jsonb
+-- Privileged helper — handles the cross-cutting work atomically
+CREATE OR REPLACE FUNCTION public._internal_admin_create_invitation(
+  p_user_id uuid, p_tenant_id uuid, p_email text, p_role text
+) RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = ''
 AS $$
 DECLARE
-  v_user_id uuid := (SELECT auth.uid());
-  v_tenant_id uuid := public._auth_tenant_id();
   v_invitation record;
+  v_tenant_name text;
 BEGIN
-  IF NOT public._auth_has_role('admin') THEN
+  IF (SELECT auth.uid()) IS DISTINCT FROM p_user_id THEN
+    RAISE EXCEPTION 'Cannot create invitation on behalf of another user';
+  END IF;
+
+  -- Verify admin via direct membership read (DEFINER bypasses RLS)
+  IF NOT EXISTS (
+    SELECT 1 FROM public.memberships
+    WHERE tenant_id = p_tenant_id AND user_id = p_user_id
+      AND role IN ('admin', 'owner')
+  ) THEN
     RAISE EXCEPTION 'Only admins can create invitations';
   END IF;
 
-  IF v_tenant_id IS NULL THEN
-    RAISE EXCEPTION 'No tenant selected';
-  END IF;
-
   INSERT INTO public.invitations (tenant_id, email, role, invited_by)
-  VALUES (v_tenant_id, p_email, p_role, v_user_id)
+  VALUES (p_tenant_id, p_email, p_role, p_user_id)
   RETURNING * INTO v_invitation;
+
+  SELECT name INTO v_tenant_name FROM public.tenants WHERE id = p_tenant_id;
+
+  PERFORM api._admin_enqueue_task(
+    'internal-invite-member',
+    jsonb_build_object(
+      'email', v_invitation.email,
+      'token', v_invitation.token::text,
+      'tenant_name', v_tenant_name
+    )
+  );
 
   RETURN jsonb_build_object(
     'id', v_invitation.id,
@@ -399,65 +428,91 @@ BEGIN
     'token', v_invitation.token,
     'expires_at', v_invitation.expires_at
   );
-END;
-$$;
-```
+END; $$;
 
-### Accept (invited user)
+REVOKE ALL ON FUNCTION public._internal_admin_create_invitation(uuid, uuid, text, text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public._internal_admin_create_invitation(uuid, uuid, text, text) TO authenticated, service_role;
 
-```sql
-CREATE OR REPLACE FUNCTION api.invitation_accept(p_token uuid)
+-- API wrapper — thin INVOKER, just resolves args and delegates
+CREATE OR REPLACE FUNCTION api.invitation_create(
+  p_email text,
+  p_role text DEFAULT 'member'
+)
 RETURNS jsonb
 LANGUAGE plpgsql
-SECURITY DEFINER  -- required: creates membership and reads invitations across tenants
+SECURITY INVOKER
 SET search_path = ''
 AS $$
 DECLARE
   v_user_id uuid := (SELECT auth.uid());
+  v_tenant_id uuid := public._auth_tenant_id();
+BEGIN
+  IF v_user_id IS NULL THEN RAISE EXCEPTION 'Not authenticated'; END IF;
+  IF v_tenant_id IS NULL THEN RAISE EXCEPTION 'No tenant selected'; END IF;
+  RETURN public._internal_admin_create_invitation(v_user_id, v_tenant_id, p_email, p_role);
+END; $$;
+```
+
+### Accept (invited user)
+
+The token lookup needs to bypass RLS on `public.invitations` (the accepting user isn't an admin of the inviting tenant yet, so they can't read invitations under normal RLS). All the privileged work — token validation, membership insert, JWT claim update — lives in the `_internal_admin_*` helper.
+
+```sql
+-- Privileged helper — bypasses RLS to validate the token and write claims
+CREATE OR REPLACE FUNCTION public._internal_admin_complete_invitation(
+  p_user_id uuid, p_token uuid
+) RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
   v_invitation record;
   v_tenant record;
 BEGIN
-  -- Find and validate invitation
-  SELECT * INTO v_invitation
-  FROM public.invitations
-  WHERE token = p_token
-    AND accepted_at IS NULL
-    AND expires_at > now();
-
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'Invalid or expired invitation';
+  IF (SELECT auth.uid()) IS DISTINCT FROM p_user_id THEN
+    RAISE EXCEPTION 'Cannot accept invitation on behalf of another user';
   END IF;
 
-  -- Create membership
+  SELECT * INTO v_invitation
+  FROM public.invitations
+  WHERE token = p_token AND accepted_at IS NULL AND expires_at > now();
+  IF NOT FOUND THEN RAISE EXCEPTION 'Invalid or expired invitation'; END IF;
+
   INSERT INTO public.memberships (tenant_id, user_id, role)
-  VALUES (v_invitation.tenant_id, v_user_id, v_invitation.role)
+  VALUES (v_invitation.tenant_id, p_user_id, v_invitation.role)
   ON CONFLICT (tenant_id, user_id) DO NOTHING;
 
-  -- Mark invitation as accepted
-  UPDATE public.invitations
-  SET accepted_at = now()
-  WHERE id = v_invitation.id;
+  UPDATE public.invitations SET accepted_at = now() WHERE id = v_invitation.id;
+  SELECT * INTO v_tenant FROM public.tenants WHERE id = v_invitation.tenant_id;
 
-  SELECT * INTO v_tenant
-  FROM public.tenants
-  WHERE id = v_invitation.tenant_id;
-
-  -- Set JWT claims to the new tenant
   UPDATE auth.users
-  SET raw_app_meta_data = COALESCE(raw_app_meta_data, '{}'::jsonb) || jsonb_build_object(
-    'tenant_id', v_invitation.tenant_id,
-    'tenant_role', v_invitation.role
-  )
-  WHERE id = v_user_id;
+  SET raw_app_meta_data = COALESCE(raw_app_meta_data, '{}'::jsonb)
+    || jsonb_build_object('tenant_id', v_invitation.tenant_id, 'tenant_role', v_invitation.role)
+  WHERE id = p_user_id;
 
   RETURN jsonb_build_object(
-    'id', v_tenant.id,
-    'name', v_tenant.name,
-    'slug', v_tenant.slug,
+    'id', v_tenant.id, 'name', v_tenant.name, 'slug', v_tenant.slug,
     'role', v_invitation.role
   );
-END;
-$$;
+END; $$;
+
+REVOKE ALL ON FUNCTION public._internal_admin_complete_invitation(uuid, uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public._internal_admin_complete_invitation(uuid, uuid) TO authenticated, service_role;
+
+-- API wrapper — INVOKER, delegates everything
+CREATE OR REPLACE FUNCTION api.invitation_accept(p_token uuid)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = ''
+AS $$
+DECLARE
+  v_user_id uuid := (SELECT auth.uid());
+BEGIN
+  IF v_user_id IS NULL THEN RAISE EXCEPTION 'Not authenticated'; END IF;
+  RETURN public._internal_admin_complete_invitation(v_user_id, p_token);
+END; $$;
 ```
 
 ---

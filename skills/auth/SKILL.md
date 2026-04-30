@@ -373,7 +373,7 @@ If a user reports that signup confirmations, password resets, or invitation emai
   - `.env.local` still has the placeholder `RESEND_API_KEY=re_your_api_key_here` or `RESEND_FROM_EMAIL=Your App <noreply@yourdomain.com>`.
   - Cloud mode: the project's edge-function secrets are missing `RESEND_API_KEY` (the values exist in `.env.local` but were never pushed to Supabase).
 
-  **Fix:** tell the user to run `agentlink resend setup`. It walks them through getting an API key + verified-domain FROM address, writes both to `.env.local`, and (in cloud mode) pushes them to the edge-function secrets. Don't try to debug the `send-email` or `invite-member` functions until this is green — they silently no-op without these vars.
+  **Fix:** tell the user to run `agentlink resend setup`. It walks them through getting an API key + verified-domain FROM address, writes both to `.env.local`, and (in cloud mode) pushes them to the edge-function secrets. Don't try to debug the `internal-send-auth-email` or `internal-invite-member` functions until this is green — they silently no-op without these vars.
 
 - **`true`** — Resend is wired up. The issue is elsewhere. Check, in order:
   1. Edge function logs in the Supabase dashboard for actual send errors (most common: unverified FROM domain).

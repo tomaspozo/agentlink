@@ -428,10 +428,9 @@ $$;
 
 For operations that span multiple tables (e.g., closing an order creates an invoice and updates inventory):
 
-1. **Start with SECURITY INVOKER** — if all tables have RLS for the calling user, INVOKER is correct
-2. **Use SECURITY DEFINER only** when the operation must touch tables the user role can't access
-3. **Lock rows** with `FOR UPDATE` to prevent race conditions
-4. **Validate first** — check preconditions before making changes
+1. **Always SECURITY INVOKER in `api`** — never DEFINER in an exposed schema. If RLS doesn't permit a write, fix RLS or push the privileged step into a `public._internal_admin_*` helper and call it from your INVOKER wrapper.
+2. **Lock rows** with `FOR UPDATE` to prevent race conditions
+3. **Validate first** — check preconditions before making changes
 
 ```sql
 CREATE OR REPLACE FUNCTION api.order_close(p_order_id uuid)
@@ -547,6 +546,18 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA api
   GRANT EXECUTE ON FUNCTIONS TO anon, authenticated, service_role;
 ```
 
-Every function created in the `api` schema is automatically callable by both `anon` and `authenticated` roles. No per-function `GRANT EXECUTE` is needed.
+Every function created in the `api` schema is automatically callable by `anon`, `authenticated`, AND `service_role`. For client RPCs that's correct — RLS does the filtering, no per-function `GRANT EXECUTE` is needed.
 
-`_auth_*` and `_internal_admin_*` functions in `public` do **not** get grants — they're called internally by RLS policies and other functions, not by clients.
+**Exception — admin-only RPCs (`api._admin_*`):** the auto-grant to anon/authenticated is wrong here, since these functions exist precisely because they shouldn't be reachable by users. You MUST add explicit revoke + grant lines after the function definition:
+
+```sql
+CREATE OR REPLACE FUNCTION api._admin_do_thing(...)
+RETURNS ... LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$ ... $$;
+
+REVOKE ALL ON FUNCTION api._admin_do_thing(...) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION api._admin_do_thing(...) TO service_role;
+```
+
+Both lines are required. Grants don't override defaults — only revokes do. Without the REVOKE, anon keeps EXECUTE despite the narrower GRANT, and the database linter fires lint 0028 (`anon_security_definer_function_executable`).
+
+`_auth_*` and `_internal_admin_*` functions in `public` are different: they're called internally by RLS policies and INVOKER api wrappers, not by clients. They get explicit grants too — typically `REVOKE ALL FROM PUBLIC, anon` then `GRANT EXECUTE TO authenticated, service_role` so api wrappers (running as `authenticated` under INVOKER) can reach them. See the SKILL.md "Where DEFINER is allowed" table for the matrix.
