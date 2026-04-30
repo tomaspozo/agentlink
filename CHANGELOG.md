@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.23.1] - 2026-04-30
+
 ### Changed
 
 - **Docs no longer mention the `SB_*` edge-function secret mirror.** CLI 0.27 dropped the mirror from `applyVaultSecrets` — edge functions read the platform-injected `SUPABASE_*` env vars directly. Updated the `secrets` row in the `env config` table in `skills/cli/SKILL.md`, the "Re-apply vault secrets" entry in `agents/builder.md`'s tools table, and the `env config secrets prod` example comment in `skills/cli/references/workflows.md`.
