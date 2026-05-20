@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.25.0] - 2026-05-19
+
 ### Changed
 
 - **Docs and agent skills no longer assume a global `agentlink` install — every command is `npx agentlink-sh@latest <subcommand>`.** Reverts the 0.23.0 stance ("install the CLI globally, then use the bare `agentlink` command for everything"). `npx agentlink-sh@latest` always resolves to the latest published version, removes the install step from onboarding, and means new-machine setups work in one command. Swept every `.md` file under `agents/` and `skills/` — `skills/cli/SKILL.md` (the heaviest at ~140 invocations across the Quick syntax / Commands reference / Workflows sections), `skills/edge-functions/SKILL.md`, `skills/database/SKILL.md`, `skills/auth/SKILL.md`, `skills/frontend/SKILL.md`, and the entire `skills/*/references/` tree — replacing bare `agentlink <cmd>` with `npx agentlink-sh@latest <cmd>`. `@agentlink` SQL annotations are preserved (they're CLI metadata markers parsed by `templates.ts`, not commands). `agents/builder.md`'s "Tool reference" table and command examples (lines 33-155) follow the same pattern. `README.md` install block collapsed to the single `npx agentlink-sh@latest <project-name>` form; the "After global install, every CLI command is just `agentlink <subcommand>`…" paragraph removed.
