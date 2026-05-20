@@ -1,79 +1,263 @@
 # Auth UI Patterns
 
-Client-side authentication UI — sign-in/sign-up forms, OAuth redirect flows, and protected routes.
-
-> **Vite projects:** The scaffold provides auth infrastructure (`AuthProvider`, `_auth.tsx` guard) but not auth pages. Build login/sign-up pages based on the project's auth strategy.
+Client-side authentication UI: sign-in, sign-up, password reset, email confirmation, magic links, and workspace-invitation acceptance. The scaffold ships a complete canonical flow in both Next.js and Vite templates — this doc explains how the pieces fit together so you can customize without breaking it.
 
 ## Contents
-- Vite Auth Infrastructure
-- Sign-In / Sign-Up Forms
-- Handling Supabase Auth Responses
-- OAuth Redirect Flow
-- Protected Routes
-- Post-Auth Actions (e.g., invitation acceptance)
+
+- [Canonical flow](#canonical-flow)
+- [Page-by-page reference](#page-by-page-reference)
+- [Hooks layer](#hooks-layer)
+- [Customizing without breaking the flow](#customizing-without-breaking-the-flow)
+- [Cross-device PKCE: why OTP-paste is always visible](#cross-device-pkce)
+- [OAuth callback (extension point)](#oauth-callback-extension-point)
+- [Post-auth actions (e.g. invitation acceptance)](#post-auth-actions)
 
 ---
 
-## Vite Auth Infrastructure
+## Canonical flow
 
-### Auth context
+One diagram, both templates.
 
-The scaffold provides `AuthProvider` and `useAuth()` in `src/contexts/auth-context.tsx`:
+```
+                         ┌─── /auth/sign-in ───► /dashboard (session created)
+                         │       │
+                         │       └── magic link ─► sends email
+                         │                          │
+                         ▼                          ▼
+            /auth/sign-up ─signup─► /auth/check-inbox?type=signup|magiclink|recovery
+                         │                          │
+                         │                  ┌───────┴────────┐
+                         │              click link        paste OTP
+                         │                  │                │
+                         │                  ▼                ▼
+                         │           /auth/confirm   verifyOtp({type, token, email})
+                         │                  │                │
+                         │                  └────────┬───────┘
+                         │                           │
+                         │              type=signup|magiclink → refreshSession → /dashboard
+                         │              type=recovery        → /update-password
+                         │              type=email_change    → success page
+                         │
+            /auth/forgot-password ─► /auth/check-inbox?type=recovery
+                         │
+                         ▼
+                  /update-password ─► /dashboard
+
+            /accept-invite?token=&[code=]
+                         │
+                         ├─ ?code present (new user)   → exchangeCodeForSession → invitation_accept → refreshSession → /dashboard
+                         └─ no ?code (existing user)   → if no session: /auth/sign-in?next=/accept-invite?token=...
+                                                       → else: invitation_accept → refreshSession → /dashboard
+
+            /settings/members  (in-app, gated)
+                         ├─ membership_list    — show members + roles
+                         ├─ invitation_list    — show pending invites
+                         ├─ invitation_create  — invite (queue-driven)
+                         ├─ invitation_resend  — re-enqueue email for existing invitation
+                         ├─ invitation_revoke  — cancel pending invite
+                         ├─ membership_update_role
+                         └─ membership_remove
+```
+
+Two consolidations to keep in mind:
+
+1. **One `/auth/confirm` route** handles signup / magiclink / recovery / email_change link-clicks. It reads `?type=…` and branches. Invites are NOT routed through here — they have `/accept-invite` because the URL also carries `?token=` for the `invitation_accept` RPC.
+
+2. **One `/auth/check-inbox` page** replaces the old `sign-up-success`. It's parameterized by `?type=signup|magiclink|recovery` and renders the same shell with type-specific copy. Resend + OTP-paste are baked in.
+
+---
+
+## Page-by-page reference
+
+| Path | Purpose | Hook used | Navigation targets |
+|------|---------|-----------|--------------------|
+| `/auth/sign-in` | Email+password sign-in with magic-link toggle | `useSignInFlow`, `useMagicLinkFlow` | password ok → `next \|\| /dashboard`; magic-link ok → `/auth/check-inbox?type=magiclink&email=…` |
+| `/auth/sign-up` | New account creation | `useSignUpFlow` | session returned → `/dashboard`; pending → `/auth/check-inbox?type=signup&email=…` |
+| `/auth/check-inbox` | Pending email state — Resend + OTP entry | `useResendEmail`, `useVerifyOtpFlow` | recovery → `/update-password`; signup/magiclink → `/dashboard` |
+| `/auth/forgot-password` | Request a recovery email | `useResetPasswordFlow` | success → `/auth/check-inbox?type=recovery&email=…` |
+| `/update-password` | Set a new password (recovery destination + in-app change) | `useUpdatePasswordFlow` | success → `/dashboard` |
+| `/auth/confirm` | Single PKCE callback for link clicks | (server-side `exchangeCodeForSession` in Next.js; `useEffect` in Vite) | branches on `?type=` |
+| `/accept-invite` | Workspace invitation acceptance | `useAcceptInvite` | accepted → `/dashboard`; logged out → `/auth/sign-in?next=…` |
+| `/settings/members` | Admin: list, invite, revoke, resend, update role, remove | RPC calls (no hooks layer needed) | mutations refresh the table |
+
+### Vite route layout
+
+```
+src/routes/
+  __root.tsx
+  index.tsx                       — public landing
+  _anon.tsx                       — anon-only layout (redirects signed-in users to /dashboard)
+  _anon/
+    sign-in.tsx
+    sign-up.tsx
+    check-inbox.tsx
+    forgot-password.tsx
+  update-password.tsx              — TOP-LEVEL, not under _anon (recovery sessions
+                                     have a session, so _anon would bounce them)
+  auth.confirm.tsx                  — TOP-LEVEL PKCE callback
+  accept-invite.tsx                 — TOP-LEVEL (workspace invitation)
+  _auth.tsx                         — gated layout (redirects to /sign-in)
+  _auth/
+    dashboard.tsx
+    settings/
+      members.tsx
+```
+
+### Next.js route layout
+
+```
+app/
+  page.tsx                          — public landing
+  auth/
+    sign-in/page.tsx
+    sign-up/page.tsx
+    check-inbox/page.tsx
+    forgot-password/page.tsx
+    confirm/route.ts                — server-side PKCE callback (route handler)
+  update-password/page.tsx           — TOP-LEVEL (recovery + in-app change)
+  accept-invite/page.tsx             — TOP-LEVEL
+  protected/
+    layout.tsx                       — server-side session guard
+    page.tsx                         — placeholder dashboard
+  settings/
+    members/page.tsx
+```
+
+The Next.js proxy middleware (`lib/supabase/proxy.ts`) gates unauth'd users by redirecting to `/auth/sign-in?next=<original-path>`. The allowlist for unauth-accessible paths is `/`, `/auth/*`, `/update-password`, `/accept-invite`.
+
+---
+
+## Hooks layer
+
+`lib/auth/` (Next.js) and `src/lib/auth/` (Vite) ship the same set of hooks. Each wraps one Supabase call with the canonical post-call logic — friendly errors via `formatAuthError`, post-signup `refreshSession()` so the JWT carries the `tenant_id` claim, etc. Hooks do not navigate; they return discriminated state and the page picks the destination.
+
+| Hook | Wraps | Returns |
+|------|-------|---------|
+| `useSignUpFlow` | `auth.signUp` | `{ submit, loading, error }` — `submit` returns `{ kind: "pending", email } \| { kind: "authenticated" } \| null` |
+| `useSignInFlow` | `auth.signInWithPassword` | `{ submit, loading, error }` — `submit` returns `boolean` |
+| `useMagicLinkFlow` | `auth.signInWithOtp` | `{ submit, loading, error, sentTo }` |
+| `useResetPasswordFlow` | `auth.resetPasswordForEmail` | `{ submit, loading, error, sentTo }` |
+| `useUpdatePasswordFlow` | `auth.updateUser({ password })` | `{ submit, loading, error }` |
+| `useVerifyOtpFlow(kind)` | `auth.verifyOtp` | `{ submit, loading, error }` — `submit` returns a `VerifyResult` discriminator |
+| `useResendEmail({ type, email })` | type-aware: `auth.resend`, `signInWithOtp`, `resetPasswordForEmail` | `{ resend, loading, error, cooldownLeft }` |
+| `useAcceptInvite` | `exchangeCodeForSession` + `invitation_accept` RPC | `{ loading, error }` (auto-runs on mount with auth-lock guard) |
+
+### `useResendEmail` is type-aware
+
+`supabase.auth.resend({ type })` only accepts `'signup'` and `'email_change'`. The hook handles other types by re-calling the original send API:
+
+- `signup` → `auth.resend({ type: 'signup' })`
+- `magiclink` → `signInWithOtp({ email })` again (new token, old still valid until use)
+- `recovery` → `resetPasswordForEmail(email)` again
+- `invite` → **NOT supported** here; workspace invitations resend via `api.invitation_resend` from `/settings/members`
+
+### `useSignUpFlow` — branching on `data.session`
+
+The hook checks `data.session`, not `data.user.email_confirmed_at`. The latter can be written asynchronously and is unsafe to race on.
 
 ```typescript
-import { useAuth } from "@/contexts/auth-context";
-
-function MyComponent() {
-  const { user, session, loading } = useAuth();
-  // user: User | null, session: Session | null, loading: boolean
+const result = await signUp.submit({ email, password, displayName, organizationName });
+if (result?.kind === "pending") {
+  // Email confirmation required → router to /auth/check-inbox?type=signup&email=…
+} else if (result?.kind === "authenticated") {
+  // Confirmation disabled (scaffold dev default) → /dashboard
 }
 ```
 
-The `AuthProvider` wraps the app in `main.tsx` and manages a single Supabase auth subscription. All components share the same auth state — no duplicate subscriptions.
+When a session IS returned, the hook calls `refreshSession()` internally so the JWT picks up the `tenant_id` claim that `_internal_admin_handle_new_user` populates AFTER the initial mint.
 
-### Protected routes (TanStack Router layout)
+### `useVerifyOtpFlow` — type mapping
 
-The scaffold uses a `_auth.tsx` layout route that guards all child routes via `beforeLoad`:
+When verifying email-confirmation OTPs, supabase-js wants `type: 'email'` (the canonical value), not `'signup'`. The hook collapses user-facing kinds to SDK values:
+
+- `signup`, `magiclink`, `invite` → SDK `type: 'email'`
+- `recovery` → SDK `type: 'recovery'`
+
+---
+
+## Customizing without breaking the flow
+
+What you can change freely:
+- Copy, headings, descriptions
+- Layout, spacing, colors (the visual system in `index.css` / `globals.css`)
+- Form field order, validation messages
+- Add OAuth providers (see [extension point](#oauth-callback-extension-point))
+- Move pages around — but keep the URL paths stable, because `internal-send-auth-email` builds verify URLs from `REDIRECT_PATHS`
+
+What's load-bearing — change carefully:
+- **`useSignUpFlow`'s `!data.session` branch.** Skipping it produces the silent-failure bug (sign-up succeeds, no UI feedback, user stuck on the form).
+- **`refreshSession()` after signup.** The trigger writes `tenant_id` AFTER the initial JWT is minted; without refresh, every tenant-scoped RPC fails until the user reloads.
+- **`useAcceptInvite`'s auth-lock guard.** Two paths can race for the auth lock during invite acceptance — see [Post-auth actions](#post-auth-actions). The hook already implements the guard; don't reorder its operations.
+- **PKCE flow type.** `auth.confirm` and `useAcceptInvite` rely on `exchangeCodeForSession`, which requires `flowType: 'pkce'`. Vite ships the explicit setting in `lib/supabase.ts`; Next.js's `@supabase/ssr` defaults to PKCE.
+- **`/update-password` is NOT under `_anon`.** Recovery sessions have a session, so `_anon` would bounce them away. Keep it top-level.
+
+What's load-bearing — never change:
+- The `REDIRECT_PATHS` shape in `internal-send-auth-email/index.ts`. The keys are GoTrue's `email_action_type` vocabulary; the values must be valid paths in your app. Adding a new key only works if Supabase Auth emits that action type.
+- The `additional_redirect_urls` allowlist in `config.toml`. PKCE callbacks fail if the URL isn't in the allowlist. The default ships wildcards for local development; production needs your real domain there.
+
+---
+
+## Cross-device PKCE
+
+PKCE stores a `code_verifier` in `localStorage` on the device that *initiated* the auth flow. If the user signs up on a laptop and opens the email on their phone, the verifier isn't there → `exchangeCodeForSession` fails with "invalid request: both auth code and code verifier should be non-empty".
+
+This is the single biggest reason the OTP-paste input on `/auth/check-inbox` is **always visible**, not hidden behind a toggle. Pasting the 8-digit code carries no verifier requirement and works regardless of device.
+
+Don't change this UX. Hiding the OTP input is a footgun.
+
+If you need to support a workflow where the email is always opened on a different device, consider switching to implicit flow (`flowType: 'implicit'`) — but you'll lose server-side `getClaims()` patterns in Next.js, and the OTP becomes redundant.
+
+---
+
+## OAuth callback (extension point)
+
+The scaffold doesn't ship OAuth providers (Google, GitHub, etc.) by default — wire them up by adding a callback route alongside `/auth/confirm`.
+
+### Trigger sign-in (client)
 
 ```typescript
-// src/routes/_auth.tsx
-import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
-import { supabase } from "@/lib/supabase";
-import { ErrorBoundary } from "@/components/error-boundary";
-
-export const Route = createFileRoute("/_auth")({
-  beforeLoad: async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) throw redirect({ to: "/login" });
-    return { session };
-  },
-  component: AuthLayout,
-});
-
-function AuthLayout() {
-  return (
-    <main className="min-h-dvh bg-background">
-      <ErrorBoundary>
-        <Outlet />
-      </ErrorBoundary>
-    </main>
-  );
+async function handleOAuthSignIn(provider: "google" | "github") {
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider,
+    options: {
+      redirectTo: `${window.location.origin}/auth/callback?next=/dashboard`,
+    },
+  });
+  if (error) setError(formatAuthError(error));
+  // Browser redirects to the OAuth provider — no need to handle success here
 }
 ```
 
-All routes under `src/routes/_auth/` are automatically protected. No wrapper component needed — the router handles it before the page even renders.
-
-### Auth callback (PKCE flow)
-
-For OAuth redirects, magic links, and email confirmations, `onAuthStateChange` handles the token exchange automatically. Create a dedicated route if you need custom post-auth logic:
+### Callback route (Next.js)
 
 ```typescript
-// src/routes/auth-callback.tsx
+// app/auth/callback/route.ts
+import { createClient } from "@/lib/supabase/server";
+import { NextResponse } from "next/server";
+
+export async function GET(request: Request) {
+  const { searchParams, origin } = new URL(request.url);
+  const code = searchParams.get("code");
+  const next = searchParams.get("next") ?? "/protected";
+
+  if (code) {
+    const supabase = await createClient();
+    const { error } = await supabase.auth.exchangeCodeForSession(code);
+    if (!error) return NextResponse.redirect(`${origin}${next}`);
+  }
+  return NextResponse.redirect(`${origin}/auth/sign-in?error=oauth_failed`);
+}
+```
+
+### Callback route (Vite)
+
+```typescript
+// src/routes/auth.callback.tsx
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 
-export const Route = createFileRoute("/auth-callback")({
+export const Route = createFileRoute("/auth/callback")({
   component: AuthCallbackPage,
 });
 
@@ -83,485 +267,69 @@ function AuthCallbackPage() {
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event) => {
-        if (event === "SIGNED_IN") {
-          navigate({ to: "/", replace: true });
-        }
-      }
+        if (event === "SIGNED_IN") navigate({ to: "/dashboard", replace: true });
+      },
     );
     return () => subscription.unsubscribe();
   }, [navigate]);
 
-  return <div>Completing sign in...</div>;
+  return <p>Completing sign in…</p>;
 }
 ```
 
-### Post-auth action (e.g., invitation acceptance)
+For the OAuth-via-magic-link case where `auth.callback` does the same thing as `auth.confirm`, you can route them to a single handler — but keep the URLs distinct so the email-link flow doesn't accidentally inherit OAuth-specific behavior later.
 
-When the auth callback must perform an action after sign-in (RPC call, session refresh), two concurrent paths race for the auth lock:
+---
+
+## Post-auth actions
+
+When the auth callback must perform an action after sign-in (e.g., accept an invitation, claim a referral), two concurrent paths race for the auth lock:
 
 1. `onAuthStateChange` fires `SIGNED_IN` when the URL hash fragment is consumed
 2. `getSession()` resolves once the session is established
 
-If both trigger the same async work, three operations compete for the lock and produce **"Lock broken by another request"** errors.
+If both trigger the same async work, the SDK's serializer competes with itself and produces **"Lock broken by another request"** errors.
 
-Rules:
-- **Guard flag** — `let handled = false` ensures only the first path executes
-- **Non-async `onAuthStateChange` callback** — do not `await` inside the callback (holds the lock)
-- **Defer `refreshSession()`** — call it in a `setTimeout` after the RPC succeeds, never in the same tick
+The `useAcceptInvite` hook already implements the canonical guard pattern. If you build a similar flow, mirror it:
 
-❌ Wrong — both paths fire, async callback holds the lock:
-
-```typescript
-// src/routes/accept-invitation.tsx — BROKEN
-function AcceptInvitationPage() {
-  const navigate = useNavigate();
-  const { token } = Route.useSearch();
-
-  useEffect(() => {
-    async function acceptInvitation() {
-      await supabase.rpc("invitation_accept", { p_token: token });
-      await supabase.auth.refreshSession(); // competes for auth lock
-      navigate({ to: "/", replace: true });
-    }
-
-    // Path 1: fires on SIGNED_IN
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event) => {
-        if (event === "SIGNED_IN") {
-          await acceptInvitation(); // holds the auth lock
-        }
-      }
-    );
-
-    // Path 2: fires when session resolves
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) acceptInvitation(); // races with Path 1
-    });
-
-    return () => subscription.unsubscribe();
-  }, [token, navigate]);
-
-  return <div>Accepting invitation...</div>;
-}
-```
-
-✅ Correct — guard flag, non-async callback, deferred refresh:
+- **Guard flag**: `let handled = false` — only the first path executes
+- **Non-async `onAuthStateChange` callback** — do not `await` inside (holds the lock)
+- **Defer `refreshSession()`** — call it in a `setTimeout(0)` after the RPC succeeds
 
 ```typescript
-// src/routes/accept-invitation.tsx
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect } from "react";
-import { supabase } from "@/lib/supabase";
-import { z } from "zod";
+useEffect(() => {
+  let handled = false;
 
-const searchSchema = z.object({
-  token: z.string().uuid(),
-});
-
-export const Route = createFileRoute("/accept-invitation")({
-  validateSearch: searchSchema,
-  component: AcceptInvitationPage,
-});
-
-function AcceptInvitationPage() {
-  const navigate = useNavigate();
-  const { token } = Route.useSearch();
-
-  useEffect(() => {
-    let handled = false;
-
-    async function acceptInvitation() {
-      if (handled) return;
-      handled = true;
-
-      const { error } = await supabase.rpc("invitation_accept", {
-        p_token: token,
-      });
-
-      if (error) {
-        console.error("Failed to accept invitation:", error.message);
-        navigate({ to: "/login", replace: true });
-        return;
-      }
-
-      // Defer refreshSession — let the auth flow settle first
-      setTimeout(async () => {
-        await supabase.auth.refreshSession();
-        navigate({ to: "/", replace: true });
-      }, 0);
-    }
-
-    // Path 1: auth state listener
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event) => {
-      if (event === "SIGNED_IN") {
-        // Non-async — do not hold the auth lock
-        acceptInvitation();
-      }
-    });
-
-    // Path 2: session may already exist
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) acceptInvitation();
-    });
-
-    return () => subscription.unsubscribe();
-  }, [token, navigate]);
-
-  return <div>Accepting invitation...</div>;
-}
-```
-
-Key differences from the simple auth callback above:
-- `let handled = false` guard prevents double execution
-- `onAuthStateChange` callback is **not** `async` — calls `acceptInvitation()` without `await`
-- `refreshSession()` runs inside `setTimeout` so it does not compete for the auth lock
-- Error handling navigates to `/login` as fallback
-
----
-
-## Sign-In / Sign-Up Forms
-
-### Email + password form
-
-```typescript
-"use client";
-import { createClient } from "@/lib/supabase/client";
-import { useState } from "react";
-
-export function SignInForm() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const supabase = createClient();
-
-  async function handleSignIn(e: React.FormEvent) {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
-
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    if (error) {
-      setError(error.message);
-      setLoading(false);
-      return;
-    }
-
-    // Redirect — middleware or onAuthStateChange handles navigation
-    window.location.href = "/dashboard";
+  async function doWork() {
+    if (handled) return;
+    handled = true;
+    const { error } = await supabase.rpc("invitation_accept", { p_token: token });
+    if (error) { /* ... */ return; }
+    setTimeout(() => supabase.auth.refreshSession().then(() => navigate("/dashboard")), 0);
   }
 
-  return (
-    <form onSubmit={handleSignIn}>
-      <input
-        type="email"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        placeholder="Email"
-        required
-      />
-      <input
-        type="password"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-        placeholder="Password"
-        required
-      />
-      {error && <p>{error}</p>}
-      <button type="submit" disabled={loading}>
-        {loading ? "Signing in..." : "Sign in"}
-      </button>
-    </form>
-  );
-}
-```
-
-### Sign-up form
-
-Use `supabase.auth.signUp()` and branch on `data.session`, not on `email_confirmed_at`:
-
-```typescript
-const { data, error } = await supabase.auth.signUp({ email, password });
-if (error) throw error;
-
-// Supabase returns a user but NO session when email confirmation is required.
-// This is the reliable check — `data.user.email_confirmed_at` may be populated
-// asynchronously and is not safe to race on.
-if (!data.session) {
-  // Show a "check your inbox" UI, DO NOT navigate into the app.
-  setPendingConfirmationEmail(email);
-  return;
-}
-
-// Session exists → refresh to pick up tenant_id claim (see note below).
-await supabase.auth.refreshSession();
-router.push("/dashboard");
-```
-
-**Why refresh the session after signup?** The `_internal_admin_handle_new_user`
-trigger writes the default `tenant_id` into the JWT **after** Supabase issues
-the initial token. Without `refreshSession()`, every tenant-scoped RPC fails
-with `missing tenant_id` until the user reloads the page.
-
-### Magic link (passwordless)
-
-```typescript
-const { error } = await supabase.auth.signInWithOtp({
-  email,
-  options: {
-    emailRedirectTo: `${window.location.origin}/auth/callback`,
-  },
-});
-
-if (error) {
-  setError(error.message);
-  return;
-}
-
-setMessage("Check your email for a login link.");
-```
-
----
-
-## Handling Supabase Auth Responses
-
-Supabase's auth responses have sharp edges. Handle them explicitly so users
-don't get stranded on errors they can't understand or loop in confirmation
-dead-ends.
-
-### Email confirmation — branch on `data.session`, not on `email_confirmed_at`
-
-`supabase.auth.signUp()` returns `{ user, session }`. When email confirmation
-is required, `session` is `null`. Always check `data.session` — not
-`data.user.email_confirmed_at`, which can be written asynchronously.
-
-```typescript
-const { data, error } = await supabase.auth.signUp({ email, password });
-if (error) throw error;
-
-if (!data.session) {
-  // Confirmation required — show a "check your inbox" UI. Do NOT navigate,
-  // the user isn't signed in yet.
-  return showConfirmationPending(email);
-}
-
-// Session exists — refresh to pick up the tenant_id claim from the
-// `_internal_admin_handle_new_user` trigger, then continue into the app.
-await supabase.auth.refreshSession();
-router.push("/dashboard");
-```
-
-### Where is email confirmation configured?
-
-| Environment | Setting | Default in scaffold |
-| --- | --- | --- |
-| Local (`config.toml`) | `[auth.email].enable_confirmations` | `false` (dev) |
-| Cloud (Management API) | `mailer_autoconfirm` | `true` on initial scaffold (dev), `false` otherwise |
-
-The scaffold disables email confirmation on dev so the first sign-up lands in
-the app without SMTP. The `!data.session` branch is a safety net: it handles
-prod (where confirmation stays on) and any project where an admin re-enables it.
-
-### Map Supabase errors to friendly messages
-
-The scaffold ships `lib/auth-errors.ts` with `formatAuthError(err)`. It checks
-the stable `code` field first, falls back to message substrings. Use it at
-every auth call site instead of surfacing raw Supabase strings:
-
-```typescript
-import { formatAuthError } from "@/lib/auth-errors";
-
-try {
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
-  if (error) throw error;
-} catch (err) {
-  setError(formatAuthError(err));  // "Wrong email or password." etc.
-}
-```
-
-Extend the helper when you add new flows (magic link, OAuth, password reset)
-— the map is just a `switch` on `err.code`.
-
-### Known auth response quirks
-
-- **`User already registered`** on sign-up with an existing *unconfirmed* email
-  is returned when "Confirm email" is on. It looks like a duplicate but the
-  user just never finished confirmation. Send them to resend.
-- **`Email not confirmed`** on sign-in means the session isn't issued yet.
-  Offer a "resend confirmation" action — don't ask for a different password.
-- **`Email rate limit exceeded`** fires after ~4 sign-ups from the same IP
-  within an hour. Show the rate-limit copy, not a generic error.
-- **`refreshSession()` deadlock**: never call it inside `onAuthStateChange`.
-  The SDK re-fires the event and hangs. Refresh after explicit user actions
-  (signup, invitation accept), not inside auth listeners.
-
----
-
-## OAuth Redirect Flow
-
-### Trigger sign-in
-
-```typescript
-async function handleOAuthSignIn(provider: "google" | "github") {
-  const { error } = await supabase.auth.signInWithOAuth({
-    provider,
-    options: {
-      redirectTo: `${window.location.origin}/auth/callback`,
-    },
+  const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+    if (event === "SIGNED_IN") doWork(); // NOT async, no await here
   });
 
-  if (error) {
-    setError(error.message);
-  }
-  // Browser redirects to the OAuth provider — no need to handle success here
-}
-```
+  supabase.auth.getSession().then(({ data: { session } }) => {
+    if (session) doWork();
+  });
 
-### Callback page
-
-After the OAuth provider redirects back, exchange the code for a session:
-
-```typescript
-// Next.js: src/app/auth/callback/route.ts
-import { createClient } from "@/lib/supabase/server";
-import { NextResponse } from "next/server";
-
-export async function GET(request: Request) {
-  const { searchParams, origin } = new URL(request.url);
-  const code = searchParams.get("code");
-  const next = searchParams.get("next") ?? "/dashboard";
-
-  if (code) {
-    const supabase = await createClient();
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
-    if (!error) {
-      return NextResponse.redirect(`${origin}${next}`);
-    }
-  }
-
-  // Auth failed — redirect to error page
-  return NextResponse.redirect(`${origin}/auth/error`);
-}
-```
-
-```typescript
-// SvelteKit: src/routes/auth/callback/+server.ts
-import { redirect } from "@sveltejs/kit";
-import type { RequestHandler } from "./$types";
-import { createClient } from "$lib/supabase/server";
-
-export const GET: RequestHandler = async ({ url, cookies }) => {
-  const code = url.searchParams.get("code");
-  const next = url.searchParams.get("next") ?? "/dashboard";
-
-  if (code) {
-    const supabase = createClient(cookies);
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
-    if (!error) {
-      redirect(303, next);
-    }
-  }
-
-  redirect(303, "/auth/error");
-};
+  return () => subscription.unsubscribe();
+}, [token, navigate]);
 ```
 
 ---
 
-## Protected Routes
+## Known auth response quirks
 
-### Server-side (recommended)
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| Sign-up returns "User already registered" but the user never finished confirmation | Auth keeps the unconfirmed user. Looks like a duplicate. | Send them to resend (`useResendEmail({ type: 'signup' })`) |
+| Sign-in returns "Email not confirmed" | Session not issued yet | Render the "resend confirmation" CTA — don't ask for a different password |
+| "Email rate limit exceeded" | ~4 signups from the same IP within an hour | Show the rate-limit copy, not a generic error. The 30s cooldown on `useResendEmail` reduces the chance of hitting this. |
+| `refreshSession()` deadlock | Called inside `onAuthStateChange` callback | Refresh after explicit user actions (signup, invite accept), not inside listeners |
+| Invite link "Invalid or expired" on second click | `invitation_accept` checks `accepted_at IS NULL` | The scaffold's `_internal_admin_complete_invitation` is idempotent — it returns success when the user already has a membership in the invited tenant |
 
-Check auth in server components or load functions. This prevents flash of unauthenticated content.
-
-```typescript
-// Next.js: src/app/dashboard/layout.tsx
-import { createClient } from "@/lib/supabase/server";
-import { redirect } from "next/navigation";
-
-export default async function DashboardLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-
-  if (!user) redirect("/login");
-
-  return <>{children}</>;
-}
-```
-
-```typescript
-// SvelteKit: src/routes/dashboard/+layout.server.ts
-import { redirect } from "@sveltejs/kit";
-import type { LayoutServerLoad } from "./$types";
-
-export const load: LayoutServerLoad = async ({ locals }) => {
-  if (!locals.user) redirect(303, "/login");
-  return { user: locals.user };
-};
-```
-
-### Client-side guard (Vite SPA)
-
-For Vite projects, the `_auth.tsx` layout route handles this automatically via `beforeLoad`. No separate guard component is needed — see the "Vite Auth Patterns" section above.
-
-For Next.js projects without SSR, guard in client components:
-
-```typescript
-"use client";
-import { createClient } from "@/lib/supabase/client";
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-
-export function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const [loading, setLoading] = useState(true);
-  const router = useRouter();
-  const supabase = createClient();
-
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (!user) {
-        router.push("/login");
-      } else {
-        setLoading(false);
-      }
-    });
-  }, []);
-
-  if (loading) return null; // or a spinner
-
-  return <>{children}</>;
-}
-```
-
-### Sign-out
-
-Call `supabase.auth.signOut()` directly — no wrapper needed:
-
-```typescript
-import { supabase } from "@/lib/supabase";
-import { useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
-
-function SignOutButton() {
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
-
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    queryClient.clear(); // clear cached data
-    navigate({ to: "/login" });
-  };
-
-  return <button onClick={handleSignOut}>Sign out</button>;
-}
-```
+The `formatAuthError` helper in `lib/auth-errors.ts` maps these to friendly copy. Use it everywhere instead of surfacing raw Supabase strings.

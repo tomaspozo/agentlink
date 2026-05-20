@@ -56,8 +56,8 @@ Calls `npx supabase migration repair <version> --status applied --local` for eac
 
 **Solution:** We use `pgdelta` (bundled with the CLI) via two subcommands:
 
-- `agentlink db apply` — applies all schema files with `pgdelta declarative apply`, which resolves statement ordering automatically. **This is the only command the agent uses during development.**
-- `agentlink db migrate name` — generates migrations by comparing catalog snapshots (no shadow DB needed). **Deployment only — used when the user explicitly asks.**
+- `npx agentlink-sh@latest db apply` — applies all schema files with `pgdelta declarative apply`, which resolves statement ordering automatically. **This is the only command the agent uses during development.**
+- `npx agentlink-sh@latest db migrate name` — generates migrations by comparing catalog snapshots (no shadow DB needed). **Deployment only — used when the user explicitly asks.**
 
 DB URL is auto-resolved from `.env.local` (written during scaffold). No `--db-url` flag needed. An explicit `--db-url` override is available if needed.
 

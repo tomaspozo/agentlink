@@ -40,7 +40,7 @@ Folders prefixed with `_` are shared modules and are NOT deployed as edge functi
 
 ### Setting Up Shared Utilities
 
-**When creating the first edge function for a project**, check if `supabase/functions/_shared/responses.ts` exists. If not, tell the user to run `agentlink` to set up the shared utilities.
+**When creating the first edge function for a project**, check if `supabase/functions/_shared/responses.ts` exists. If not, tell the user to run `npx agentlink-sh@latest` to set up the shared utilities.
 
 The `withSupabase` wrapper comes from the `@supabase/server` npm package — it's declared in each function's `deno.json`, not as a local file.
 

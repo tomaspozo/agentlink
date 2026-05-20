@@ -67,7 +67,7 @@ CREATE POLICY "Members can read own tenant" ON public.tenants ...
 CREATE POLICY members_read_own_tenant ON public.tenants ...
 ```
 
-**Why:** `agentlink db apply` uses `pg-delta` / `pg-topo`, which parses every SQL statement through libpg_query and re-emits it via `deparseSql`. The deparser canonicalizes identifiers and silently drops the surrounding quotes — so `DROP POLICY IF EXISTS "Members can read own tenant" ON …` reaches Postgres as `DROP POLICY IF EXISTS Members can read own tenant ON …` and fails with `42601: syntax error at or near "can"`. Quoted names with spaces are effectively unusable in schema files.
+**Why:** `npx agentlink-sh@latest db apply` uses `pg-delta` / `pg-topo`, which parses every SQL statement through libpg_query and re-emits it via `deparseSql`. The deparser canonicalizes identifiers and silently drops the surrounding quotes — so `DROP POLICY IF EXISTS "Members can read own tenant" ON …` reaches Postgres as `DROP POLICY IF EXISTS Members can read own tenant ON …` and fails with `42601: syntax error at or near "can"`. Quoted names with spaces are effectively unusable in schema files.
 
 ## Schema File Naming
 

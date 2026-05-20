@@ -76,7 +76,7 @@ This is the largest part of the migration. Each step below must be completed.
 
 ### 1. Set up shared utilities
 
-Check if `supabase/functions/_shared/responses.ts` exists. If not, tell the user to run `agentlink` to install the shared utilities (`responses.ts`). The `withSupabase` wrapper comes from the `@supabase/server` npm package, declared in each function's `deno.json`.
+Check if `supabase/functions/_shared/responses.ts` exists. If not, tell the user to run `npx agentlink-sh@latest` to install the shared utilities (`responses.ts`). The `withSupabase` wrapper comes from the `@supabase/server` npm package, declared in each function's `deno.json`.
 
 ### 2. Set `verify_jwt = false` in `config.toml`
 
@@ -221,7 +221,7 @@ After completing all steps, run through this checklist:
 - [ ] No references to `NEXT_PUBLIC_SUPABASE_ANON_KEY` in codebase
 - [ ] `verify_jwt = false` set for all functions in `config.toml`
 - [ ] Edge function secrets configured (`npx supabase secrets list`)
-- [ ] Vault secrets present (`agentlink check` passes)
+- [ ] Vault secrets present (`npx agentlink-sh@latest check` passes)
 - [ ] Seed file updated with new vault secret names
 - [ ] All edge functions use `withSupabase` wrapper (no manual `createClient`)
 - [ ] Old shared client files removed

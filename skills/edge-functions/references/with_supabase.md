@@ -311,7 +311,7 @@ interface SupabaseContext {
 
 The `withSupabase` wrapper comes from the `@supabase/server` npm package — import it via bare specifier (`import { withSupabase } from "@supabase/server"`) and map it in each function's `deno.json`. See [Dependencies & Deployment](./dependencies.md) for import map setup.
 
-The `_shared/` local utilities (`responses.ts`) are installed by the CLI. If missing, run `agentlink`.
+The `_shared/` local utilities (`responses.ts`) are installed by the CLI. If missing, run `npx agentlink-sh@latest`.
 
 The wrapper handles:
 - CORS preflight (`OPTIONS` requests) automatically — uses `corsHeaders` from `@supabase/supabase-js/cors`

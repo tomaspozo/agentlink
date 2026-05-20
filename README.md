@@ -6,18 +6,14 @@ An opinionated way to build on Supabase with AI agents.
 
 Agent Link is a [Claude Code plugin](https://docs.anthropic.com/en/docs/claude-code/plugins) with composable skills and an app development agent. Each skill covers a specific domain — CLI, schema development, RPCs, edge functions, auth, frontend — and Claude loads whichever skills are relevant to the current task automatically. The agent bundles all skills together with architecture enforcement.
 
-It ships alongside the [`agentlink` CLI](https://www.npmjs.com/package/agentlink-sh) — the plugin's hands. The CLI scaffolds new Supabase projects (cloud or local Docker), manages multiple environments (`local` / `dev` / `prod`), applies schemas, generates migrations, and deploys schemas + edge functions to any cloud env. The agent reasons about _what_ to build; the CLI does the work the agent shouldn't do itself — OAuth, project creation, environment switching, deploys.
+It ships alongside the [`agentlink-sh` CLI](https://www.npmjs.com/package/agentlink-sh) — the plugin's hands. The CLI scaffolds new Supabase projects (cloud or local Docker), manages multiple environments (`local` / `dev` / `prod`), applies schemas, generates migrations, and deploys schemas + edge functions to any cloud env. The agent reasons about _what_ to build; the CLI does the work the agent shouldn't do itself — OAuth, project creation, environment switching, deploys.
 
 ---
 
 ## Install
 
 ```bash
-# Recommended — install the CLI globally so you can use the bare `agentlink` command
-npm install -g agentlink-sh@latest
-agentlink <project-name>
-
-# Or run once via npx (fine for trying it out)
+# Run via npx — always pulls the latest version, no install step
 npx agentlink-sh@latest <project-name>
 
 # From the Claude Code plugin marketplace
@@ -28,7 +24,7 @@ npx agentlink-sh@latest <project-name>
 claude --plugin-dir ./path/to/agentlink
 ```
 
-After global install, every CLI command is just `agentlink <subcommand>` — `agentlink check`, `agentlink db apply`, `agentlink env deploy prod`, etc.
+Every CLI command runs through `npx agentlink-sh@latest <subcommand>` — `npx agentlink-sh@latest check`, `npx agentlink-sh@latest db apply`, `npx agentlink-sh@latest env deploy prod`, etc.
 
 ---
 
@@ -54,7 +50,7 @@ You can also call it directly with `@link:builder`.
 
 Skills also activate automatically when Claude detects a relevant task. You can invoke them explicitly with slash commands:
 
-- `/link:cli` — `agentlink` commands, env management, deploys
+- `/link:cli` — `npx agentlink-sh@latest` commands, env management, deploys
 - `/link:database` — schema files, migrations, type generation
 - `/link:rpc` — RPC-first data access, CRUD templates, pagination
 - `/link:edge-functions` — `withSupabase` wrapper, webhooks, secrets
@@ -71,10 +67,10 @@ The app development agent ships with opinionated defaults:
 
 The CLI handles all project setup. The agent builds — it does not scaffold.
 
-- **New project (cloud, default):** `agentlink my-app` — creates a Supabase Cloud project, scaffolds schemas, vault secrets, edge functions, and a frontend
-- **Local Docker mode:** `agentlink my-app --local` — runs Supabase locally instead of cloud
-- **Validate setup:** `agentlink check` — verifies extensions, internal functions, vault secrets, api schema, file layout
-- **Re-apply managed resources:** `agentlink --force-update` — patches templates, config, and SQL after a CLI upgrade
+- **New project (cloud, default):** `npx agentlink-sh@latest my-app` — creates a Supabase Cloud project, scaffolds schemas, vault secrets, edge functions, and a frontend
+- **Local Docker mode:** `npx agentlink-sh@latest my-app --local` — runs Supabase locally instead of cloud
+- **Validate setup:** `npx agentlink-sh@latest check` — verifies extensions, internal functions, vault secrets, api schema, file layout
+- **Re-apply managed resources:** `npx agentlink-sh@latest --force-update` — patches templates, config, and SQL after a CLI upgrade
 
 ### Cloud vs local mode
 
@@ -101,7 +97,7 @@ If you need these, run them manually on your terminal outside Claude Code.
 
 ## Companion Skills
 
-The CLI installs a curated set of companion skills automatically — the agent assumes they are present. To skip auto-install, pass `--no-skills` to `agentlink`.
+The CLI installs a curated set of companion skills automatically — the agent assumes they are present. To skip auto-install, pass `--no-skills` to `npx agentlink-sh@latest`.
 
 **Auto-installed for every project:**
 

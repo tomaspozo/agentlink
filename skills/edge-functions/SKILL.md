@@ -25,7 +25,7 @@ This is required because the `withSupabase` wrapper handles auth itself. If `ver
 
 ### First edge function in a project?
 
-The `_shared/` utilities (`responses.ts`) should already exist in `supabase/functions/_shared/` — the CLI sets these up. If missing, run `agentlink`.
+The `_shared/` utilities (`responses.ts`) should already exist in `supabase/functions/_shared/` — the CLI sets these up. If missing, run `npx agentlink-sh@latest`.
 
 The `withSupabase` wrapper comes from the `@supabase/server` npm package, resolved via per-function `deno.json` import maps.
 
@@ -71,7 +71,7 @@ export default {
    enabled = true
    verify_jwt = false
    ```
-6. **Test** — Local: `npx supabase functions serve` / Deploy: `agentlink env deploy <dev|prod>` (pushes schemas + functions to the chosen env). Direct `npx supabase functions deploy --use-api` also works for functions-only pushes.
+6. **Test** — Local: `npx supabase functions serve` / Deploy: `npx agentlink-sh@latest env deploy <dev|prod>` (pushes schemas + functions to the chosen env). Direct `npx supabase functions deploy --use-api` also works for functions-only pushes.
 
 ---
 

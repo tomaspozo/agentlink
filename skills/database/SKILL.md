@@ -73,13 +73,13 @@ CREATE OR REPLACE FUNCTION api.chart_create(...)
 ## Development Loop
 
 1. **Write SQL** to the appropriate schema file (see organization above)
-2. **Apply** — `agentlink db apply`
+2. **Apply** — `npx agentlink-sh@latest db apply`
 3. **Fix errors** with more SQL — never reset the database
 4. **Iterate** until the feature is complete
 
 > **Companion:** If `supabase-postgres-best-practices` is available, invoke it to review schema changes before proceeding.
 
-`db apply` auto-generates TypeScript types after applying schemas. To regenerate types separately: `agentlink db types`.
+`db apply` auto-generates TypeScript types after applying schemas. To regenerate types separately: `npx agentlink-sh@latest db types`.
 
 The DB URL is auto-resolved from `.env.local` (written by the CLI during setup). No `--db-url` flag needed in either local or cloud mode.
 
@@ -144,19 +144,19 @@ GRANT EXECUTE ON FUNCTION public._internal_admin_get_secret(text) TO service_rol
 
 If something is missing or broken, use `check` to diagnose and `--force-update` to fix:
 
-1. **Diagnose:** `agentlink check` → read the JSON output, look at which fields are `false`
-2. **Fix:** `agentlink --force-update` → re-applies all setup (templates, config, SQL, migrations)
-3. **Verify:** `agentlink check` → confirm `ready: true`
+1. **Diagnose:** `npx agentlink-sh@latest check` → read the JSON output, look at which fields are `false`
+2. **Fix:** `npx agentlink-sh@latest --force-update` → re-applies all setup (templates, config, SQL, migrations)
+3. **Verify:** `npx agentlink-sh@latest check` → confirm `ready: true`
 
 | Issue | Diagnose with `check` | Fix |
 |-------|----------------------|-----|
-| Missing `_internal_admin_*` functions | `database.functions: false` | `agentlink --force-update` |
-| Missing extensions (`pg_net`, `supabase_vault`) | `database.extensions: false` | `agentlink --force-update` |
-| Missing vault secrets | `database.secrets: false` | `agentlink --force-update` |
-| Missing `api` schema or grants | `database.api_schema: false` | `agentlink --force-update` |
-| Missing `supabase/schemas/` structure | `files: false` | `agentlink --force-update` |
+| Missing `_internal_admin_*` functions | `database.functions: false` | `npx agentlink-sh@latest --force-update` |
+| Missing extensions (`pg_net`, `supabase_vault`) | `database.extensions: false` | `npx agentlink-sh@latest --force-update` |
+| Missing vault secrets | `database.secrets: false` | `npx agentlink-sh@latest --force-update` |
+| Missing `api` schema or grants | `database.api_schema: false` | `npx agentlink-sh@latest --force-update` |
+| Missing `supabase/schemas/` structure | `files: false` | `npx agentlink-sh@latest --force-update` |
 
-Use `agentlink info <component>` to understand what a missing component does before fixing it.
+Use `npx agentlink-sh@latest info <component>` to understand what a missing component does before fixing it.
 
 ---
 
