@@ -226,9 +226,9 @@ Edge Functions handle webhooks, third-party APIs, and anything outside the datab
 
 Background work runs on `pg_cron` and `pgmq`. No external job runners.
 
-### RLS + Schema Isolation → `auth` skill
+### Authorization (four layers) → `auth` skill
 
-Row-Level Security on every table. Schema isolation keeps application logic out of the `public` schema. Access control and tenant isolation are enforced by the database.
+Schema isolation is the table boundary (only `api.*` is exposed). **Permission/action authz lives in RPC guards**: every mutating `api.*` RPC calls `public.auth_verify_access('<entity>.<action>')` as its first statement (raises HTTP 403). **RLS is isolation-only** (`tenant_id`/ownership) defense-in-depth on every table — never check permissions in RLS. The frontend `useHasPermission()` / route guards are UX only. Adding a capability = seed the permission key + guard the RPC + gate the frontend.
 
 ### Development → `database` skill
 
@@ -319,11 +319,14 @@ Load the `rpc` skill for function patterns. Load the `frontend` skill for client
 ### Security context: SECURITY INVOKER by default
 
 ```sql
--- ✅ CORRECT — RLS handles access control automatically
-CREATE FUNCTION api.chart_get_by_id(p_chart_id uuid)
+-- ✅ CORRECT — permission guard first, then explicit tenant scope (RLS isolates as backstop)
+CREATE FUNCTION api.chart_update(p_chart_id uuid, p_name text)
 RETURNS jsonb LANGUAGE plpgsql SECURITY INVOKER SET search_path = '' AS $$
 BEGIN
-  SELECT ... FROM public.charts WHERE id = p_chart_id; -- RLS enforces permissions
+  PERFORM public.auth_verify_access('chart.update');   -- primary permission gate (403)
+  UPDATE public.charts SET name = p_name
+   WHERE id = p_chart_id
+     AND tenant_id = (SELECT public._auth_tenant_id()); -- explicit scope; isolation RLS backstops
 END; $$;
 ```
 

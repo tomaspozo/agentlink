@@ -7,18 +7,46 @@ description: Authentication, authorization, and tenant isolation for Supabase. U
 
 Authentication, authorization, and tenant isolation — all enforced by the database.
 
-## Security Model
+## Security Model — four layers, each with one job
 
-Three layers work together:
-
-1. **`api` schema** (primary boundary) — Only functions in `api` are exposed to clients. Tables are invisible. This is the broadest access control.
-2. **RLS policies** (defense-in-depth) — Even if a function queries a table, RLS filters rows by user/tenant. This catches bugs in function logic.
-3. **`_auth_*` functions** (policy helpers) — Complex access checks used by RLS policies. Live in `public`, not exposed to clients.
+1. **Schema isolation** (the table boundary) — Only `api.*` functions are exposed to clients; `public` tables are unreachable via the Data API (`.from()` cannot touch them). This is what actually protects the tables.
+2. **RPC permission guard** (the permission gate — PRIMARY) — Every mutating `api.*` RPC calls `public.auth_verify_access('<entity>.<action>')` as its first statement; it raises HTTP 403 when the caller's active workspace lacks the permission. **This is where permission/action authz lives.**
+3. **RLS, isolation-only** (the backstop) — Every table has a cheap policy scoping rows to `tenant_id = _auth_tenant_id()` and/or `user_id = auth.uid()`. It is the safety net against a forgotten `WHERE` — in an agent-built codebase, the worst-case multi-tenant bug. **Never put permission checks in RLS** — isolation only.
+4. **Frontend guard** (UX only) — `useHasPermission()` / route guards hide or redirect. Never security: the backend guard is the real gate; a user who bypasses the UI still hits the 403.
 
 ```
-Client → api.chart_get_by_id()  → RLS filters by user → returns only allowed rows
-                                     ↓
-                              _auth_chart_can_read()  ← called by RLS policy
+Client → api.member_update(...)
+            1. PERFORM auth_verify_access('membership.update')  → 403 if denied   (permission gate)
+            2. UPDATE ... WHERE tenant_id = _auth_tenant_id()                      (explicit scope)
+                 ↓ isolation RLS on memberships still filters by tenant            (backstop)
+```
+
+**When you add a capability you touch three layers:** seed the permission key (`role_permissions`), guard the RPC, gate the frontend. RLS only ever does isolation. See the checklist near the end of this file.
+
+### The guard helpers (`public/_authz.sql`)
+
+- `public.auth_verify_access(p_permission text)` — **raises** (SQLSTATE `42501` → HTTP 403). Call as the first statement of every mutating RPC.
+- `public.auth_has_access(p_permission text)` — **boolean**, for conditional branching inside an RPC (e.g. return a richer payload to admins).
+
+Both wrap `public._auth_has_permission` — JWT-only (`app_metadata.permissions`, populated by `_hook_custom_access_token`), zero DB reads, evaluated against the caller's **active workspace**. Do **not** call `_auth_has_permission` in policies anymore; use `auth_verify_access` in the RPC.
+
+```sql
+-- Canonical: isolation-only RLS + permission guard in the RPC
+CREATE POLICY widgets_tenant_isolation ON public.widgets
+  FOR ALL TO authenticated
+  USING      (tenant_id = (SELECT public._auth_tenant_id()))
+  WITH CHECK (tenant_id = (SELECT public._auth_tenant_id()));
+
+CREATE FUNCTION api.widget_update(p_id uuid, p_name text)
+RETURNS jsonb LANGUAGE plpgsql SECURITY INVOKER SET search_path = '' AS $$
+BEGIN
+  PERFORM public.auth_verify_access('widget.update');      -- primary deny (403)
+  UPDATE public.widgets SET name = p_name
+   WHERE id = p_id
+     AND tenant_id = (SELECT public._auth_tenant_id());     -- explicit scope; RLS backstops
+  RETURN jsonb_build_object('id', p_id, 'name', p_name);
+END; $$;
+-- then seed: INSERT INTO public.permissions / role_permissions ('widget.update')
 ```
 
 ### Grants on the `api` schema
@@ -314,7 +342,7 @@ tenant-scoped tables → Every row has a tenant_id column (agent creates these)
 3. Looks up the user's permissions in `role_permissions`.
 4. Injects `tenant_id`, `tenant_role`, and `permissions` into `app_metadata`.
 
-Tenant context comes from JWT custom claims (`auth.jwt() -> 'app_metadata' ->> 'tenant_id'`), **not** from request parameters. RLS policies use these claims via `_auth_tenant_id()` and `_auth_has_permission()` to filter rows automatically.
+Tenant context comes from JWT custom claims (`auth.jwt() -> 'app_metadata' ->> 'tenant_id'`), **not** from request parameters. RLS policies use `_auth_tenant_id()` for **isolation only** (scoping rows to the active tenant). **Permission checks do not go in policies** — they live in the RPC via `public.auth_verify_access('<entity>.<action>')`. See the four-layer Security Model at the top of this file.
 
 API RPCs live in `supabase/schemas/api/tenant.sql`: `tenant_select`, `tenant_list`, `tenant_create`, `invitation_create`, `invitation_accept`, `membership_list`. `tenant_select` writes `session_tenants` (per-device pin); `tenant_create` and `invitation_accept` also pin the new tenant to the caller's session so a single `refreshSession()` lands them inside it.
 
@@ -372,6 +400,23 @@ All eight RPCs read the current tenant from JWT claims via
 `public._auth_tenant_id()`. **Never accept `p_tenant_id` from the
 client when "current tenant" is what you mean** — match the existing
 convention in `tenant.sql`.
+
+Each permission-bearing RPC enforces its permission with
+`PERFORM public.auth_verify_access('<permission>')` as its first statement
+(after the auth/tenant null guards) — the "Permission" column above is the
+exact key it passes. `invitation_accept` is intentionally **unguarded** (the
+accepter isn't a member yet; the token is the authorization). The matching
+table policies are isolation-only — they no longer check the permission.
+
+### Checklist — adding a permission-gated capability
+
+Do all of these (the guard alone, or the frontend alone, is never enough):
+
+1. **Seed the permission** in `public.permissions` + `public.role_permissions` (which roles get it) in `_rbac.sql`.
+2. **Guard the RPC**: `PERFORM public.auth_verify_access('<key>')` as the first statement of the mutating `api.*` function; scope queries with `WHERE tenant_id = (SELECT public._auth_tenant_id())`.
+3. **Isolate the table**: ensure an isolation-only RLS policy exists (tenant/ownership, no permission predicate).
+4. **Gate the frontend**: route guard `requirePermission('<key>')` + control gating `useHasPermission('<key>')` (UX only).
+5. **Verify** the JWT carries the key for a permitted role — the access-token hook bakes `role_permissions` → `app_metadata.permissions` on every mint.
 
 ### Role enum and the owner rule
 

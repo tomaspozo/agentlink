@@ -197,6 +197,27 @@ Key points:
 - All shared chrome (sidebar, header, mobile nav) lives in this layout -- child routes only render their own content
 - Routes outside `_auth/` (like `login.tsx`, `invitacion.tsx`) are public and skip the auth check
 
+### Permission route guard (per page)
+
+`_auth.tsx` only checks *authentication*. To require a *permission* for a
+specific page, add `requirePermission(...)` (scaffolded at
+`lib/require-permission.ts`) to that route's `beforeLoad`:
+
+```typescript
+import { requirePermission } from "@/lib/require-permission";
+
+export const Route = createFileRoute("/_auth/settings/members")({
+  beforeLoad: () => requirePermission("membership.read"), // → redirect /forbidden
+  component: MembersPage,
+});
+```
+
+It reads the active workspace's JWT permissions, refreshes once if the tenant
+claim isn't ready yet (fresh-signup race), and redirects to `/forbidden`
+otherwise. **UX only** — the backend `auth_verify_access()` guard in each RPC
+is the real gate. Combine with `useHasPermission(...)` to gate controls inside
+the page.
+
 ### Redirect with return URL
 
 Pass the current path as a search param so login can redirect back:

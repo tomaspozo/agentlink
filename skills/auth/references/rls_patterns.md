@@ -138,7 +138,13 @@ USING (tenant_id = public._auth_tenant_id());
 
 ## Role-Based Access (RBAC)
 
-> **Scaffolded by the CLI.** Three lookup tables — `public.roles`, `public.permissions`, `public.role_permissions` — and the `_auth_has_permission(text)` helper are created in `supabase/schemas/public/_rbac.sql`. The default seed ships four roles (`owner`, `admin`, `member`, `viewer`) with a sensible permission matrix.
+> **Scaffolded by the CLI.** Three lookup tables — `public.roles`, `public.permissions`, `public.role_permissions` — plus `_auth_has_permission(text)` and the `auth_verify_access` / `auth_has_access` guards (`public/_authz.sql`). The default seed ships four roles (`owner`, `admin`, `member`, `viewer`) with a sensible permission matrix.
+
+> **Where permissions are checked: in the RPC, not in RLS.** The primary
+> permission gate is `public.auth_verify_access('<entity>.<action>')`, called
+> as the first statement of every mutating `api.*` RPC (raises HTTP 403). RLS
+> is **isolation-only** (`tenant_id`/ownership) — a backstop, never the place
+> you check a permission. This section's examples follow that split.
 
 ### Why three tables instead of enums
 
@@ -200,33 +206,44 @@ END;
 $$;
 ```
 
-### Permission-based policies (preferred)
+### Authorization guards — `auth_verify_access` / `auth_has_access`
+
+`_auth_has_permission` (above) is the JWT-only engine. You don't call it
+directly anymore — you call the guards in `public/_authz.sql`, which wrap it:
+
+- `public.auth_verify_access(p_permission text)` → **raises** `42501` (HTTP 403) when the permission is absent. First statement of every mutating RPC.
+- `public.auth_has_access(p_permission text)` → **boolean**, for conditional branching inside an RPC.
+
+Both are JWT-only (zero DB reads), evaluated against the caller's **active workspace**.
+
+### Permissions go in the RPC, not the policy
+
+The table gets ONE isolation-only policy; the permission is checked in the RPC.
 
 ```sql
--- Anyone in the tenant can read
-DROP POLICY IF EXISTS members_read_projects ON public.projects;
-CREATE POLICY members_read_projects
-ON public.projects FOR SELECT
-USING (tenant_id = public._auth_tenant_id());
+-- TABLE: isolation-only RLS (backstop). No permission predicate.
+DROP POLICY IF EXISTS projects_tenant_isolation ON public.projects;
+CREATE POLICY projects_tenant_isolation
+ON public.projects FOR ALL TO authenticated
+USING      (tenant_id = (SELECT public._auth_tenant_id()))
+WITH CHECK (tenant_id = (SELECT public._auth_tenant_id()));
 
--- Only roles holding 'projects.create' can insert
-DROP POLICY IF EXISTS authorized_insert_projects ON public.projects;
-CREATE POLICY authorized_insert_projects
-ON public.projects FOR INSERT
-WITH CHECK (
-  tenant_id = public._auth_tenant_id()
-  AND public._auth_has_permission('projects.create')
-);
-
--- Only roles holding 'projects.delete' can delete
-DROP POLICY IF EXISTS authorized_delete_projects ON public.projects;
-CREATE POLICY authorized_delete_projects
-ON public.projects FOR DELETE
-USING (
-  tenant_id = public._auth_tenant_id()
-  AND public._auth_has_permission('projects.delete')
-);
+-- RPC: the permission gate is the first statement.
+CREATE OR REPLACE FUNCTION api.project_create(p_name text)
+RETURNS jsonb LANGUAGE plpgsql SECURITY INVOKER SET search_path = '' AS $$
+DECLARE v_tenant_id uuid := public._auth_tenant_id();
+BEGIN
+  IF v_tenant_id IS NULL THEN RAISE EXCEPTION 'No tenant selected'; END IF;
+  PERFORM public.auth_verify_access('projects.create');          -- 403 if denied
+  INSERT INTO public.projects (tenant_id, name) VALUES (v_tenant_id, p_name);
+  ...
+END; $$;
 ```
+
+Reads that should hard-deny without a permission (e.g. a members list) guard
+the same way: `PERFORM public.auth_verify_access('membership.read')` at the top
+of the read RPC. Reads that should silently return empty instead can branch on
+`public.auth_has_access(...)` and return `'[]'::jsonb`.
 
 ### Role hierarchy via `_auth_has_role`
 
@@ -245,27 +262,21 @@ RETURNS boolean LANGUAGE sql STABLE SECURITY INVOKER SET search_path = '' AS $$
 $$;
 ```
 
-**Prefer `_auth_has_permission`.** It maps to capabilities (what someone can *do*), not seniority. Use `_auth_has_role` only when you genuinely want a hierarchy — e.g. an admin dashboard that shows different sections based on rank.
+**Prefer permission checks (`auth_verify_access('<key>')` in the RPC)** over role hierarchy — they map to capabilities (what someone can *do*), not seniority. Use `_auth_has_role` only when you genuinely want a hierarchy (e.g. an admin dashboard that shows different sections based on rank); it reads the JWT too and can be called from an RPC or a `auth_has_access`-style branch — but it is not for permission gating.
 
 ### Wrap `_auth_*` helpers in `(SELECT ...)` inside RLS predicates
 
-When calling these helpers from a USING/WITH CHECK clause, wrap each call in a subquery so the planner promotes it to an InitPlan (one evaluation per query, not per row):
+When calling `_auth_tenant_id()` (or any helper) from a USING/WITH CHECK clause, wrap the call in a subquery so the planner promotes it to an InitPlan (one evaluation per query, not per row):
 
 ```sql
 -- ✅ CORRECT — InitPlan, single evaluation
-USING (
-  tenant_id = (SELECT public._auth_tenant_id())
-  AND (SELECT public._auth_has_permission('membership.read'))
-)
+USING (tenant_id = (SELECT public._auth_tenant_id()))
 
--- ❌ AVOID — bare calls may be re-evaluated per row in some plans
-USING (
-  tenant_id = public._auth_tenant_id()
-  AND public._auth_has_permission('membership.read')
-)
+-- ❌ AVOID — bare call may be re-evaluated per row in some plans
+USING (tenant_id = public._auth_tenant_id())
 ```
 
-The helpers themselves are `LANGUAGE sql STABLE` so the planner can also inline them — but the wrap is universal best practice and matches Supabase's documented RLS-performance pattern.
+The helper is `LANGUAGE sql STABLE` so the planner can also inline it — but the wrap is universal best practice and matches Supabase's documented RLS-performance pattern. (Isolation policies are typically just this one predicate — permissions are enforced in the RPC, so policies stay simple.)
 
 ---
 
@@ -347,48 +358,43 @@ $$;
 
 > These policies are scaffolded by the CLI in `multitenancy.sql`.
 
+These are **isolation-only** (tenant membership / tenant scope, plus the cheap
+self-protection rule). The permission for each action (`tenant.update`,
+`membership.read`, `membership.delete`, ...) is enforced in the corresponding
+`api.*` RPC via `auth_verify_access`, **not** here.
+
 ```sql
--- Tenants: members can see their own tenants
+-- Tenants: members can see / act on their own tenants (isolation by membership)
 DROP POLICY IF EXISTS members_read_own_tenant ON public.tenants;
 CREATE POLICY members_read_own_tenant ON public.tenants
   FOR SELECT TO authenticated
   USING ((SELECT public._auth_is_tenant_member(id)));
 
--- Tenants: roles holding tenant.update can update
 DROP POLICY IF EXISTS authorized_update_tenant ON public.tenants;
 CREATE POLICY authorized_update_tenant ON public.tenants
   FOR UPDATE TO authenticated
-  USING (
-    (SELECT public._auth_is_tenant_member(id))
-    AND (SELECT public._auth_has_permission('tenant.update'))
-  );
+  USING ((SELECT public._auth_is_tenant_member(id)));
+  -- tenant.update is checked in the RPC, not here.
 
--- Memberships: roles holding membership.read can see other members of their tenant
+-- Memberships: scope to the active tenant (isolation)
 DROP POLICY IF EXISTS members_read_memberships ON public.memberships;
 CREATE POLICY members_read_memberships ON public.memberships
   FOR SELECT TO authenticated
-  USING (
-    tenant_id = (SELECT public._auth_tenant_id())
-    AND (SELECT public._auth_has_permission('membership.read'))
-  );
+  USING (tenant_id = (SELECT public._auth_tenant_id()));
 
--- Memberships: roles holding membership.delete can add/remove members
 DROP POLICY IF EXISTS authorized_insert_memberships ON public.memberships;
 CREATE POLICY authorized_insert_memberships ON public.memberships
   FOR INSERT TO authenticated
-  WITH CHECK (
-    tenant_id = (SELECT public._auth_tenant_id())
-    AND (SELECT public._auth_has_permission('membership.delete'))
-  );
+  WITH CHECK (tenant_id = (SELECT public._auth_tenant_id()));
 
 DROP POLICY IF EXISTS authorized_delete_memberships ON public.memberships;
 CREATE POLICY authorized_delete_memberships ON public.memberships
   FOR DELETE TO authenticated
   USING (
     tenant_id = (SELECT public._auth_tenant_id())
-    AND (SELECT public._auth_has_permission('membership.delete'))
-    AND user_id != (SELECT auth.uid())  -- can't remove yourself
+    AND user_id != (SELECT auth.uid())  -- can't remove yourself (cheap business rule)
   );
+-- membership.read / membership.delete are checked in the RPC via auth_verify_access.
 ```
 
 ### Setting tenant context — per-device via the access-token hook

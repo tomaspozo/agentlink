@@ -4,6 +4,12 @@
 -- These are templates — replace table names and column names with your own.
 -- Copy the relevant patterns into the entity file: supabase/schemas/public/<table>.sql
 -- Policy names use snake_case: {role}_{action}_{table}
+--
+-- AUTHORIZATION MODEL: RLS is ISOLATION-ONLY (scope rows by tenant/owner). It
+-- is NOT where permissions are checked. Permission/action authz lives in the
+-- api.* RPC via `PERFORM public.auth_verify_access('<entity>.<action>')` — see
+-- Pattern 5 at the bottom. Do not put _auth_has_permission/_auth_has_role in
+-- a policy.
 -- =============================================================================
 
 -- ---------------------------------------------------------------------------
@@ -35,34 +41,23 @@ USING (user_id = auth.uid());
 
 
 -- ---------------------------------------------------------------------------
--- Pattern 2: Tenant-scoped (all members can read, members+ can write)
+-- Pattern 2: Tenant-scoped (isolation-only)
 -- ---------------------------------------------------------------------------
--- Use when: data belongs to a tenant/org, all members can see it
--- Requires: table has a `tenant_id` column, _auth_tenant_id() function exists
+-- Use when: data belongs to a tenant/org. One policy scopes ALL operations to
+-- the active tenant. Permission gating ("can this member write?") goes in the
+-- RPC via auth_verify_access — see Pattern 5 — NOT here.
+-- Requires: table has a `tenant_id` column, _auth_tenant_id() function exists.
+-- (SELECT ...) wrap promotes the helper to an InitPlan — one eval per query.
 
-DROP POLICY IF EXISTS members_read_<table> ON public.<table>;
-CREATE POLICY members_read_<table>
-ON public.<table> FOR SELECT
-USING (tenant_id = public._auth_tenant_id());
+DROP POLICY IF EXISTS <table>_tenant_isolation ON public.<table>;
+CREATE POLICY <table>_tenant_isolation
+ON public.<table> FOR ALL TO authenticated
+USING      (tenant_id = (SELECT public._auth_tenant_id()))
+WITH CHECK (tenant_id = (SELECT public._auth_tenant_id()));
 
-DROP POLICY IF EXISTS members_insert_<table> ON public.<table>;
-CREATE POLICY members_insert_<table>
-ON public.<table> FOR INSERT
-WITH CHECK (
-  tenant_id = public._auth_tenant_id()
-  AND public._auth_has_role('member')
-);
-
-DROP POLICY IF EXISTS members_update_<table> ON public.<table>;
-CREATE POLICY members_update_<table>
-ON public.<table> FOR UPDATE
-USING (tenant_id = public._auth_tenant_id() AND public._auth_has_role('member'))
-WITH CHECK (tenant_id = public._auth_tenant_id());
-
-DROP POLICY IF EXISTS admins_delete_<table> ON public.<table>;
-CREATE POLICY admins_delete_<table>
-ON public.<table> FOR DELETE
-USING (tenant_id = public._auth_tenant_id() AND public._auth_has_role('admin'));
+-- If a SELECT should be readable by every member but writes need a permission,
+-- you still only need the isolation policy above — the write permission is
+-- enforced by auth_verify_access in the RPC (Pattern 5), not by a second policy.
 
 
 -- ---------------------------------------------------------------------------
@@ -116,3 +111,38 @@ DROP POLICY IF EXISTS users_delete_own_<table> ON public.<table>;
 CREATE POLICY users_delete_own_<table>
 ON public.<table> FOR DELETE
 USING (user_id = auth.uid());
+
+
+-- ---------------------------------------------------------------------------
+-- Pattern 5: RPC authorization guard (the PRIMARY permission gate)
+-- ---------------------------------------------------------------------------
+-- Permissions are enforced HERE — in the api.* RPC — not in RLS policies.
+-- `auth_verify_access` raises a 403 (SQLSTATE 42501) when the caller's active
+-- workspace lacks the permission; `auth_has_access` is the boolean form for
+-- branching. The matching table keeps an isolation-only policy (Pattern 2) as
+-- the backstop. Seed the permission key in _rbac.sql (permissions +
+-- role_permissions) so the access-token hook bakes it into the JWT.
+
+CREATE OR REPLACE FUNCTION api.<table>_update(p_id uuid, p_name text)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = ''
+AS $$
+BEGIN
+  -- 1) permission gate (first statement after any auth/tenant null guards)
+  PERFORM public.auth_verify_access('<entity>.update');
+
+  -- 2) explicit tenant scope; isolation RLS backstops a forgotten WHERE
+  UPDATE public.<table>
+  SET name = p_name
+  WHERE id = p_id
+    AND tenant_id = (SELECT public._auth_tenant_id());
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION '<table> not found or not permitted';
+  END IF;
+
+  RETURN jsonb_build_object('id', p_id, 'name', p_name);
+END;
+$$;

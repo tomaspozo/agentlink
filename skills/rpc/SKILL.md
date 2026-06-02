@@ -56,7 +56,8 @@ $$;
 
 **Key rules:**
 - **`api.` schema** — all data access functions live here
-- **`SECURITY INVOKER`** — RLS applies automatically, no manual `auth.uid()` filtering
+- **`SECURITY INVOKER`** — runs as the caller; isolation RLS applies automatically
+- **Permission gate first** — mutating RPCs `PERFORM public.auth_verify_access('<entity>.<action>')` as the first statement, then scope queries with `WHERE tenant_id = (SELECT public._auth_tenant_id())`. Permissions live in the RPC, not in RLS (which is isolation-only).
 - **`SET search_path = ''`** — prevents search path injection
 - **Fully qualified names** — `public.charts`, `public._auth_*`, `public._internal_admin_*` — never bare names
 - **No per-function `GRANT EXECUTE` for client RPCs** — schema-level default privileges in `_schemas.sql` automatically grant EXECUTE on every new function in `api` to `anon`, `authenticated`, and `service_role`. **Exception:** `api._admin_*` functions MUST add an explicit `REVOKE … FROM PUBLIC, anon, authenticated; GRANT EXECUTE … TO service_role` block to override the schema defaults — otherwise they're silently exposed to anon and the DEFINER linter (0028) fires. See "Admin-only RPCs" below.
@@ -235,6 +236,8 @@ RAISE EXCEPTION 'Chart not found: %', p_chart_id;
 { "error": { "message": "Chart not found: abc-123", "code": "P0001" } }
 ```
 
+A bare `RAISE EXCEPTION` uses SQLSTATE `P0001`, which PostgREST maps to **HTTP 400**. The permission guard `public.auth_verify_access('x')` raises with `ERRCODE '42501'` (insufficient_privilege) → **HTTP 403**, the correct status for an authenticated-but-unauthorized caller. Use 403 for "you can't do this," 400 for "your input is wrong." The `message` surfaces verbatim in the client's `error.message`.
+
 For operations that can partially succeed, return structured jsonb:
 
 ```sql
@@ -256,7 +259,8 @@ RETURN jsonb_build_object(
 - [ ] `SECURITY INVOKER` — **always** in `api`. If you need DEFINER for a side-effect, put it in `public._internal_admin_*` and call it from your INVOKER wrapper.
 - [ ] `SET search_path = ''`
 - [ ] Fully qualified names — tables (`public.tablename`) and function calls (`public._auth_*`, `public._internal_admin_*`)
-- [ ] Don't manually filter by `auth.uid()` in INVOKER functions — RLS does this
+- [ ] **Permission gate**: for any permission-bearing operation, `PERFORM public.auth_verify_access('<entity>.<action>')` as the FIRST statement (after the auth/tenant null guards). This is the primary allow/deny — RLS is isolation-only and won't check the permission. Use `public.auth_has_access('<key>')` for conditional branching.
+- [ ] **Scope queries explicitly**: tenant-scoped reads/writes include `WHERE tenant_id = (SELECT public._auth_tenant_id())` (and ownership `user_id` where relevant). Isolation RLS backstops a forgotten scope, but write it explicitly — don't rely on RLS as the only filter.
 - [ ] Validate input parameters before use
 - [ ] If you wrote a `_internal_admin_*` helper: revalidate `auth.uid() = p_user_id` inside the helper (defense in depth)
 - [ ] If your function name starts with `api._admin_*`: explicit `REVOKE ALL ON FUNCTION ... FROM PUBLIC, anon, authenticated;` AND `GRANT EXECUTE ON FUNCTION ... TO service_role;` — overrides the schema-level default that auto-grants EXECUTE to anon/authenticated

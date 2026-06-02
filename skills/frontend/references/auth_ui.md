@@ -333,3 +333,59 @@ useEffect(() => {
 | Invite link "Invalid or expired" on second click | `invitation_accept` checks `accepted_at IS NULL` | The scaffold's `_internal_admin_complete_invitation` is idempotent — it returns success when the user already has a membership in the invited tenant |
 
 The `formatAuthError` helper in `lib/auth-errors.ts` maps these to friendly copy. Use it everywhere instead of surfacing raw Supabase strings.
+
+---
+
+## Permission gating (authorization UX)
+
+> **UX only — never security.** The backend `auth_verify_access()` guard inside
+> every mutating RPC is the real gate (returns HTTP 403). The frontend just
+> avoids showing controls/pages the user can't use. Bypassing the UI still
+> hits the 403. Permissions come from the JWT `app_metadata.permissions` for
+> the **active workspace**.
+
+`useHasPermission(permission, mode?)` (both templates) returns a boolean,
+failing safe to `false` while loading. Disable mutating buttons; hide nav.
+
+```tsx
+const canManage = useHasPermission("membership.update");
+<Button disabled={!canManage}>Change role</Button>
+
+// hide a nav entry entirely:
+<RequirePermission permission="membership.read">
+  <NavLink to="/settings/members">Members</NavLink>
+</RequirePermission>
+```
+
+### Recipe — Vite (TanStack Router): guard a page
+
+```tsx
+// routes/_auth/settings/members.tsx
+import { requirePermission } from "@/lib/require-permission";
+
+export const Route = createFileRoute("/_auth/settings/members")({
+  beforeLoad: () => requirePermission("membership.read"), // → redirect /forbidden
+  component: MembersPage,
+});
+```
+
+`requirePermission` reads the session, refreshes once if the tenant claim
+isn't present yet (fresh-signup race), then redirects to `/forbidden` (a route
+under `_auth`, so the TopBar/workspace switcher stays mounted).
+
+### Recipe — Next.js (App Router): guard a section
+
+```tsx
+// app/settings/layout.tsx — server component, runs before the client page
+import { requirePermission } from "@/lib/permissions.server";
+
+export default async function SettingsLayout({ children }) {
+  await requirePermission("membership.read"); // → redirect("/forbidden")
+  return <>{children}</>;
+}
+```
+
+Client controls inside the page gate with the same `useHasPermission(...)`.
+An optional middleware route→permission map is provided (commented) in
+`lib/supabase/proxy.ts` if you want a coarse gate before render — the per-page
+server guard is the default.

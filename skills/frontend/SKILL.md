@@ -575,7 +575,47 @@ a refresh re-runs the hook. The scaffold handles this in two places:
 >
 > Server-side (RLS, RPCs) is unaffected — `auth.jwt()` in Postgres
 > reads from the actual JWT and continues to work via
-> `_auth_tenant_id()` / `_auth_has_permission(...)`.
+> `_auth_tenant_id()` and the `auth_verify_access(...)` guard.
+
+### Permissions & authorization (UX gating)
+
+> **🛑 The frontend permission check is UX only — never security.** The real
+> gate is the backend `auth_verify_access()` guard inside every mutating RPC,
+> which returns **403** regardless of what the UI shows. Hiding or disabling a
+> control does not secure it; a user who bypasses the UI (devtools, direct
+> `.rpc()`) still hits the 403. Never weaken a backend guard because the UI
+> hides a button.
+
+Permissions come from the JWT (`app_metadata.permissions`) for the **active
+workspace** — the same array the gotcha above decodes. Both templates ship a
+hook with identical name + semantics:
+
+```typescript
+// Vite + Next — fails safe to false while loading / tenant not ready
+const canEdit = useHasPermission("membership.update");
+<Button disabled={!canEdit}>Change role</Button>
+```
+
+Convention: **disable** mutating buttons (discoverable), **hide** nav entries
+the user can't use (`<RequirePermission permission="...">`).
+
+**Page guard** (route-level, also UX): block rendering a page when the active
+workspace lacks a permission.
+
+- **Vite (TanStack):** `beforeLoad: () => requirePermission("membership.read")`
+  in the route — redirects to `/forbidden`. Reuses the `use-tenant-guard`
+  refresh-once remedy so a fresh signup never false-denies.
+- **Next.js (App Router):** a server component guard —
+  `await requirePermission("membership.read")` in a `layout.tsx` (e.g.
+  `app/settings/layout.tsx`) — redirects to `/forbidden` before the client
+  page renders. `lib/permissions.server.ts` ships it; an optional middleware
+  route→permission map lives commented in `lib/supabase/proxy.ts`.
+
+See `references/auth_ui.md` (recipes) and `references/routing.md` (the route
+seam for each router). Scaffolded files: Vite `hooks/use-has-permission.ts`,
+`components/require-permission.tsx`, `lib/require-permission.ts`,
+`routes/_auth/forbidden.tsx`; Next `hooks/use-has-permission.ts`,
+`lib/permissions.ts`, `lib/permissions.server.ts`, `app/forbidden/page.tsx`.
 
 ### Scaffolded auth infrastructure (Vite projects)
 

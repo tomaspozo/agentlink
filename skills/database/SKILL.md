@@ -68,6 +68,8 @@ CREATE OR REPLACE FUNCTION api.chart_create(...)
 - `extensions.*` — All Postgres extensions. Always `CREATE EXTENSION ... WITH SCHEMA extensions`
 - Never create tables in `api` — it contains functions only
 
+**RLS on every table is ISOLATION-ONLY.** When you create a tenant-scoped table, give it `ENABLE ROW LEVEL SECURITY` and a cheap policy scoping rows to the tenant/owner — `tenant_id = (SELECT public._auth_tenant_id())` and/or `user_id = (SELECT auth.uid())`. Do **not** put permission checks (`_auth_has_permission(...)`) in policies. Permission/action authz lives in the `api.*` RPC via `public.auth_verify_access('<entity>.<action>')`. See the `auth` skill's four-layer Security Model and checklist.
+
 ---
 
 ## Development Loop
