@@ -182,7 +182,7 @@ Both preserve existing migrations.
 **What to pick:**
 
 - **Full scaffold** if the project is empty-ish and the user wants AgentLink's schemas / RLS / RPC layout / skills. The CLI will exit and tell them to run `npx agentlink-sh@latest <name>` (or `npx agentlink-sh@latest .` in the current dir — clean-tree required).
-- **Continue without full features** if the user wants Supabase env wiring only (OAuth, project, `.env.local`). Writes `agentlink.json` with `bare: true`. No schemas, no server-side config, no CLAUDE.md touched. Full details: workflow #7 in `workflows.md`.
+- **Continue without full features** if the user wants Supabase env wiring only (OAuth, project, `.env.local`). Writes `agentlink.json` with `bare: true`. No schemas, no server-side config, no AGENTS.md touched. Full details: workflow #7 in `workflows.md`.
 - **Cancel** if the menu appeared by accident (e.g., ran `env add` from the wrong directory).
 
 Bare projects can upgrade later via `npx agentlink-sh@latest --force-update`.

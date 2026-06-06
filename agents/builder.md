@@ -21,7 +21,7 @@ These are your app development guidelines — not the project itself. The user's
 
 ## Blank-project kickoff
 
-When the user asks you to build something on a **freshly scaffolded project** — one with no domain schema yet (only the scaffolded `profiles` / multitenancy tables) and a `CLAUDE.md` that's just the `agentlink:config` block — do a short **discovery pass first**, then write a product brief into `CLAUDE.md`. This is the product-level equivalent of `/init`: capture *what* you're building (and *why*) before you plan *how*. Do it once at the start; skip it on projects that already carry a brief.
+When the user asks you to build something on a **freshly scaffolded project** — one with no domain schema yet (only the scaffolded `profiles` / multitenancy tables) and an `AGENTS.md` that's just the `agentlink:config` block — do a short **discovery pass first**, then write a product brief into `AGENTS.md`. This is the product-level equivalent of `/init`: capture *what* you're building (and *why*) before you plan *how*. Do it once at the start; skip it on projects that already carry a brief.
 
 Discover three things. Where the user's request already answers one, confirm rather than re-ask; where it's genuinely unclear and the choice changes what you build, ask.
 
@@ -43,9 +43,9 @@ Then pin the **visual identity** — colors, typography, overall mood. Propose o
 
 **3. The product itself.** The value proposition (one line — who it's for and the problem it solves), the core features for a first version, and the **main entities** — the nouns the app revolves around, which become your first tables and RPCs.
 
-### Write the brief into `CLAUDE.md`
+### Write the brief into `AGENTS.md`
 
-Once scope is confirmed and **before** you plan the technical architecture or write any SQL/UI, record the brief in the project's `CLAUDE.md`. It's a doc, not code — writing it is the kickoff, the same as `/init`. Capture:
+Once scope is confirmed and **before** you plan the technical architecture or write any SQL/UI, record the brief in the project's `AGENTS.md`. It's a doc, not code — writing it is the kickoff, the same as `/init`. Capture:
 
 - **What we're building** — value proposition + target user.
 - **Features** — the v1 list, plus anything explicitly deferred.
@@ -54,15 +54,15 @@ Once scope is confirmed and **before** you plan the technical architecture or wr
 - **Main entities** — the core nouns and how they relate.
 - **Decisions to track** — anything worth remembering while planning and building (auth strategy, deferred scope, naming choices).
 
-**🛑 Write the brief OUTSIDE the managed config block.** `CLAUDE.md` contains a CLI-owned section fenced by `<!-- agentlink:config:start -->` … `<!-- agentlink:config:end -->`. The CLI rewrites everything between those markers on `--force-update` and every `env` command — anything you put there is lost. **Append your brief *below* the `agentlink:config:end` marker**, under a heading like `# <Product> — Project Brief`. Never edit inside the markers.
+**🛑 Write the brief OUTSIDE the managed config block.** `AGENTS.md` contains a CLI-owned section fenced by `<!-- agentlink:config:start -->` … `<!-- agentlink:config:end -->`. The CLI rewrites everything between those markers on `--force-update` and every `env` command — anything you put there is lost. **Append your brief *below* the `agentlink:config:end` marker**, under a heading like `# <Product> — Project Brief`. Never edit inside the markers.
 
-After the brief is written, proceed to architectural planning (plan mode) as usual. Keep the brief current — as entities and decisions firm up while building, update it so `CLAUDE.md` stays the source of truth for the *what* and *why*, just as the skills are the source of truth for the *how*.
+After the brief is written, proceed to architectural planning (plan mode) as usual. Keep the brief current — as entities and decisions firm up while building, update it so `AGENTS.md` stays the source of truth for the *what* and *why*, just as the skills are the source of truth for the *how*.
 
 ## Environment
 
 The AgentLink CLI handles all project setup and validation. The agent builds — it does not scaffold.
 
-Check `CLAUDE.md` in the project root for the project mode (**cloud** or **local**) and mode-specific commands. If `CLAUDE.md` is missing, read `agentlink.json` — `mode: "cloud"` means cloud, anything else means local.
+Check `AGENTS.md` in the project root for the project mode (**cloud** or **local**) and mode-specific commands. If `AGENTS.md` is missing, read `agentlink.json` — `mode: "cloud"` means cloud, anything else means local.
 
 ### New project setup
 
@@ -92,7 +92,7 @@ After the user completes `env add dev`, run `npx agentlink-sh@latest check` to c
 - The database runs in the cloud — do NOT run `npx supabase start` or `npx supabase stop`.
 - There is no local MCP server. Use Supabase CLI commands directly.
 - DB URL uses the Supabase connection pooler (IPv4-compatible): `postgresql://postgres.[project_id]:[password]@aws-0-[region].pooler.supabase.com:5432/postgres` — stored in `.env.local`.
-- See `CLAUDE.md` for the cloud-specific commands and connection details.
+- See `AGENTS.md` for the cloud-specific commands and connection details.
 
 ### Diagnose with `check`
 
@@ -271,7 +271,7 @@ Schema isolation is the table boundary (only `api.*` is exposed). **Permission/a
 
 ### Development → `database` skill
 
-Develop with the Supabase CLI — locally via Docker or against a cloud project. Check `CLAUDE.md` for mode-specific commands.
+Develop with the Supabase CLI — locally via Docker or against a cloud project. Check `AGENTS.md` for mode-specific commands.
 
 ---
 

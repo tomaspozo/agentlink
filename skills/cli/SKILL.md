@@ -54,7 +54,7 @@ After scaffold completes, the user finishes setup by running this in a terminal:
 npx agentlink-sh@latest env add dev
 ```
 
-That step does the browser OAuth, creates/links the cloud project, provisions schema + edge functions, and populates `.env.local`. The scaffolded `CLAUDE.md` surfaces this as a prominent "▶ Next step" callout at the top.
+That step does the browser OAuth, creates/links the cloud project, provisions schema + edge functions, and populates `.env.local`. The scaffolded `AGENTS.md` surfaces this as a prominent "▶ Next step" callout at the top.
 
 Mutually exclusive with `--local` and `--link` — all three imply different intents about env creation, so the CLI errors out if combined. Use `--skip-env` specifically for agent-driven flows; use `--link` when you already have credentials; use `--local` when the user wants a local Docker env now.
 
@@ -92,7 +92,7 @@ npx agentlink-sh@latest env add dev
 #     - Cancel
 ```
 
-If the user picks "Continue without full features," the CLI writes a minimal `agentlink.json` with `bare: true` and runs the full Supabase flow (OAuth → org pick → project create/select → credentials → `.env.local`). **No schemas applied, no server-side config (vault / PostgREST / auth hooks), no `CLAUDE.md` touched** — the user's file is theirs. `env use` / `env add` / `env relink` all skip `writeClaudeMd` in bare mode.
+If the user picks "Continue without full features," the CLI writes a minimal `agentlink.json` with `bare: true` and runs the full Supabase flow (OAuth → org pick → project create/select → credentials → `.env.local`). **No schemas applied, no server-side config (vault / PostgREST / auth hooks), no `AGENTS.md` touched** — the user's file is theirs. `env use` / `env add` / `env relink` all skip `writeAgentsMd` in bare mode.
 
 What works in bare mode: `env add`/`use`/`remove`/`list`, `env config [secrets|db|auth|all]`, `db password`, `db url`. What's a no-op until the user adds content: `db apply` (skips with "supabase/schemas/ not found"), `env deploy` (picks up migrations/schemas/functions incrementally as they appear).
 
@@ -293,7 +293,7 @@ No interactive prompts. All connection details come from `--link` flags.
          migrations push, edge-functions deploy, vault secrets,
          PostgREST/auth config, .env.local Supabase block
 3. Install frontend + backend deps (npm install in user's project dir)
-4. Configure Claude Code (pending-env CLAUDE.md mode, Next-step callout)
+4. Configure Claude Code (pending-env AGENTS.md mode, Next-step callout)
 5. Install plugin + companion skills
 6. User runs `npx agentlink-sh@latest env add dev` in a terminal to finish setup
 ```

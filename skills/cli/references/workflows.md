@@ -35,9 +35,9 @@ This lays down the full project — templates, schemas, config, frontend, plugin
 
 > "Scaffold done. Open a terminal in `<path>` and run `npx agentlink-sh@latest env add dev` to create the Supabase project. I can't do that step — it needs a browser for OAuth."
 
-The scaffolded `CLAUDE.md` already surfaces this as a prominent "▶ Next step" callout, so the next session of Claude Code (or a different agent) will see it immediately.
+The scaffolded `AGENTS.md` already surfaces this as a prominent "▶ Next step" callout, so the next session of Claude Code (or a different agent) will see it immediately.
 
-Once the env exists and the user asks to build, the **first thing the builder agent does is a blank-project kickoff** — discover the multi-tenancy model, the entry point + look-and-feel, and the product itself, then write a product brief into `CLAUDE.md` (below the `agentlink:config` block) before planning the architecture. See the "Blank-project kickoff" section in `agents/builder.md`.
+Once the env exists and the user asks to build, the **first thing the builder agent does is a blank-project kickoff** — discover the multi-tenancy model, the entry point + look-and-feel, and the product itself, then write a product brief into `AGENTS.md` (below the `agentlink:config` block) before planning the architecture. See the "Blank-project kickoff" section in `agents/builder.md`.
 
 **Commands — user running directly (cloud default)**
 
@@ -310,13 +310,13 @@ Interactive flow when no `agentlink.json` is present:
 ```
 
 - **Full scaffold** → aborts; user runs `npx agentlink-sh@latest my-app` in a fresh dir or `npx agentlink-sh@latest .` in this one (clean-tree required).
-- **Continue without full features** → writes a minimal `agentlink.json` with `bare: true`, runs the full Supabase flow (OAuth → org pick → project select/create → credentials → `.env.local`). No schemas applied, no server-side config, no `CLAUDE.md` touched.
+- **Continue without full features** → writes a minimal `agentlink.json` with `bare: true`, runs the full Supabase flow (OAuth → org pick → project select/create → credentials → `.env.local`). No schemas applied, no server-side config, no `AGENTS.md` touched.
 
 **What works in bare mode afterward**
 
 | Command | Behavior |
 |---------|----------|
-| `env add` / `env use` / `env remove` / `env list` | Normal, but `env use` / `env add` skip CLAUDE.md writes. |
+| `env add` / `env use` / `env remove` / `env list` | Normal, but `env use` / `env add` skip AGENTS.md writes. |
 | `env config [secrets\|db\|auth\|all] [env]` | Primary way to add server-side config incrementally. |
 | `env deploy [env]` | No-op until the user drops files into `supabase/migrations/`, `supabase/schemas/`, or `supabase/functions/`. Each step gates on its directory. |
 | `db password` / `db url` | Normal. |
