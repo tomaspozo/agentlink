@@ -19,6 +19,45 @@ These are your app development guidelines — not the project itself. The user's
 
 **Match the user's language.** Chat, planning, and explanations must use the same language as the user (e.g., if they write in Spanish, respond in Spanish). All code — SQL schemas, RPC functions, edge functions, TypeScript/JSX, variable names, comments, and resource names — is always in English, regardless of conversation language.
 
+## Blank-project kickoff
+
+When the user asks you to build something on a **freshly scaffolded project** — one with no domain schema yet (only the scaffolded `profiles` / multitenancy tables) and a `CLAUDE.md` that's just the `agentlink:config` block — do a short **discovery pass first**, then write a product brief into `CLAUDE.md`. This is the product-level equivalent of `/init`: capture *what* you're building (and *why*) before you plan *how*. Do it once at the start; skip it on projects that already carry a brief.
+
+Discover three things. Where the user's request already answers one, confirm rather than re-ask; where it's genuinely unclear and the choice changes what you build, ask.
+
+**1. Multi-tenancy model.** The scaffold ships multi-tenancy by default (`tenants` + `memberships` + `invitations`, tenant-scoped RLS). The question is never *whether* to use it but *what a tenant represents* in this product:
+
+- **SaaS** — a tenant is a customer/workspace; tenants isolate one paying account's data from another's.
+- **Internal tool** — a tenant is a department, team, or business area inside one company.
+- **Multi-location org** — a tenant is an office, branch, or region of the same company.
+- **Genuinely single-tenant** — a personal app or single-org tool with no isolation need. Even then, keep the scaffolded tables; just don't surface tenant switching in the UI.
+
+The answer drives which entities are tenant-scoped, how onboarding and invitations work, and whether the UI needs a tenant switcher.
+
+**2. Entry point & look-and-feel.** Decide what lives at `/`:
+
+- **Public-facing product** (SaaS, marketplace, anything with prospects): `/` is a real — if small — marketing **landing page** that sells the value (headline, what it does, who it's for, a CTA into sign-up). The gated app lives at `/dashboard`. The scaffolded `index.tsx` is auth-aware; build the landing into it.
+- **Internal / corporate tool** (no prospects): skip the landing. `/` redirects straight to the main entry point (usually `/dashboard`). Don't build marketing for an audience that doesn't exist.
+
+Then pin the **visual identity** — colors, typography, overall mood. Propose one or two concrete directions tied to what they're building (e.g. for a clinical tool: calm, high-contrast, system sans; for a creator product: bold, warm accent, display headings) and confirm before building. Load the `frontend-design` skill for this.
+
+**3. The product itself.** The value proposition (one line — who it's for and the problem it solves), the core features for a first version, and the **main entities** — the nouns the app revolves around, which become your first tables and RPCs.
+
+### Write the brief into `CLAUDE.md`
+
+Once scope is confirmed and **before** you plan the technical architecture or write any SQL/UI, record the brief in the project's `CLAUDE.md`. It's a doc, not code — writing it is the kickoff, the same as `/init`. Capture:
+
+- **What we're building** — value proposition + target user.
+- **Features** — the v1 list, plus anything explicitly deferred.
+- **Multi-tenancy** — what a tenant represents here, and which entities are tenant-scoped.
+- **Look & feel** — the entry-point decision (landing vs redirect), colors, typography.
+- **Main entities** — the core nouns and how they relate.
+- **Decisions to track** — anything worth remembering while planning and building (auth strategy, deferred scope, naming choices).
+
+**🛑 Write the brief OUTSIDE the managed config block.** `CLAUDE.md` contains a CLI-owned section fenced by `<!-- agentlink:config:start -->` … `<!-- agentlink:config:end -->`. The CLI rewrites everything between those markers on `--force-update` and every `env` command — anything you put there is lost. **Append your brief *below* the `agentlink:config:end` marker**, under a heading like `# <Product> — Project Brief`. Never edit inside the markers.
+
+After the brief is written, proceed to architectural planning (plan mode) as usual. Keep the brief current — as entities and decisions firm up while building, update it so `CLAUDE.md` stays the source of truth for the *what* and *why*, just as the skills are the source of truth for the *how*.
+
 ## Environment
 
 The AgentLink CLI handles all project setup and validation. The agent builds — it does not scaffold.

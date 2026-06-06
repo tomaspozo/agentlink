@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Builder agent runs a blank-project kickoff — discovery pass + product brief before building.** New "Blank-project kickoff" section in `agents/builder.md`: when asked to build on a freshly scaffolded project (no domain schema, `CLAUDE.md` is just the `agentlink:config` block), the agent first discovers three things — (1) the **multi-tenancy model** (what a tenant represents: SaaS customer, internal department, multi-location branch, or genuinely single-tenant — the scaffold ships tenancy by default, so the question is *what it represents*, not *whether* to use it), (2) the **entry point & look-and-feel** (public-facing → a small real landing at `/` + gated app at `/dashboard`; internal tool → `/` redirects to the dashboard; plus colors/typography via the `frontend-design` skill), and (3) the **product itself** (value prop, v1 features, main entities). It then writes a product brief into `CLAUDE.md` — the `/init` equivalent for the *what* and *why* — **outside** the CLI-managed `<!-- agentlink:config:start/end -->` block (appended below the end marker, since `--force-update` and every `env` command rewrite everything between the markers). `skills/cli/references/workflows.md` workflow #1 ("Start a new project from zero") cross-links the kickoff so the post-scaffold step is discoverable from the scaffolding flow.
+
 ## [0.26.0] - 2026-06-04
 
 ### Changed

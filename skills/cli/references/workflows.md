@@ -37,6 +37,8 @@ This lays down the full project — templates, schemas, config, frontend, plugin
 
 The scaffolded `CLAUDE.md` already surfaces this as a prominent "▶ Next step" callout, so the next session of Claude Code (or a different agent) will see it immediately.
 
+Once the env exists and the user asks to build, the **first thing the builder agent does is a blank-project kickoff** — discover the multi-tenancy model, the entry point + look-and-feel, and the product itself, then write a product brief into `CLAUDE.md` (below the `agentlink:config` block) before planning the architecture. See the "Blank-project kickoff" section in `agents/builder.md`.
+
 **Commands — user running directly (cloud default)**
 
 If the user is doing it themselves in a terminal:
