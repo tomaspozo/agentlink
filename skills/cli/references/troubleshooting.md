@@ -2,6 +2,42 @@
 
 ## Common Errors
 
+### `42501 permission denied for table public.<name>` (RPC fails / "GRANT … TO authenticated")
+
+**Cause:** Supabase stopped auto-granting table privileges to `anon`/`authenticated`/`service_role` on `public` (default changed 2026; new cloud projects, and existing projects' future tables from Oct 30 2026). The `api.*` RPCs are `SECURITY INVOKER`, so they touch `public` tables **as the caller** — which now has no privilege. Grants are a layer separate from RLS: the grant decides whether the role can touch the table at all; RLS decides which rows.
+
+**Fix:** Add the grant to the table's schema file, bundled with `ENABLE ROW LEVEL SECURITY`, then `db apply`:
+```sql
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.<table> TO authenticated, service_role;
+-- read-only reference table → SELECT to authenticated, full to service_role.
+-- Never grant anon on tables (anon-facing RPCs are SECURITY DEFINER).
+```
+`db apply` diffs the live DB, so it applies the grant on a new-default project; `env deploy` runs `db apply`, so deploys carry it. **`db apply` is the source of truth for grants** — a `db migrate`-generated migration may omit them (pg-delta's `--integration supabase` assumes the old auto-grant default), but `db apply` (and the scaffolded baseline migration's explicit grants) cover it.
+
+For an existing AgentLink project, `npx agentlink-sh@latest --force-update` refreshes the managed table files (`multitenancy.sql`, `profiles.sql`, `_rbac.sql`) with the grants; then `db apply`. To unblock immediately without editing files:
+```sql
+grant select, insert, update, delete on all tables in schema public to authenticated, service_role;
+alter default privileges for role postgres in schema public
+  grant select, insert, update, delete on tables to authenticated, service_role;
+```
+
+See the `database` skill's GRANT rule and the `auth` skill's Security Model.
+
+---
+
+### `db migrate` says "No changes detected" (or wrote a migration containing that text)
+
+**Cause:** `db migrate` diffs a **migrations-only baseline** against the schema files. The baseline must come from replaying `supabase/migrations/` — **not** the live dev DB, which `db apply` has already converged to the schema files. If a clean baseline can't be built, no diff is found. (An older CLI diffed the live DB against itself and emitted an empty migration whose body was the literal text "No changes detected." — that bug is fixed.)
+
+**This is NOT a signal to hand-author the migration.** First make sure a baseline source is available:
+
+- **Local / cloud-dev with Docker:** ensure Docker is running. `db migrate` spins a short-lived throwaway Supabase stack from your migration files to build the baseline. Confirm the change is actually in a schema file and was applied (`db apply`) so the desired state reflects it.
+- **No Docker, cloud:** `db migrate` falls back to a read-only `prod` (baseline) → `dev` (desired) catalog diff. This needs **both** a `prod` and a `dev` env registered. Verify prod is current with all committed migrations (`supabase migration list --linked`), or its catalog will be stale and the diff may re-include already-migrated objects.
+
+**Genuinely empty?** If the baseline built cleanly and the diff is still empty, the migrations already capture your schema — nothing to do. Only when `db migrate` prints `▲ Could not build a clean migration baseline` (no Docker AND no prod+dev) should you author the migration by hand — see "Manual Migration Operations" below.
+
+---
+
 ### `schema "api" does not exist` during `db diff`
 
 **Cause:** `_schemas.sql` is missing from `schema_paths` in `config.toml`, or the file doesn't exist on disk. The shadow database can't build because schema files reference `api.*` objects but the schema was never created.
@@ -345,6 +381,7 @@ rm supabase/migrations/<version>_name.sql
 | Situation | Action |
 |-----------|--------|
 | Missing component reported by `check` | `npx agentlink-sh@latest --force-update` |
+| `db migrate` prints "No changes detected" | Ensure Docker is running (ephemeral baseline) or a `prod`+`dev` cloud env exists (read-only baseline); don't hand-author unless it prints `▲ Could not build a clean migration baseline` |
 | `db diff` produces wrong output | Edit the generated migration file manually |
 | Need a migration for auth schema changes | Write migration file + repair |
 | Timestamp collision | Rename file + repair |

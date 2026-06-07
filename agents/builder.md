@@ -206,7 +206,7 @@ The boundary is **production**, not deployment in general. The agent's everyday 
 - `supabase functions deploy [name]` — deploy edge functions to the active cloud-dev project (or all functions if `name` omitted). The agent should run this whenever it adds or modifies a function on a cloud-dev project — otherwise the new code never reaches the server and the user can't test it.
 - `supabase secrets set KEY=value` — set edge-function secrets on the active cloud-dev project.
 - `npx agentlink-sh@latest env deploy dev --yes` — full dev-env apply (schemas + functions + secrets). Equivalent to running the three above in sequence.
-- `npx agentlink-sh@latest db migrate <name>` — generate a migration file for review (no DB changes).
+- `npx agentlink-sh@latest db migrate <name>` — generate a migration file for review (doesn't touch the dev DB; it builds the baseline on a short-lived throwaway Supabase stack, so Docker must be running, or it falls back to a read-only prod→dev catalog diff).
 
 **The agent must NOT — without explicit, in-message user approval:**
 
@@ -269,6 +269,8 @@ Background work runs on `pg_cron` and `pgmq`. No external job runners.
 
 Schema isolation is the table boundary (only `api.*` is exposed). **Permission/action authz lives in RPC guards**: every mutating `api.*` RPC calls `public.auth_verify_access('<entity>.<action>')` as its first statement (raises HTTP 403). **RLS is isolation-only** (`tenant_id`/ownership) defense-in-depth on every table — never check permissions in RLS. The frontend `useHasPermission()` / route guards are UX only. Adding a capability = seed the permission key + guard the RPC + gate the frontend.
 
+**Table GRANTs are a prerequisite layer.** `api.*` RPCs are `SECURITY INVOKER`, so they hit `public` tables as the caller; Supabase stopped auto-granting table privileges in 2026. **Every table needs `GRANT SELECT, INSERT, UPDATE, DELETE … TO authenticated, service_role`** bundled with its `ENABLE ROW LEVEL SECURITY` — without it the RPC fails with `42501 permission denied` before RLS or the guard runs. Never grant `anon` on tables (anon RPCs are `SECURITY DEFINER`). Grant ≠ RLS: grant is "can the role touch the table," RLS is "which rows." See the `database` skill's GRANT rule.
+
 ### Development → `database` skill
 
 Develop with the Supabase CLI — locally via Docker or against a cloud project. Check `AGENTS.md` for mode-specific commands.
@@ -303,7 +305,7 @@ supabase/schemas/
     └── chart.sql              # agent builds — api.chart_* functions + grants
 ```
 
-**Migrations** are generated only when the user explicitly asks, or as part of a deployment workflow. Use `npx agentlink-sh@latest db migrate name` — never create migration files manually.
+**Migrations** are generated only when the user explicitly asks, or as part of a deployment workflow. Use `npx agentlink-sh@latest db migrate name` — it produces a real, non-empty migration by diffing a migrations-only baseline against the schema files. **Never hand-author migration files.** If `db migrate` reports "No changes detected," that's a baseline-availability issue (Docker not running, or no `prod`+`dev` env) — not a cue to write the SQL yourself; see the cli skill's `troubleshooting.md`.
 
 Load the `database` skill for the full workflow, schema file conventions, and worked examples.
 

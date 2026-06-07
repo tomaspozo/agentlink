@@ -135,6 +135,11 @@ CREATE TABLE IF NOT EXISTS public.readings (
 
 ALTER TABLE public.readings ENABLE ROW LEVEL SECURITY;
 
+-- Table privileges (bundle with RLS). The api.* RPCs are SECURITY INVOKER, so
+-- they touch this table as the caller; Supabase no longer auto-grants. RLS
+-- still gates rows. anon omitted (anon RPCs are SECURITY DEFINER).
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.readings TO authenticated, service_role;
+
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_readings_chart_id ON public.readings(chart_id);
 CREATE INDEX IF NOT EXISTS idx_readings_user_id ON public.readings(user_id);

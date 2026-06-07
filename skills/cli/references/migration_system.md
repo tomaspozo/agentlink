@@ -57,7 +57,7 @@ Calls `npx supabase migration repair <version> --status applied --local` for eac
 **Solution:** We use `pgdelta` (bundled with the CLI) via two subcommands:
 
 - `npx agentlink-sh@latest db apply` — applies all schema files with `pgdelta declarative apply`, which resolves statement ordering automatically. **This is the only command the agent uses during development.**
-- `npx agentlink-sh@latest db migrate name` — generates migrations by comparing catalog snapshots (no shadow DB needed). **Deployment only — used when the user explicitly asks.**
+- `npx agentlink-sh@latest db migrate name` — generates migrations by diffing a migrations-only baseline against the schema files (via `pgdelta plan` on catalog snapshots). Because the baseline can't be the db-apply'd live DB, it builds the baseline from the migration files — on a throwaway ephemeral stack (Docker) or via a read-only prod→dev catalog diff (cloud). **Deployment only — used when the user explicitly asks.** See "How `db migrate` works" below.
 
 DB URL is auto-resolved from `.env.local` (written during scaffold). No `--db-url` flag needed. An explicit `--db-url` override is available if needed.
 
@@ -75,16 +75,18 @@ This is written to `.env.local` during scaffold. The direct connection (`db.<ref
 
 > **Note:** Migration generation is a deployment concern. The agent does not run this during development — only when the user explicitly asks for a migration.
 
-Unified flow for both local and cloud:
-1. Exports baseline catalog from current DB state
-2. Applies schemas via `pgdelta declarative apply`
-3. Exports desired state catalog
-4. Diffs baseline vs desired (`pgdelta plan`) → writes migration file
-5. (Cloud only) User pushes with `npx supabase db push`
+A migration is the delta between a **migrations-only baseline** (what replaying `supabase/migrations/` produces) and the **schema-files desired state**. The baseline is the key: it must come from a database that reflects migrations only — **never the live dev DB**, because development uses `db apply` to converge the live DB to the schema files, so diffing the live DB against the schemas always yields nothing. (This was a real bug: `db migrate` used to diff the live DB against itself and emit an empty migration containing the literal text "No changes detected.")
 
-Non-destructive — no `db reset`, no data backup/restore.
+`db migrate` resolves the baseline by trying, in order:
 
-**Important:** In cloud mode, if `db apply` has already been run (which it has during development), the migration will be empty because the database already matches the schema files. This is expected — migrations are for deploying to a *different* environment. For cloud projects where you develop directly on the target database, migrations are unnecessary.
+1. **Empty baseline** — when there are no migration files yet (the `db rebuild` case). Baseline = empty; desired = the live (just-`db apply`'d) DB. Read-only, no Docker.
+2. **Ephemeral throwaway stack** (preferred) — copies `supabase/{config.toml,migrations}` to a temp dir on shifted ports + a unique `project_id`, runs a minimal `supabase start` (Postgres only) to replay the migrations onto a fresh base, then runs `catalog-export → declarative apply schemas → catalog-export → plan` against it, and tears the stack down. Needs Docker. This is env-independent — the baseline comes from the repo's migration files, not from whichever env is active.
+3. **Cloud read-only diff** — no Docker: `catalog-export(prod)` (prod is deployed only via `supabase db push`, so it's migrations-only) as baseline, `catalog-export(dev)` (db-apply'd → schema-files) as desired. Mutates nothing. Warns that it assumes prod is current with migrations and dev reflects your latest schema edits.
+4. **None available** → prints a warning and points at manual authoring. It never writes an empty or live-DB-diffed migration.
+
+`supabase db diff --use-pg-delta` is deliberately **not** used (see the section above): it lacks `--integration`/`--sql-format` parity and re-introduces the alphabetical shadow-build ordering problem.
+
+Non-destructive — no `db reset` of the dev DB, no data backup/restore. The ephemeral stack is a separate throwaway and never touches the user's running stack.
 
 **Limitation:** `pgdelta` filters out `cron` and `storage` schemas. Append `cron.schedule()` or storage policies manually to the generated migration.
 

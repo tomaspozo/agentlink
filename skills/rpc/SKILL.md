@@ -264,3 +264,4 @@ RETURN jsonb_build_object(
 - [ ] Validate input parameters before use
 - [ ] If you wrote a `_internal_admin_*` helper: revalidate `auth.uid() = p_user_id` inside the helper (defense in depth)
 - [ ] If your function name starts with `api._admin_*`: explicit `REVOKE ALL ON FUNCTION ... FROM PUBLIC, anon, authenticated;` AND `GRANT EXECUTE ON FUNCTION ... TO service_role;` — overrides the schema-level default that auto-grants EXECUTE to anon/authenticated
+- [ ] **Underlying table is granted**: because this INVOKER RPC reads/writes `public.*` AS the caller, every table it touches needs `GRANT SELECT, INSERT, UPDATE, DELETE ON public.<table> TO authenticated, service_role;` (in the table's schema file, bundled with `ENABLE ROW LEVEL SECURITY`). Without it the RPC raises `42501 permission denied for table …`. See the `database` skill's GRANT rule.

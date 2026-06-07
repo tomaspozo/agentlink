@@ -14,6 +14,8 @@ Authentication, authorization, and tenant isolation — all enforced by the data
 3. **RLS, isolation-only** (the backstop) — Every table has a cheap policy scoping rows to `tenant_id = _auth_tenant_id()` and/or `user_id = auth.uid()`. It is the safety net against a forgotten `WHERE` — in an agent-built codebase, the worst-case multi-tenant bug. **Never put permission checks in RLS** — isolation only.
 4. **Frontend guard** (UX only) — `useHasPermission()` / route guards hide or redirect. Never security: the backend guard is the real gate; a user who bypasses the UI still hits the 403.
 
+**Prerequisite under all of this — table GRANTs.** `api.*` RPCs are `SECURITY INVOKER`, so they touch `public` tables **as the caller**. The role needs a Postgres table grant just to access the table at all — a separate layer from RLS (grant = "can this role touch the table?"; RLS = "which rows?"). Supabase stopped auto-granting these in 2026, so **every table must `GRANT SELECT, INSERT, UPDATE, DELETE … TO authenticated, service_role`** (bundled with `ENABLE ROW LEVEL SECURITY`) or the RPC fails with `42501 permission denied` before RLS or the guard ever runs. `anon` is never granted on tables — anon-facing RPCs are `SECURITY DEFINER` and run as the owner. See the `database` skill's GRANT rule.
+
 ```
 Client → api.member_update(...)
             1. PERFORM auth_verify_access('membership.update')  → 403 if denied   (permission gate)

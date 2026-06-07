@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **Skills teach table `GRANT`s as a required layer — Supabase stopped auto-granting public-table privileges (default changed 2026).** Because `api.*` RPCs are `SECURITY INVOKER` they touch `public` tables as the caller, so each table needs `GRANT SELECT, INSERT, UPDATE, DELETE … TO authenticated, service_role` or the RPC fails with `42501 permission denied`. `skills/database/SKILL.md` adds a GRANT rule next to the RLS rule (bundle the grant with `ENABLE ROW LEVEL SECURITY`; `anon` never granted — anon RPCs are `SECURITY DEFINER`; `db apply` is the source of truth since `db migrate` may omit grants under pg-delta's `--integration supabase`), and the worked `readings` example in `references/workflow.md` now shows the grant. `skills/auth/SKILL.md` adds the table-grant prerequisite to the four-layer Security Model (grant = "can the role touch the table," RLS = "which rows"). `skills/rpc/SKILL.md` adds a security-checklist item for the underlying table grant. `agents/builder.md` adds the prerequisite-layer note to the Authorization section. `skills/cli/references/troubleshooting.md` adds a `42501 permission denied for table` entry with the fix + immediate-unblock SQL. Pairs with the CLI-side template + baseline-migration fix.
+
+- **Migration docs corrected to match the fixed `db migrate` — it now produces real, non-empty migrations.** `skills/cli/references/migration_system.md` rewrites "How `db migrate` works" around the tiered migrations-only baseline (empty / ephemeral throwaway stack / read-only prod→dev) and **deletes the old "in cloud mode the migration will be empty… this is expected" paragraph** that was teaching the agent to accept empty output and hand-author migrations. `skills/cli/references/troubleshooting.md` adds a "`db migrate` says 'No changes detected'" entry (it's a baseline-availability issue — ensure Docker or a prod+dev env — not a cue to hand-author) plus an intervene-table row. `agents/builder.md` notes `db migrate` doesn't touch the dev DB (builds the baseline on a throwaway Supabase stack, so Docker must be running, else a read-only prod→dev diff) and reinforces "never hand-author migration files." Pairs with the CLI-side fix.
+
 ## [0.27.0] - 2026-06-05
 
 ### Added
