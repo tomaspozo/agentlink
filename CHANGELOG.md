@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.29.0] - 2026-06-08
+
 ### Added
 
 - **Agent learns the project-upgrade workflow.** New `skills/cli/references/upgrading.md` documents the `check` → `--dry-run` → `--force-update` → `check` path, the function-level `@agentlink` merge, and a disposable files-only reference (`--skip-env --skip-install`) to diff against when the in-place update misbehaves. Linked from `agents/builder.md` and the `skills/cli/SKILL.md` reference index.
