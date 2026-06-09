@@ -501,6 +501,7 @@ Always prefer the CLI (`--force-update`) first. Only fix manually when the CLI c
 ## Reference Files
 
 - **[Workflows](./references/workflows.md)** — Common user scenarios as a flow-by-flow playbook: start a new project from zero, add prod, switch envs, deploy, recover from a failed deploy. Each entry lists the user trigger, questions to ask, commands to run, and watch-outs.
+- **[Upgrading](./references/upgrading.md)** — Moving an existing project onto a newer AgentLink version: `check` → `--dry-run` → `--force-update` → `check`, the function-level merge, and the disposable `--skip-env --skip-install` reference-diff fallback for when the in-place update misbehaves.
 - **[Migration System](./references/migration_system.md)** — Deep dive: two-tier migrations, how db diff works, adding extensions
 - **[Troubleshooting](./references/troubleshooting.md)** — Common errors and manual fixes
 - **[Known Issues](./references/known_issues.md)** — Transient/upstream toolchain quirks (e.g. `supabase start` storage health-check flake on first start) and their workarounds — not AgentLink bugs

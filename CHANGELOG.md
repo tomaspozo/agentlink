@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Agent learns the project-upgrade workflow.** New `skills/cli/references/upgrading.md` documents the `check` → `--dry-run` → `--force-update` → `check` path, the function-level `@agentlink` merge, and a disposable files-only reference (`--skip-env --skip-install`) to diff against when the in-place update misbehaves. Linked from `agents/builder.md` and the `skills/cli/SKILL.md` reference index.
+
 ### Changed
 
 - **Skills teach explicit, default-deny table grants — every reachable table is granted in its schema file; ungranted tables stay private.** Refines the 0.28.0 grant guidance for the model that ships with the Supabase CLI / pg-delta upgrade (where `auto_expose_new_tables = false` makes local new-default, so per-table grants are real diffs that reach prod via `db migrate`). `skills/database/SKILL.md` states the rule as "GRANT every table explicitly — default-deny" with examples for full-access, read-only (`SELECT` to authenticated), and internal (no grant → private) tables; the worked `readings` example in `references/workflow.md` shows the explicit `GRANT`. `skills/auth/SKILL.md`, `skills/rpc/SKILL.md`, and `agents/builder.md` frame the table-grant prerequisite as explicit/default-deny (a forgotten grant fails fast with `42501` in dev). `skills/cli/references/troubleshooting.md`'s `42501` entry explains it's expected default-deny and to add the table's grant. `anon` is never granted (anon RPCs are `SECURITY DEFINER`). Pairs with the CLI-side explicit-grant + toolchain-bump change.

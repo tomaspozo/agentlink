@@ -110,6 +110,17 @@ Overwrites template files, patches `config.toml`, applies SQL setup, and generat
 
 Typical workflow: `check` → identify what's wrong → `--force-update` → `check` again to confirm `ready: true`.
 
+### Upgrading to a newer AgentLink version
+
+`npx agentlink-sh@latest` auto-detects an existing project and runs the update flow — there's no separate `upgrade` command. The order of operations is `check` → `--dry-run` → `--force-update` → `check`:
+
+- **`--dry-run`** previews the full plan (which template files would be created / rewritten / merged / preserved, which `config.toml` patches apply, which SQL and functions deploy) **without touching disk, DB, or network.** Reach for this first whenever the user asks "what will the upgrade change?"
+- After a real `--force-update`, the CLI prints a changed-files summary and points at `git diff` (review) and `git checkout . && git clean -fd supabase/ .claude/` (rollback).
+
+**If the in-place update misbehaves** — `--dry-run` looks wrong, `--force-update` errors unclearly, or you don't trust what landed — scaffold a disposable files-only reference (`npx agentlink-sh@latest /tmp/agentlink-ref --skip-env --skip-install`, using the same name/skills/frontend as `agentlink.json`) and diff the env-independent trees (`supabase/schemas`, `supabase/functions`, the `20200101*` baseline migrations) against the real project. **Don't** diff `.env.local`, `agentlink.json`, `config.toml`, or `AGENTS.md` — they hold project-specific values and only produce noise.
+
+Full procedure, watch-outs, and the merge semantics: `skills/cli/references/upgrading.md`.
+
 ### Look up components with `info`
 
 Commands: `npx agentlink-sh@latest info` (summary list) or `npx agentlink-sh@latest info <name>` (detail for one component).
