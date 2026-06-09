@@ -38,7 +38,7 @@ npx agentlink-sh@latest <name>       # interactive — handles login + project c
 npx agentlink-sh@latest .            # scaffold in current directory
 ```
 
-Creates template files, config, schema files, frontend (React + Vite by default, Next.js with `--nextjs`), configures Claude Code, and installs the plugin + companion skills. Cloud is the default — the wizard prompts for Supabase OAuth (browser), org selection, and region.
+Creates template files, config, schema files, frontend (React + TanStack Start, SPA mode), configures Claude Code, and installs the plugin + companion skills. Cloud is the default — the wizard prompts for Supabase OAuth (browser), org selection, and region.
 
 ### Scaffold without env creation (`--skip-env`)
 
@@ -129,7 +129,6 @@ Shows type, summary, description, signature, and related components. Use to unde
 | Flag                      | Effect                                                                                                                                                                                                        |
 | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `--no-skills`             | Skip companion skill installation                                                                                                                                                                             |
-| `--nextjs`                | Use Next.js instead of Vite for frontend                                                                                                                                                                      |
 | `--no-frontend`           | Skip frontend scaffolding (backend only)                                                                                                                                                                      |
 | `--no-launch`             | Skip launching Claude Code after scaffold                                                                                                                                                                     |
 | `-y, --yes`               | Auto-confirm all prompts                                                                                                                                                                                      |

@@ -67,7 +67,7 @@ diff -u  supabase/migrations/20200101000000_initial_agentlink_bootstrap.sql \
 
 ### Watch-outs — the diff is noisy unless you control for these
 
-**1. Scaffold output is parameterized.** Project name, selected companion skills, and frontend type are substituted into the output. Read the real project's `agentlink.json` and scaffold the reference with the **same options** (same name, same skills, same frontend `--nextjs`/default), or you'll see spurious diffs everywhere those values appear.
+**1. Scaffold output is parameterized.** Project name, selected companion skills, and frontend choice are substituted into the output. Read the real project's `agentlink.json` and scaffold the reference with the **same options** (same name, same skills, and frontend on/off via `--no-frontend`), or you'll see spurious diffs everywhere those values appear.
 
 **2. Only trust env-independent files.** Diff these:
 - `supabase/schemas/**` — the managed SQL (this is what matters most)

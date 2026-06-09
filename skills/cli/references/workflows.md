@@ -18,7 +18,7 @@ Use this as a lookup. When a user prompt matches a trigger below, follow that se
 **Questions to ask**
 
 - **What are you building?** (A one-liner is fine — becomes the prompt passed to Claude Code.)
-- **Frontend?** React + Vite (default), Next.js (`--nextjs`), or backend-only (`--no-frontend`).
+- **Frontend?** React + TanStack Start (SPA, default), or backend-only (`--no-frontend`).
 - **Where?** New subdirectory (default, pass the project name) or the current directory (`.` as the name).
 
 If the user asks to run the scaffold for them through you (agent-driven): you do NOT have browser access, so you can't complete Supabase OAuth. Use `--skip-env`.

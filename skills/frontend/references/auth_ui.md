@@ -1,6 +1,6 @@
 # Auth UI Patterns
 
-Client-side authentication UI: sign-in, sign-up, password reset, email confirmation, magic links, and workspace-invitation acceptance. The scaffold ships a complete canonical flow in both Next.js and Vite templates — this doc explains how the pieces fit together so you can customize without breaking it.
+Client-side authentication UI: sign-in, sign-up, password reset, email confirmation, magic links, and workspace-invitation acceptance. The scaffold ships a complete canonical flow in the React + TanStack Start (SPA) template — this doc explains how the pieces fit together so you can customize without breaking it.
 
 ## Contents
 
@@ -76,15 +76,15 @@ Two consolidations to keep in mind:
 | `/auth/check-inbox` | Pending email state — Resend + OTP entry | `useResendEmail`, `useVerifyOtpFlow` | recovery → `/update-password`; signup/magiclink → `/dashboard` |
 | `/auth/forgot-password` | Request a recovery email | `useResetPasswordFlow` | success → `/auth/check-inbox?type=recovery&email=…` |
 | `/update-password` | Set a new password (recovery destination + in-app change) | `useUpdatePasswordFlow` | success → `/dashboard` |
-| `/auth/confirm` | Single PKCE callback for link clicks | (server-side `exchangeCodeForSession` in Next.js; `useEffect` in Vite) | branches on `?type=` |
+| `/auth/confirm` | Single PKCE callback for link clicks | `useEffect` `exchangeCodeForSession` | branches on `?type=` |
 | `/accept-invite` | Workspace invitation acceptance | `useAcceptInvite` | accepted → `/dashboard`; logged out → `/auth/sign-in?next=…` |
 | `/settings/members` | Admin: list, invite, revoke, resend, update role, remove | RPC calls (no hooks layer needed) | mutations refresh the table |
 
-### Vite route layout
+### Route layout
 
 ```
 src/routes/
-  __root.tsx
+  __root.tsx                       — document shell + providers (see frontend SKILL)
   index.tsx                       — public landing
   _anon.tsx                       — anon-only layout (redirects signed-in users to /dashboard)
   _anon/
@@ -103,33 +103,13 @@ src/routes/
       members.tsx
 ```
 
-### Next.js route layout
-
-```
-app/
-  page.tsx                          — public landing
-  auth/
-    sign-in/page.tsx
-    sign-up/page.tsx
-    check-inbox/page.tsx
-    forgot-password/page.tsx
-    confirm/route.ts                — server-side PKCE callback (route handler)
-  update-password/page.tsx           — TOP-LEVEL (recovery + in-app change)
-  accept-invite/page.tsx             — TOP-LEVEL
-  protected/
-    layout.tsx                       — server-side session guard
-    page.tsx                         — placeholder dashboard
-  settings/
-    members/page.tsx
-```
-
-The Next.js proxy middleware (`lib/supabase/proxy.ts`) gates unauth'd users by redirecting to `/auth/sign-in?next=<original-path>`. The allowlist for unauth-accessible paths is `/`, `/auth/*`, `/update-password`, `/accept-invite`.
+Gating is by folder: `_anon/*` is anon-only, `_auth/*` is gated (each via the layout route's `beforeLoad`), and top-level files are public.
 
 ---
 
 ## Hooks layer
 
-`lib/auth/` (Next.js) and `src/lib/auth/` (Vite) ship the same set of hooks. Each wraps one Supabase call with the canonical post-call logic — friendly errors via `formatAuthError`, post-signup `refreshSession()` so the JWT carries the `tenant_id` claim, etc. Hooks do not navigate; they return discriminated state and the page picks the destination.
+`src/lib/auth/` ships a set of hooks. Each wraps one Supabase call with the canonical post-call logic — friendly errors via `formatAuthError`, post-signup `refreshSession()` so the JWT carries the `tenant_id` claim, etc. Hooks do not navigate; they return discriminated state and the page picks the destination.
 
 | Hook | Wraps | Returns |
 |------|-------|---------|
@@ -188,7 +168,7 @@ What's load-bearing — change carefully:
 - **`useSignUpFlow`'s `!data.session` branch.** Skipping it produces the silent-failure bug (sign-up succeeds, no UI feedback, user stuck on the form).
 - **`refreshSession()` after signup.** The trigger writes `tenant_id` AFTER the initial JWT is minted; without refresh, every tenant-scoped RPC fails until the user reloads.
 - **`useAcceptInvite`'s auth-lock guard.** Two paths can race for the auth lock during invite acceptance — see [Post-auth actions](#post-auth-actions). The hook already implements the guard; don't reorder its operations.
-- **PKCE flow type.** `auth.confirm` and `useAcceptInvite` rely on `exchangeCodeForSession`, which requires `flowType: 'pkce'`. Vite ships the explicit setting in `lib/supabase.ts`; Next.js's `@supabase/ssr` defaults to PKCE.
+- **PKCE flow type.** `auth.confirm` and `useAcceptInvite` rely on `exchangeCodeForSession`, which requires `flowType: 'pkce'`. The scaffold sets it explicitly in `src/lib/supabase.ts`.
 - **`/update-password` is NOT under `_anon`.** Recovery sessions have a session, so `_anon` would bounce them away. Keep it top-level.
 
 What's load-bearing — never change:
@@ -205,7 +185,7 @@ This is the single biggest reason the OTP-paste input on `/auth/check-inbox` is 
 
 Don't change this UX. Hiding the OTP input is a footgun.
 
-If you need to support a workflow where the email is always opened on a different device, consider switching to implicit flow (`flowType: 'implicit'`) — but you'll lose server-side `getClaims()` patterns in Next.js, and the OTP becomes redundant.
+If you need to support a workflow where the email is always opened on a different device, consider switching to implicit flow (`flowType: 'implicit'`) — but the OTP becomes redundant, and you'd give up the PKCE guarantees the scaffold relies on.
 
 ---
 
@@ -228,28 +208,7 @@ async function handleOAuthSignIn(provider: "google" | "github") {
 }
 ```
 
-### Callback route (Next.js)
-
-```typescript
-// app/auth/callback/route.ts
-import { createClient } from "@/lib/supabase/server";
-import { NextResponse } from "next/server";
-
-export async function GET(request: Request) {
-  const { searchParams, origin } = new URL(request.url);
-  const code = searchParams.get("code");
-  const next = searchParams.get("next") ?? "/protected";
-
-  if (code) {
-    const supabase = await createClient();
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
-    if (!error) return NextResponse.redirect(`${origin}${next}`);
-  }
-  return NextResponse.redirect(`${origin}/auth/sign-in?error=oauth_failed`);
-}
-```
-
-### Callback route (Vite)
+### Callback route
 
 ```typescript
 // src/routes/auth.callback.tsx
@@ -357,7 +316,7 @@ const canManage = useHasPermission("membership.update");
 </RequirePermission>
 ```
 
-### Recipe — Vite (TanStack Router): guard a page
+### Recipe — guard a page (TanStack Router `beforeLoad`)
 
 ```tsx
 // routes/_auth/settings/members.tsx
@@ -371,21 +330,5 @@ export const Route = createFileRoute("/_auth/settings/members")({
 
 `requirePermission` reads the session, refreshes once if the tenant claim
 isn't present yet (fresh-signup race), then redirects to `/forbidden` (a route
-under `_auth`, so the TopBar/workspace switcher stays mounted).
-
-### Recipe — Next.js (App Router): guard a section
-
-```tsx
-// app/settings/layout.tsx — server component, runs before the client page
-import { requirePermission } from "@/lib/permissions.server";
-
-export default async function SettingsLayout({ children }) {
-  await requirePermission("membership.read"); // → redirect("/forbidden")
-  return <>{children}</>;
-}
-```
-
-Client controls inside the page gate with the same `useHasPermission(...)`.
-An optional middleware route→permission map is provided (commented) in
-`lib/supabase/proxy.ts` if you want a coarse gate before render — the per-page
-server guard is the default.
+under `_auth`, so the TopBar/workspace switcher stays mounted). Client controls
+inside the page gate with the same `useHasPermission(...)`.

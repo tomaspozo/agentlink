@@ -55,7 +55,7 @@ Skills also activate automatically when Claude detects a relevant task. You can 
 - `/link:rpc` — RPC-first data access, CRUD templates, pagination
 - `/link:edge-functions` — `withSupabase` wrapper, webhooks, secrets
 - `/link:auth` — RLS policies, RBAC, multi-tenancy, invitation flows
-- `/link:frontend` — Supabase client setup, RPC calls, auth state, SSR
+- `/link:frontend` — Supabase client setup, RPC calls, auth state, TanStack Start (SPA) rendering
 
 ---
 
@@ -107,10 +107,6 @@ The CLI installs a curated set of companion skills automatically — the agent a
 - `shadcn/ui`
 - `vercel-labs/agent-skills@vercel-react-best-practices`
 - `resend/react-email`, `resend/email-best-practices`, `resend/resend-skills`
-
-**Auto-installed for Next.js projects (`--nextjs`):**
-
-- `vercel-labs/next-skills --skill next-best-practices`
 
 To install or update a companion skill manually use the `skills` cli:
 

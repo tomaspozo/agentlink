@@ -29,7 +29,7 @@ This is **not** just an env var rename. The migration touches client code, edge 
 
 | Area | Old Pattern | New Pattern |
 |------|-------------|-------------|
-| Client env vars | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` |
+| Client env vars | `VITE_SUPABASE_ANON_KEY` | `VITE_SUPABASE_PUBLISHABLE_KEY` |
 | Server env vars | `SUPABASE_SERVICE_ROLE_KEY` | `SUPABASE_SECRET_KEY` |
 | Edge function auth | Manual `createClient()` + gateway JWT check | `withSupabase` wrapper handles auth |
 | Edge function config | `verify_jwt = true` (default) | `verify_jwt = false` (required) |
@@ -46,7 +46,7 @@ Find-and-replace env vars across `.env`, `.env.example`, `.env.local`, and all s
 
 | Old | New |
 |-----|-----|
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` |
+| `VITE_SUPABASE_ANON_KEY` | `VITE_SUPABASE_PUBLISHABLE_KEY` |
 | `SUPABASE_ANON_KEY` | `SUPABASE_PUBLISHABLE_KEY` (or framework-prefixed equivalent) |
 | `SUPABASE_SERVICE_ROLE_KEY` | `SUPABASE_SECRET_KEY` |
 
@@ -55,14 +55,14 @@ Update all `createClient()` calls that reference these env vars:
 ```typescript
 // Before
 const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  import.meta.env.VITE_SUPABASE_URL,
+  import.meta.env.VITE_SUPABASE_ANON_KEY
 );
 
 // After
 const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!
+  import.meta.env.VITE_SUPABASE_URL,
+  import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY
 );
 ```
 
@@ -202,7 +202,7 @@ Update environment variables in your hosting platform's dashboard:
 
 | Old | New |
 |-----|-----|
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` |
+| `VITE_SUPABASE_ANON_KEY` | `VITE_SUPABASE_PUBLISHABLE_KEY` |
 | `SUPABASE_SERVICE_ROLE_KEY` | `SUPABASE_SECRET_KEY` |
 
 ### Supabase dashboard
@@ -218,7 +218,7 @@ Update environment variables in your hosting platform's dashboard:
 After completing all steps, run through this checklist:
 
 - [ ] No references to `SUPABASE_ANON_KEY` or `SUPABASE_SERVICE_ROLE_KEY` in codebase
-- [ ] No references to `NEXT_PUBLIC_SUPABASE_ANON_KEY` in codebase
+- [ ] No references to `VITE_SUPABASE_ANON_KEY` in codebase
 - [ ] `verify_jwt = false` set for all functions in `config.toml`
 - [ ] Edge function secrets configured (`npx supabase secrets list`)
 - [ ] Vault secrets present (`npx agentlink-sh@latest check` passes)

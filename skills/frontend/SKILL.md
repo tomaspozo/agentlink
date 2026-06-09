@@ -7,13 +7,11 @@ description: Supabase client integration for frontend applications. Use when the
 
 Connecting frontend applications to the Supabase backend. Client initialization, RPC calls, auth state, routing, data fetching, forms, and type safety.
 
-The CLI scaffolds React + Vite + TanStack Router (file-based routing) by default. Next.js is available with `--nextjs`. Both use `{ db: { schema: 'api' } }` — the difference is client initialization and auth handling.
+The CLI scaffolds a single frontend: **React + TanStack Start in SPA mode** (Vite under the hood, file-based routing via TanStack Router, TanStack Query for data). It ships as a fully client-rendered static SPA — no server. Because it's built on TanStack Start, server-side rendering is a config switch away later, with no route rewrites (see [Rendering](#rendering--spa-now-ssr-later)).
 
 ## Client Initialization
 
-### Vite / SPA (default)
-
-Scaffolded by the CLI in `src/lib/supabase.ts`. Uses `@supabase/supabase-js` directly. For client-side only apps (React SPA, Vue, etc.) without server-side rendering:
+Scaffolded by the CLI in `src/lib/supabase.ts`. Uses `@supabase/supabase-js` directly — the app is client-rendered, so there's no server client to configure:
 
 ```typescript
 import { createClient } from "@supabase/supabase-js";
@@ -25,46 +23,20 @@ const supabase = createClient(
 );
 ```
 
-### Next.js / SSR (`--nextjs`)
-
-For projects created with `npx agentlink-sh@latest <name> --nextjs`. Uses `@supabase/ssr` for cookie-based session management:
-
-```typescript
-import { createBrowserClient } from "@supabase/ssr";
-
-// Client-side — use in components, hooks, client modules
-const supabase = createBrowserClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
-  { db: { schema: "api" } }
-);
-```
-
-```typescript
-import { createServerClient } from "@supabase/ssr";
-
-// Server-side — use in server components, API routes, middleware
-const supabase = createServerClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
-  { db: { schema: "api" }, cookies: { /* cookie handlers — see SSR reference */ } }
-);
-```
-
-> **Load [SSR Patterns](./references/ssr.md) for full `@supabase/ssr` setup with Next.js App Router or SvelteKit.**
+The data API schema is always `api` (`{ db: { schema: 'api' } }`). Env vars use Vite's `VITE_` prefix and are read via `import.meta.env` — this holds even in TanStack Start SPA mode, since the build is Vite-based.
 
 ---
 
 ## Environment Variables
 
-### Variable names by framework
+The scaffold uses Vite's `VITE_` prefix, read via `import.meta.env`:
 
-| Framework | URL | Publishable key | Secret key (server-only) |
-|-----------|-----|-----------------|--------------------------|
-| Vite (React, Vue) | `VITE_SUPABASE_URL` | `VITE_SUPABASE_PUBLISHABLE_KEY` | N/A (no server) |
-| Next.js | `NEXT_PUBLIC_SUPABASE_URL` | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | `SUPABASE_SECRET_KEY` |
-| SvelteKit | `PUBLIC_SUPABASE_URL` | `PUBLIC_SUPABASE_PUBLISHABLE_KEY` | `SUPABASE_SECRET_KEY` |
-| Astro | `PUBLIC_SUPABASE_URL` | `PUBLIC_SUPABASE_PUBLISHABLE_KEY` | `SUPABASE_SECRET_KEY` |
+| Variable | Purpose |
+|----------|---------|
+| `VITE_SUPABASE_URL` | Supabase API URL (client-safe) |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | Publishable key (client-safe) |
+
+There's no client-exposed secret key — the SPA only ever uses the publishable key, and RLS + the `api` schema are the security boundary. (Server-only secrets like `SUPABASE_SECRET_KEY` belong to edge functions, never the frontend bundle.)
 
 ### What's safe to expose
 
@@ -147,9 +119,9 @@ npx agentlink-sh@latest db types
 ```
 
 This works in both local and cloud mode. Types are written to
-`src/types/database.ts` (Vite) or `types/database.ts` (Next.js). The
-scaffolded Supabase client already imports from these paths — just
-run `db types` (or `db apply`, which runs it for you) to populate them.
+`src/types/database.ts`. The scaffolded Supabase client already imports
+from this path — just run `db types` (or `db apply`, which runs it for
+you) to populate them.
 
 ```typescript
 import { createClient } from "@supabase/supabase-js";
@@ -587,11 +559,11 @@ a refresh re-runs the hook. The scaffold handles this in two places:
 > hides a button.
 
 Permissions come from the JWT (`app_metadata.permissions`) for the **active
-workspace** — the same array the gotcha above decodes. Both templates ship a
-hook with identical name + semantics:
+workspace** — the same array the gotcha above decodes. The scaffold ships a
+hook for it:
 
 ```typescript
-// Vite + Next — fails safe to false while loading / tenant not ready
+// fails safe to false while loading / tenant not ready
 const canEdit = useHasPermission("membership.update");
 <Button disabled={!canEdit}>Change role</Button>
 ```
@@ -600,24 +572,17 @@ Convention: **disable** mutating buttons (discoverable), **hide** nav entries
 the user can't use (`<RequirePermission permission="...">`).
 
 **Page guard** (route-level, also UX): block rendering a page when the active
-workspace lacks a permission.
-
-- **Vite (TanStack):** `beforeLoad: () => requirePermission("membership.read")`
-  in the route — redirects to `/forbidden`. Reuses the `use-tenant-guard`
-  refresh-once remedy so a fresh signup never false-denies.
-- **Next.js (App Router):** a server component guard —
-  `await requirePermission("membership.read")` in a `layout.tsx` (e.g.
-  `app/settings/layout.tsx`) — redirects to `/forbidden` before the client
-  page renders. `lib/permissions.server.ts` ships it; an optional middleware
-  route→permission map lives commented in `lib/supabase/proxy.ts`.
+workspace lacks a permission. Use the route's `beforeLoad`:
+`beforeLoad: () => requirePermission("membership.read")` redirects to
+`/forbidden`. It reuses the `use-tenant-guard` refresh-once remedy so a fresh
+signup never false-denies.
 
 See `references/auth_ui.md` (recipes) and `references/routing.md` (the route
-seam for each router). Scaffolded files: Vite `hooks/use-has-permission.ts`,
+seam). Scaffolded files: `hooks/use-has-permission.ts`,
 `components/require-permission.tsx`, `lib/require-permission.ts`,
-`routes/_auth/forbidden.tsx`; Next `hooks/use-has-permission.ts`,
-`lib/permissions.ts`, `lib/permissions.server.ts`, `app/forbidden/page.tsx`.
+`routes/_auth/forbidden.tsx`.
 
-### Scaffolded auth infrastructure (Vite projects)
+### Scaffolded auth infrastructure
 
 The scaffold ships a working auth entry point plus the hooks to extend
 it. You are not starting from zero.
@@ -664,31 +629,31 @@ export const Route = createFileRoute("/_auth")({
 
 ### Provider nesting order
 
-Providers are nested in `__root.tsx`. The order matters:
+In TanStack Start, `src/routes/__root.tsx` splits into two pieces:
+
+- **`shellComponent`** — the HTML document (`<html>/<head>/<body>`, `<HeadContent/>`, `<Scripts/>`, the dark-mode-before-paint script). It is server-rendered during the SPA shell prerender, so it must stay free of app code that touches the browser or env (no Supabase client here).
+- **`component`** — the in-body app, rendered on the client only in SPA mode. This is where the providers wrap `<Outlet/>`:
 
 ```
 QueryClientProvider
   -> AuthProvider
-    -> RouterProvider
-      + Toaster
+    -> Outlet
+       + Toaster
 ```
 
-`QueryClientProvider` is outermost so auth and route components can use queries. `AuthProvider` wraps the router so route guards can access auth state. `Toaster` is a sibling of the router, not a wrapper.
+`QueryClientProvider` is outermost so auth and route components can use queries. `AuthProvider` wraps `<Outlet/>` so route guards can access auth state. `Toaster` is a sibling of the outlet. Keeping the providers in `component` (not `shellComponent`) is what stops the Supabase client — which reads `import.meta.env` at module load — from being pulled into the prerendered shell.
 
 > **Load [Auth UI Patterns](./references/auth_ui.md) for sign-in/sign-up forms, OAuth redirect flows, and protected route patterns.**
 
 ---
 
-## SSR
+## Rendering — SPA now, SSR later
 
-For server-side rendered apps, `@supabase/ssr` handles cookie-based session management so the server can make authenticated Supabase calls on behalf of the user.
+The scaffold ships as a **fully client-rendered SPA** (TanStack Start with `spa: { enabled: true }`): no server-side execution of `beforeLoad`/loaders, no SSR of route components. The build prerenders a static HTML shell and a client bundle — deploy the static output anywhere, with a catch-all rewrite of unknown paths to the shell.
 
-Key concepts:
-- **`createBrowserClient`** — client-side, reads cookies automatically
-- **`createServerClient`** — server-side, requires explicit cookie handlers
-- **Middleware** — refreshes tokens on every server request to keep the session alive
+Because it's TanStack Start (not plain Vite + Router), **moving to server-side rendering later is a config switch, not a rewrite**: set `spa: { enabled: false }` in `vite.config.ts`, set `defaultSsr` in `createStart`, and/or opt individual routes in with `ssr: true | 'data-only' | false`. The router, routes, loaders, and any server functions carry over unchanged. Cookie-based server auth (`@supabase/ssr`) is what you'd add at that point.
 
-> **Load [SSR Patterns](./references/ssr.md) for full setup with Next.js App Router and SvelteKit, including middleware and cookie handling.**
+> **Load [Rendering / SSR-later Patterns](./references/ssr.md) for the exact SPA-mode config, the static-deploy shell fallback, and how to enable SSR + `@supabase/ssr` cookie handling when you need it.**
 
 ---
 
@@ -705,7 +670,7 @@ If available, these skills are invoked automatically at the right points in the 
 
 ## Reference Files
 
-- **[🌐 SSR Patterns](./references/ssr.md)** — `@supabase/ssr` setup, middleware, cookie handling for Next.js and SvelteKit
+- **[🌐 Rendering / SSR-later Patterns](./references/ssr.md)** — TanStack Start SPA-mode config, static-deploy shell fallback, and how to switch on SSR + `@supabase/ssr` cookie handling later
 - **[🔑 Auth UI Patterns](./references/auth_ui.md)** — Sign-in/sign-up forms, OAuth redirect flow, protected routes
 - **[🗂 Routing Patterns](./references/routing.md)** — File-based routing, layouts, navigation, search params, route loaders
 - **[📊 Data Fetching Patterns](./references/data_fetching.md)** — TanStack Query, typedRpc, query key factories, cache invalidation
