@@ -6,22 +6,22 @@
 
 **Cause:** Supabase stopped auto-granting table privileges to `anon`/`authenticated`/`service_role` on `public` (default changed 2026; new cloud projects, and existing projects' future tables from Oct 30 2026). The `api.*` RPCs are `SECURITY INVOKER`, so they touch `public` tables **as the caller** — which now has no privilege. Grants are a layer separate from RLS: the grant decides whether the role can touch the table at all; RLS decides which rows.
 
-**Fix:** Add the grant to the table's schema file, bundled with `ENABLE ROW LEVEL SECURITY`, then `db apply`:
+**This is expected default-deny behavior** — AgentLink does **not** auto-grant tables. The table is missing its explicit grant.
+
+**Fix:** add the grant to the table's schema file (bundled with `ENABLE ROW LEVEL SECURITY`), then `db apply`:
 ```sql
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.<table> TO authenticated, service_role;
--- read-only reference table → SELECT to authenticated, full to service_role.
--- Never grant anon on tables (anon-facing RPCs are SECURITY DEFINER).
+-- read-only reference table → GRANT SELECT to authenticated, full to service_role.
+-- internal table only touched by DEFINER/service code → grant NOTHING (stays private).
 ```
-`db apply` diffs the live DB, so it applies the grant on a new-default project; `env deploy` runs `db apply`, so deploys carry it. **`db apply` is the source of truth for grants** — a `db migrate`-generated migration may omit them (pg-delta's `--integration supabase` assumes the old auto-grant default), but `db apply` (and the scaffolded baseline migration's explicit grants) cover it.
+`db apply` applies it on dev; `db migrate` carries it into the migration so it reaches prod (`db push`). Never grant `anon` (anon-facing RPCs are `SECURITY DEFINER`).
 
-For an existing AgentLink project, `npx agentlink-sh@latest --force-update` refreshes the managed table files (`multitenancy.sql`, `profiles.sql`, `_rbac.sql`) with the grants; then `db apply`. To unblock immediately without editing files:
+To unblock an existing table immediately without editing files:
 ```sql
-grant select, insert, update, delete on all tables in schema public to authenticated, service_role;
-alter default privileges for role postgres in schema public
-  grant select, insert, update, delete on tables to authenticated, service_role;
+grant select, insert, update, delete on public.<table> to authenticated, service_role;
 ```
 
-See the `database` skill's GRANT rule and the `auth` skill's Security Model.
+See the `database` skill's table-privileges rule and the `auth` skill's Security Model.
 
 ---
 

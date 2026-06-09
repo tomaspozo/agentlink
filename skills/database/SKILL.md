@@ -70,19 +70,25 @@ CREATE OR REPLACE FUNCTION api.chart_create(...)
 
 **RLS on every table is ISOLATION-ONLY.** When you create a tenant-scoped table, give it `ENABLE ROW LEVEL SECURITY` and a cheap policy scoping rows to the tenant/owner — `tenant_id = (SELECT public._auth_tenant_id())` and/or `user_id = (SELECT auth.uid())`. Do **not** put permission checks (`_auth_has_permission(...)`) in policies. Permission/action authz lives in the `api.*` RPC via `public.auth_verify_access('<entity>.<action>')`. See the `auth` skill's four-layer Security Model and checklist.
 
-**GRANT table privileges on every new table — bundle it with the RLS enable.** Supabase no longer auto-grants table privileges (default changed 2026), and the `api.*` RPCs are `SECURITY INVOKER`, so they touch tables **as the calling role** — `authenticated`/`service_role` need a table grant or every RPC fails with `42501 permission denied for table …`. Grants and RLS are separate layers: the grant decides whether the role can touch the table at all; RLS decides which rows. Grant `authenticated, service_role` (never `anon` — anon-facing RPCs are `SECURITY DEFINER` and run as the owner, so anon never needs a table grant):
+**GRANT every table explicitly — default-deny.** Supabase stopped auto-granting table privileges in 2026, and AgentLink keeps that posture on purpose: a `public` table is **unreachable until you grant it**, so internal/audit/extension tables stay private (least privilege). The `api.*` RPCs are `SECURITY INVOKER` (they touch tables **as the caller**), so a table with no grant fails `42501 permission denied for table …` — and because local dev is also new-default (`config.toml` sets `auto_expose_new_tables = false`), a forgotten grant fails **immediately in dev**, not silently on prod. Grant `authenticated, service_role` (never `anon`), bundled with the RLS enable:
 
 ```sql
 CREATE TABLE IF NOT EXISTS public.charts ( ... );
 ALTER TABLE public.charts ENABLE ROW LEVEL SECURITY;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.charts TO authenticated, service_role;
--- read-only reference table? grant SELECT to authenticated, full to service_role:
---   GRANT SELECT, INSERT, UPDATE, DELETE ON public.<ref> TO service_role;
---   GRANT SELECT ON public.<ref> TO authenticated;
--- identity/serial PK? also: GRANT USAGE, SELECT ON SEQUENCE public.<seq> TO authenticated, service_role;
+
+-- READ-ONLY for authenticated (e.g. reference data): grant SELECT only;
+-- service_role keeps full DML for seeding.
+ALTER TABLE public.refs ENABLE ROW LEVEL SECURITY;
+GRANT SELECT ON public.refs TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.refs TO service_role;
+
+-- INTERNAL table (only DEFINER / service-side code touches it): grant NOTHING
+-- to authenticated — it stays unreachable through INVOKER RPCs.
+ALTER TABLE public._audit_log ENABLE ROW LEVEL SECURITY;   -- no GRANT = private
 ```
 
-`db apply` is what actually applies these (it diffs the live DB), and `env deploy` runs `db apply`, so the grant lands on every dev/prod deploy. Note: a `db migrate`-generated migration may **omit** these grants — pg-delta's `--integration supabase` assumes the old auto-grant default — so the grant in the schema file (applied by `db apply`) is the source of truth, not the migration body.
+These grants are real declarative schema: `db apply` applies them on dev, and `db migrate` carries them into the migration so they reach prod (`db push`). **Never grant `anon` on tables** — anon-facing RPCs are `SECURITY DEFINER` and run as the owner, so anon never needs a table grant. (Grants and RLS are separate layers: grant = "can the role touch the table"; RLS = "which rows.")
 
 ---
 

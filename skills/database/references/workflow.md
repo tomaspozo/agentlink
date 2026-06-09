@@ -134,10 +134,9 @@ CREATE TABLE IF NOT EXISTS public.readings (
 );
 
 ALTER TABLE public.readings ENABLE ROW LEVEL SECURITY;
-
--- Table privileges (bundle with RLS). The api.* RPCs are SECURITY INVOKER, so
--- they touch this table as the caller; Supabase no longer auto-grants. RLS
--- still gates rows. anon omitted (anon RPCs are SECURITY DEFINER).
+-- Grant explicitly (default-deny). The api.* RPCs are SECURITY INVOKER, so the
+-- caller role needs this; db apply applies it on dev and db migrate carries it
+-- into the migration for prod. RLS still gates rows. anon is never granted.
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.readings TO authenticated, service_role;
 
 -- Indexes
