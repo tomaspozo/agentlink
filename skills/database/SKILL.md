@@ -90,6 +90,12 @@ ALTER TABLE public._audit_log ENABLE ROW LEVEL SECURITY;   -- no GRANT = private
 
 These grants are real declarative schema: `db apply` applies them on dev, and `db migrate` carries them into the migration so they reach prod (`db push`). **Never grant `anon` on tables** — anon-facing RPCs are `SECURITY DEFINER` and run as the owner, so anon never needs a table grant. (Grants and RLS are separate layers: grant = "can the role touch the table"; RLS = "which rows.")
 
+**Functions are default-deny too — and mostly automatic.** Postgres grants `EXECUTE` on every new function to `PUBLIC` (incl. `anon`); AgentLink revokes that so a function is callable only by roles granted explicitly. You rarely write function grants:
+- **`api.*` RPCs** auto-grant `EXECUTE` to `authenticated, service_role` (the `api` schema's default privilege) — write the function, done. For an **anon-callable** RPC, add `GRANT EXECUTE ON FUNCTION api.<fn>(<args>) TO anon;` (and make it `SECURITY DEFINER` so it runs as owner). Always keep the `auth_verify_access(...)` guard — it's the real allow/deny, regardless of who can execute.
+- **`public.*` helpers** are private by default. An RLS helper a policy calls needs `GRANT EXECUTE ON FUNCTION public.<fn>(<args>) TO authenticated;` (RLS evaluates it as the querying role). A `SECURITY DEFINER` helper you call from an RPC needs `GRANT EXECUTE … TO authenticated` (or `service_role`) for that caller. Trigger functions need no grant.
+
+The CLI keeps this enforced on prod: `db migrate` appends a blanket `REVOKE EXECUTE ON ALL FUNCTIONS … FROM PUBLIC` to any migration that creates a function (Postgres's `PUBLIC` default can't be suppressed any other way, and pg-delta won't carry per-function revokes). So a new function is locked from `anon` automatically; your job is just the explicit `GRANT` for whoever *should* call it.
+
 ---
 
 ## Development Loop
