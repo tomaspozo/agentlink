@@ -8,20 +8,21 @@ How to move an existing project onto a newer AgentLink version — and what to d
 
 ## The normal path: `check` → `--dry-run` → `--force-update` → `check`
 
-Always try the CLI first. It knows how to merge managed blocks, patch `config.toml`, apply the SQL, and bump the setup hash — none of which you should reproduce by hand.
+Always try the CLI first. It knows how to merge managed files against the base snapshot, patch `config.toml`, apply the SQL, and bump the setup hash — none of which you should reproduce by hand.
 
 1. **`npx agentlink-sh@latest check`** — read-only. Reports `ready`, `supabase_running`, `database` (extensions, queues, functions, secrets, api_schema), and `files`. The `setupHash` on disk vs. the template hash tells you whether there's drift. Look at which fields are `false`.
 
 2. **`npx agentlink-sh@latest --dry-run`** — **this is the "what would change" tool.** It computes the full plan without touching disk, DB, or network, so it's safe on a dirty tree. It prints:
    - **Setup hash** — on-disk vs. template, with `(match)` or `(drift)`.
-   - **Template files** (out of the full set) grouped as `unchanged` / `would create` / `would rewrite` / `merged` (managed blocks updated, your overrides preserved) / `project-owned` (all `@agentlink` annotations removed — left untouched) / `user-customizable` (present on disk — not rewritten).
+   - **Base snapshot** — a status block reporting whether `.agentlink/template-base/` is present and complete (it's the committed record of the templates last shipped; the merge compares disk against it).
+   - **Template files** (out of the full set) grouped against the base snapshot as `unchanged` / `would create` / `would fast-forward` (disk is pristine — overwritten with the new template) / `customized` (you edited it, no upstream change — preserved silently) / `CONFLICT` (you edited it **and** the template changed — disk preserved, 3-way reconcile surfaced) / `preserved (no base)` (no base entry — disk preserved, fail-safe).
    - **Upgrade cleanup** — version-path `DROP`s that run before apply, if any.
    - **config.toml** — `no patches needed` or the list of patches that `would patch`.
    - **Side effects** (skipped in dry run) — plugin + skills update, AGENTS.md / `.claude/settings.json` rewrite, how many SQL files apply and to which DB, PostgREST + auth config (cloud), edge-function deploys (cloud), verification, and the `agentlink.json` setupHash write.
 
    Read this first. It almost always answers "what does the upgrade do to my project?" without any disposable-project trick.
 
-3. **`npx agentlink-sh@latest --force-update`** — applies it. Overwrites template files (function-level merge — see below), patches `config.toml`, runs the SQL setup, deploys functions on cloud, regenerates migrations if schemas changed. **Requires Supabase running** (local: `supabase start`; cloud: it links automatically). Gates on a clean git tree — commit or stash first, or pass `--allow-dirty` (rollback then gets messy because your edits and AgentLink's writes are mixed).
+3. **`npx agentlink-sh@latest --force-update`** — applies it. Updates template files (file-level merge against the base snapshot — see below), patches `config.toml`, runs the SQL setup, deploys functions on cloud, regenerates migrations if schemas changed. **Requires Supabase running** (local: `supabase start`; cloud: it links automatically). Gates on a clean git tree — commit or stash first, or pass `--allow-dirty` (rollback then gets messy because your edits and AgentLink's writes are mixed).
 
 4. **`npx agentlink-sh@latest check`** again — confirm `ready: true`.
 
@@ -31,22 +32,37 @@ After a real update the CLI prints a **Changed files** summary grouped by area a
 
 So the review/rollback story is already built in — use it before reaching for anything fancier.
 
-### Function-level merge (why the upgrade won't clobber your customizations)
+### File-level merge against the base snapshot (why the upgrade won't clobber your customizations)
 
-`--force-update` merges per-resource, not per-file. Each `@agentlink`-annotated block in a template file is compared against the on-disk version:
-- Block **still annotated** → updated from the template.
-- Block where you **removed the `@agentlink` annotation** → left untouched (you own it).
-- Remove **every** annotation from a file → the whole file becomes project-owned and `--force-update` skips it.
+Schema files are **one object per file** (`public/tables/<table>.sql`, `public/functions/<fn>.sql`, `api/functions/<rpc>.sql`), and the CLI keeps a committed snapshot of the exact templates it last shipped at `.agentlink/template-base/`. `--force-update` merges per-file by comparing three versions — your disk file, the base, and the new template:
 
-This is how you customize a managed function while still receiving updates for its neighbors. See "Customizing a managed function" in `agents/builder.md`. Never *add* `@agentlink` annotations yourself — they're CLI-only metadata.
+- **not on disk** → create
+- **disk == template** → unchanged
+- **disk == base (pristine, untouched)** → **fast-forward**: overwritten with the new template (deterministic, no agent needed)
+- **disk ≠ base but base == template** (you changed it, no upstream change) → **customized**: preserved **silently**, never nagged
+- **disk ≠ base AND base ≠ template** (you changed it **and** upstream changed it) → **conflict**: disk preserved; an actionable 3-way reconcile is surfaced
+- **disk differs but no base entry / base missing entirely** → **preserved (no base)**: disk preserved, fail-safe
+
+For conflicts, the CLI captures the previous base and the new template under `.agentlink/.incoming/{base,incoming}/supabase/<file>` so you can do a 3-way reconcile (previous base vs new template vs your disk version). `.agentlink/.incoming/` is gitignored; `.agentlink/template-base/` is committed.
+
+This is how you customize a managed function while still receiving updates for its neighbors: each object is its own file, so editing one never affects the others. See "Customizing a managed function" in `agents/builder.md`. Annotations no longer exist — never add `-- @agentlink` comments.
+
+**Missing base is fail-safe and self-healing.** If `.agentlink/template-base/` is deleted, nothing is ever overwritten (every differing file is treated as preserved), the next successful update rewrites the snapshot, and it's `git restore`-able since it's committed. It can also be reconstructed by re-scaffolding the applied version — see the disposable-reference section below.
 
 ---
 
-## Fallback: a disposable reference project
+## Fallback: a disposable reference project (and base reconstruction)
 
-Use this **only when the in-place update misbehaves** — `--dry-run` output looks wrong, `--force-update` errors out unclearly, or you don't trust what landed and want a pristine ground-truth to diff against. For the normal case, `--dry-run` already tells you everything below without the extra steps.
+Use this **primarily to reconstruct a missing base snapshot**, and otherwise **only when the in-place update misbehaves** — `--dry-run` output looks wrong, `--force-update` errors out unclearly, or you don't trust what landed and want a pristine ground-truth to diff against. For the normal case, `--dry-run` already tells you everything below without the extra steps.
 
-The idea: scaffold a throwaway project **files-only** (no env, no Docker, no network), then diff its managed files against the real project to see exactly what the current template version produces.
+If `.agentlink/template-base/` is gone and not recoverable from git, rebuild it by re-scaffolding the **applied version** (recorded as `appliedVersion` in `agentlink.json`) files-only — that reproduces the exact templates that were last shipped:
+
+```bash
+# Reconstruct the base by re-scaffolding the applied version, files-only.
+npx agentlink-sh@<appliedVersion> /tmp/agentlink-ref --skip-env --skip-install
+```
+
+The same trick doubles as a comparison source: scaffold a throwaway project **files-only** (no env, no Docker, no network), then diff its managed files against the real project to see exactly what a given template version produces.
 
 ```bash
 # Pure file generation — no Supabase, no OAuth, no install, fast.
@@ -82,7 +98,7 @@ diff -u  supabase/migrations/20200101000000_initial_agentlink_bootstrap.sql \
 
 **3. The reference is just a comparison source.** Apply deltas back into the real project by editing the schema/function files and then running `npx agentlink-sh@latest db apply` (and, on cloud, `supabase functions deploy`) — the same workflow as any schema change. Don't copy `agentlink.json`/`config.toml` across. Delete `/tmp/agentlink-ref` when done.
 
-**4. Respect `@agentlink` ownership.** If you've removed an annotation to own a function, the reference will show the template's version — that's expected drift, not a regression to "fix." Only port deltas for blocks you still want managed.
+**4. Respect your customizations.** If you've edited a managed file to own it, the reference will show the template's version — that's expected drift, not a regression to "fix." The base-snapshot merge already preserves your edit (as `customized`, or surfaces a `conflict` if upstream also changed). Only port deltas you actually want.
 
 ---
 
@@ -96,4 +112,5 @@ diff -u  supabase/migrations/20200101000000_initial_agentlink_bootstrap.sql \
 | Review what landed | `git diff` |
 | Roll back | `git checkout . && git clean -fd supabase/ .claude/` |
 | Update produced a bad/unclear result | scaffold a `--skip-env --skip-install` reference and diff `supabase/schemas` + `supabase/functions` |
+| `.agentlink/template-base/` missing (not in git) | reconstruct: `npx agentlink-sh@<appliedVersion> /tmp/ref --skip-env --skip-install`, or let the next `--force-update` rewrite it |
 | Unclear CLI error | add `--debug`, then read/share `agentlink-debug.log` |

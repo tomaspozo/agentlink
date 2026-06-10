@@ -94,7 +94,7 @@ through per function.
 User metadata belongs in a `profiles` table, not in Supabase Auth metadata. The trigger creates the profile and — for direct signups — a default tenant + owner membership. Invited users (created via `generateLink({ type: 'invite' })`) only get a profile; `invitation_accept()` handles adding them to the inviter's tenant. JWT claims (`tenant_id`, `tenant_role`, `permissions`) are populated automatically on every JWT mint by the custom access-token hook (`_hook_custom_access_token`) — the trigger doesn't touch `auth.users.raw_app_meta_data`:
 
 ```sql
--- supabase/schemas/public/profiles.sql
+-- supabase/schemas/public/tables/profiles.sql
 CREATE TABLE IF NOT EXISTS public.profiles (
   id uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   email text,
@@ -108,8 +108,8 @@ ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ```
 
 ```sql
--- Trigger function: supabase/schemas/public/_internal_admin.sql (scaffolded)
--- Trigger: supabase/schemas/public/profiles.sql (scaffolded)
+-- Trigger function: supabase/schemas/public/functions/_internal_admin_handle_new_user.sql (scaffolded)
+-- Trigger: supabase/schemas/public/tables/profiles.sql (scaffolded)
 CREATE OR REPLACE FUNCTION public._internal_admin_handle_new_user()
 RETURNS TRIGGER
 LANGUAGE plpgsql
@@ -176,14 +176,14 @@ CREATE TRIGGER trg_auth_users_new_user
 > row. In that case it calls `refreshSession()` once, which re-runs the hook
 > against the now-present membership.
 
-**Need to customize signup logic?** If the app requires additional work on signup (e.g., creating rows in app-specific tables, syncing with external services), override `_internal_admin_handle_new_user` by removing its `-- @agentlink` annotation block in `supabase/schemas/public/_internal_admin.sql` and modifying the function body. Keep the same function name. The other managed functions in that file (`_internal_admin_get_secret`, `set_updated_at`, etc.) remain annotated and will continue receiving CLI updates. Apply with `npx agentlink-sh@latest db apply`.
+**Need to customize signup logic?** If the app requires additional work on signup (e.g., creating rows in app-specific tables, syncing with external services), edit `supabase/schemas/public/functions/_internal_admin_handle_new_user.sql` and modify the function body. Keep the same function name. The update flow preserves your edits via the base snapshot in `.agentlink/template-base/`; other managed functions live in their own files and keep receiving CLI updates. Apply with `npx agentlink-sh@latest db apply`.
 
 ### Profile RPCs
 
-> **Scaffolded by the CLI** in `supabase/schemas/api/profile.sql`.
+> **Scaffolded by the CLI** in `supabase/schemas/api/functions/profile_get.sql`.
 
 ```sql
--- supabase/schemas/api/profile.sql (scaffolded)
+-- supabase/schemas/api/functions/profile_get.sql (scaffolded)
 CREATE OR REPLACE FUNCTION api.profile_get()
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -262,7 +262,7 @@ Reason: `db apply` routes every statement through `pg-delta` → `pg-topo` → l
 When the table has a `user_id` column and each row belongs to one user:
 
 ```sql
--- supabase/schemas/public/charts.sql
+-- supabase/schemas/public/tables/charts.sql
 DROP POLICY IF EXISTS users_read_own_charts ON public.charts;
 CREATE POLICY users_read_own_charts
 ON public.charts FOR SELECT
@@ -291,7 +291,7 @@ This is the simplest pattern. Use it when there's no tenant/team concept — the
 When access checks are more complex than a single column comparison, use `_auth_*` functions:
 
 ```sql
--- supabase/schemas/public/_auth_chart.sql
+-- supabase/schemas/public/functions/_auth_chart_can_read.sql
 CREATE OR REPLACE FUNCTION public._auth_chart_can_read(p_chart_id uuid)
 RETURNS boolean
 LANGUAGE plpgsql
@@ -327,13 +327,13 @@ USING (public._auth_chart_can_read(id));
 The multi-tenancy model uses these tables:
 
 ```
-tenants           → Organizations/teams (multitenancy.sql)
-memberships       → Who belongs to which tenant, with what role (multitenancy.sql)
-invitations       → Pending invitations (multitenancy.sql)
-session_tenants   → Per-device tenant pin, keyed on auth.sessions.id (multitenancy.sql)
-roles             → Role definitions (_rbac.sql)
-permissions       → Permission catalog (_rbac.sql)
-role_permissions  → Role → permission matrix (_rbac.sql)
+tenants           → Organizations/teams (public/tables/tenants.sql)
+memberships       → Who belongs to which tenant, with what role (public/tables/memberships.sql)
+invitations       → Pending invitations (public/tables/invitations.sql)
+session_tenants   → Per-device tenant pin, keyed on auth.sessions.id (public/tables/session_tenants.sql)
+roles             → Role definitions (public/tables/roles.sql)
+permissions       → Permission catalog (public/tables/permissions.sql)
+role_permissions  → Role → permission matrix (public/tables/role_permissions.sql)
 tenant-scoped tables → Every row has a tenant_id column (agent creates these)
 ```
 
@@ -346,7 +346,7 @@ tenant-scoped tables → Every row has a tenant_id column (agent creates these)
 
 Tenant context comes from JWT custom claims (`auth.jwt() -> 'app_metadata' ->> 'tenant_id'`), **not** from request parameters. RLS policies use `_auth_tenant_id()` for **isolation only** (scoping rows to the active tenant). **Permission checks do not go in policies** — they live in the RPC via `public.auth_verify_access('<entity>.<action>')`. See the four-layer Security Model at the top of this file.
 
-API RPCs live in `supabase/schemas/api/tenant.sql`: `tenant_select`, `tenant_list`, `tenant_create`, `invitation_create`, `invitation_accept`, `membership_list`. `tenant_select` writes `session_tenants` (per-device pin); `tenant_create` and `invitation_accept` also pin the new tenant to the caller's session so a single `refreshSession()` lands them inside it.
+API RPCs live one-per-file under `supabase/schemas/api/functions/` (e.g. `tenant_select.sql`, `tenant_list.sql`, `tenant_create.sql`, `invitation_create.sql`, `invitation_accept.sql`, `membership_list.sql`). `tenant_select` writes `session_tenants` (per-device pin); `tenant_create` and `invitation_accept` also pin the new tenant to the caller's session so a single `refreshSession()` lands them inside it.
 
 > **Load [RLS Patterns](./references/rls_patterns.md) for tenant-scoped RLS policies, RBAC, invitation flows, and patterns for new tenant-scoped tables.**
 
@@ -401,7 +401,7 @@ UI and the `/accept-invite` flow.
 All eight RPCs read the current tenant from JWT claims via
 `public._auth_tenant_id()`. **Never accept `p_tenant_id` from the
 client when "current tenant" is what you mean** — match the existing
-convention in `tenant.sql`.
+convention in the scaffolded `tenant_*` RPCs under `api/functions/`.
 
 Each permission-bearing RPC enforces its permission with
 `PERFORM public.auth_verify_access('<permission>')` as its first statement

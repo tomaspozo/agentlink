@@ -133,9 +133,9 @@ Flag: `npx agentlink-sh@latest --debug`
 
 Writes detailed log to `agentlink-debug.log` in the project directory. Use when scaffold or `--force-update` fails with an unclear error. Tell the user to share the log contents if you can't resolve the issue.
 
-### Managed resources and `@agentlink` annotations
+### Managed files and the template base snapshot
 
-SQL files in `supabase/schemas/` contain `-- @agentlink <name>` annotations marking resources managed by the CLI (functions, extensions, queues, tables). When `--force-update` runs, it updates every function/block that still has its `@agentlink` annotation. A single file can contain multiple annotated blocks — each is managed independently.
+Schema files under `supabase/schemas/` are split **one object per file** — each table (with its grants, RLS policies, indexes, triggers) and each function lives in its own file. The CLI keeps a committed snapshot of the exact templates it last shipped at `.agentlink/template-base/` (committed to git; **never hand-edit**). On update, it compares each template file's disk version against that base to decide what to do — there are no inline annotations anymore.
 
 When you encounter an issue with a managed resource:
 
@@ -145,39 +145,31 @@ When you encounter an issue with a managed resource:
 
 #### Customizing a managed function (project-scoped override)
 
-When the app needs a managed function to behave differently (e.g., `_internal_admin_handle_new_user` must also create an accounts row), override it:
+When the app needs a managed function to behave differently (e.g., `_internal_admin_handle_new_user` must also create an accounts row), just **edit its file**:
 
-1. Open the schema file (e.g., `supabase/schemas/public/_internal_admin.sql`)
-2. Find the function you need to customize
-3. **Remove only that function's `-- @agentlink` annotation block** (the `-- @agentlink`, `-- @type`, `-- @summary`, `-- @description`, etc. comment lines above the `CREATE` statement). Keep the function itself.
-4. Modify the function body as needed
-5. Apply: `npx agentlink-sh@latest db apply`
-6. Tell the user you've created a project-specific override and why
+1. Open the per-object file (e.g., `supabase/schemas/public/functions/_internal_admin_handle_new_user.sql`)
+2. Modify the function body as needed — keep the same function name and schema
+3. Apply: `npx agentlink-sh@latest db apply`
+4. Tell the user you've created a project-specific override and why
 
-**How it works:** `--force-update` merges at the function level. It compares each `@agentlink`-annotated block in the template against the on-disk file. Functions that still have the annotation get updated from the template. Functions where the annotation was removed are left untouched — your custom version is preserved. Other functions in the same file continue to receive CLI updates normally.
+That's it. There is no annotation to remove. The base-snapshot merge detects your edit on the next update and preserves it automatically.
+
+**How it works:** `--force-update` merges at the **file level** against the base snapshot in `.agentlink/template-base/`. For each template file it compares the disk version, the base version, and the new template:
+
+- **disk == base (pristine)** → fast-forwarded to the new template (deterministic, no agent needed)
+- **you edited it, no upstream change** → preserved **silently** as a customization — never nagged
+- **you edited it AND the template also changed** → **conflict**: your disk file is preserved and an actionable 3-way reconcile is surfaced (previous base vs new template vs your version, captured under `.agentlink/.incoming/`)
+- **no base entry / base missing** → preserved (fail-safe)
 
 **Rules:**
-- Keep the same function name and schema — the CLI matches by `CREATE OR REPLACE FUNCTION <schema>.<name>`
-- Never add `-- @agentlink` annotations — these are CLI-only metadata
-- One file can have a mix of managed and overridden functions
-- If you remove ALL annotations from a file, the entire file becomes project-owned and `--force-update` skips it completely
+- Keep the same function name and schema — pg-delta matches by `CREATE OR REPLACE FUNCTION <schema>.<name>`
+- One object per file — don't merge multiple functions/tables into a single file
+- Annotations no longer exist; don't add `-- @agentlink` comments
+- Never hand-edit `.agentlink/template-base/` — the CLI manages it
 
-**Example** — overriding `_internal_admin_handle_new_user` while keeping `_internal_admin_get_secret` managed:
+**Example** — overriding `_internal_admin_handle_new_user`: open `supabase/schemas/public/functions/_internal_admin_handle_new_user.sql` and edit the body (e.g., add an `INSERT INTO public.accounts ...` after the existing logic). Neighboring functions like `_internal_admin_get_secret.sql` are untouched and keep receiving CLI updates because they live in their own files.
 
-```sql
--- @agentlink _internal_admin_get_secret        ← still managed, CLI will update this
--- @type function
--- ...
-CREATE OR REPLACE FUNCTION public._internal_admin_get_secret(secret_name text)
-...$$;
-
--- Customized for this project: also creates an accounts row on signup.
--- (no @agentlink annotation = project-owned, CLI won't touch this)
-CREATE OR REPLACE FUNCTION public._internal_admin_handle_new_user()
-...$$;
-```
-
-Use `npx agentlink-sh@latest info <name>` to read the annotation docs for any managed resource — it shows the type, description, signature, and related components.
+Use `npx agentlink-sh@latest info <name>` to read the docs for any managed resource — it reads the CLI-shipped catalog (`components.json`) and shows the type, description, signature, and related components.
 
 #### Tools reference
 
@@ -301,19 +293,30 @@ The agent focuses on development. Write SQL, apply it, keep building. Migrations
 
 Schema files are the source of truth. The live database is the working copy. Both must always reflect the same state.
 
+Schema files are **one object per file**. pg-delta topologically sorts statements by dependency at apply time, so file count and order are irrelevant — that is what makes one-object-per-file safe.
+
 ```
 supabase/schemas/
-├── _schemas.sql              # CREATE SCHEMA api; + role grants (MUST be first migration)
+├── _schemas.sql                       # CREATE SCHEMA api; + role grants (root level)
+├── _extensions.sql                    # extensions (root level)
 ├── public/
-│   ├── profiles.sql           # scaffolded — table + trigger + policies
-│   ├── multitenancy.sql       # scaffolded — tenants + memberships + invitations
-│   ├── _auth_tenant.sql       # scaffolded — tenant auth helpers
-│   ├── _internal_admin.sql    # scaffolded — utility functions + set_updated_at
-│   └── charts.sql             # agent builds — table + indexes + triggers + policies
+│   ├── tables/
+│   │   ├── profiles.sql                # one table + its grants/RLS/indexes/triggers
+│   │   ├── tenants.sql                 # scaffolded
+│   │   └── charts.sql                  # agent builds — table + indexes + triggers + policies
+│   └── functions/
+│       ├── _auth_tenant_id.sql         # one function per file
+│       ├── _internal_admin_handle_new_user.sql
+│       └── _hook_custom_access_token.sql
 └── api/
-    ├── tenant.sql             # scaffolded — tenant/invitation/membership RPCs
-    ├── profile.sql            # scaffolded — profile RPCs
-    └── chart.sql              # agent builds — api.chart_* functions + grants
+    ├── tables/
+    │   └── agentlink_tasks.sql         # PGMQ queue
+    ├── functions/
+    │   ├── tenant_create.sql           # one RPC per file
+    │   ├── profile_get.sql
+    │   └── chart_create.sql            # agent builds — api.chart_create + grants
+    └── cron/
+        └── process-stale-tasks.sql     # cron jobs
 ```
 
 **Migrations** are generated only when the user explicitly asks, or as part of a deployment workflow. Use `npx agentlink-sh@latest db migrate name` — it produces a real, non-empty migration by diffing a migrations-only baseline against the schema files. **Never hand-author migration files.** If `db migrate` reports "No changes detected," that's a baseline-availability issue (Docker not running, or no `prod`+`dev` env) — not a cue to write the SQL yourself; see the cli skill's `troubleshooting.md`.
@@ -402,6 +405,6 @@ Load the `auth` skill for RLS policies, RBAC, and multi-tenancy.
 
 Load the `rpc` skill for CRUD templates, pagination, and error handling.
 
-### `@agentlink` annotations
+### Managed files (no annotations)
 
-Never add `-- @agentlink` annotations to SQL files. These are CLI metadata for scaffolded resources — the `info` command parses them, and `--force-update` uses them to decide which functions to update. Add regular SQL comments instead. To override a managed function, remove its existing annotation block — see "Customizing a managed function" above.
+`-- @agentlink` annotations no longer exist — don't add them. Schema files are **one object per file** (`public/tables/<table>.sql`, `public/functions/<fn>.sql`, `api/functions/<rpc>.sql`), and the CLI tracks managed resources via a committed base snapshot at `.agentlink/template-base/`. On `--force-update` it compares each file's disk version against the base: pristine files fast-forward to the new template, files you edited are preserved, and files that you and upstream both changed surface as a conflict to reconcile. To customize a managed function, just edit its file — see "Customizing a managed function" above. Use plain SQL comments for documentation.

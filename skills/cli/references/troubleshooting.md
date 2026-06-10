@@ -40,15 +40,15 @@ See the `database` skill's table-privileges rule and the `auth` skill's Security
 
 ### `schema "api" does not exist` during `db diff`
 
-**Cause:** `_schemas.sql` is missing from `schema_paths` in `config.toml`, or the file doesn't exist on disk. The shadow database can't build because schema files reference `api.*` objects but the schema was never created.
+**Cause:** `schema_paths` in `config.toml` doesn't cover the schema files, or `_schemas.sql` doesn't exist on disk. The shadow database can't build because schema files reference `api.*` objects but the schema was never created.
 
 **Fix:**
 ```toml
-# Ensure config.toml has _schemas.sql listed first:
+# config.toml should use the recursive glob, which matches _schemas.sql at the root:
 [db.migrations]
-schema_paths = ["./schemas/_schemas.sql", "./schemas/_extensions.sql", "./schemas/**/*.sql"]
+schema_paths = ["./schemas/**/*.sql"]
 ```
-Also verify `supabase/schemas/_schemas.sql` exists on disk. Run `npx agentlink-sh@latest --force-update` to regenerate it.
+Also verify `supabase/schemas/_schemas.sql` exists on disk (pg-delta topo-sorts statements, so the `api` schema gets created before objects that reference it). Run `npx agentlink-sh@latest --force-update` to regenerate it.
 
 ---
 
@@ -349,7 +349,7 @@ DB_URL=$(npx supabase status -o json | jq -r '.DB_URL // .db_url')
 psql "$DB_URL" -c "ALTER TABLE public.charts ADD COLUMN description text;"
 
 # Run a schema file
-psql "$DB_URL" -f supabase/schemas/public/charts.sql
+psql "$DB_URL" -f supabase/schemas/public/tables/charts.sql
 ```
 
 ### Fix a broken migration

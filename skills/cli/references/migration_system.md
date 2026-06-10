@@ -106,15 +106,12 @@ Non-destructive — no `db reset` of the dev DB, no data backup/restore. The eph
 
 ```toml
 [db.migrations]
-schema_paths = ["./schemas/_schemas.sql", "./schemas/_extensions.sql", "./schemas/**/*.sql"]
+schema_paths = ["./schemas/**/*.sql"]
 ```
 
-Order matters:
-1. `_schemas.sql` first — creates the `api` schema so subsequent files can reference it
-2. `_extensions.sql` — declares extensions (for reference, though extensions are in the pre-start migration)
-3. `**/*.sql` — all entity schema files
+A single recursive glob picks up every schema file. Schema files are **one object per file** (`public/tables/<table>.sql`, `public/functions/<fn>.sql`, `api/functions/<rpc>.sql`), and pg-delta topologically sorts statements by dependency at apply time — so file count and order are irrelevant. The glob doesn't need to list `_schemas.sql` / `_extensions.sql` explicitly; `**/*.sql` matches them at the root.
 
-If `_schemas.sql` is missing from `schema_paths`, `db diff` fails with `schema "api" does not exist`.
+The `api` schema itself still has to exist before objects reference it — that's why `_schemas.sql` is also a pre-start migration, independent of `schema_paths`.
 
 ---
 

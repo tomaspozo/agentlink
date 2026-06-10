@@ -326,13 +326,13 @@ $$;
 For serious search, use PostgreSQL's full-text search instead of `ILIKE`:
 
 ```sql
--- Add a tsvector column to the table (in public/charts.sql)
+-- Add a tsvector column to the table (in public/tables/charts.sql)
 ALTER TABLE public.charts ADD COLUMN IF NOT EXISTS
   search_vector tsvector GENERATED ALWAYS AS (
     to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, ''))
   ) STORED;
 
--- Add a GIN index (in public/charts.sql)
+-- Add a GIN index (in public/tables/charts.sql)
 CREATE INDEX IF NOT EXISTS idx_charts_search ON public.charts USING gin(search_vector);
 
 -- Search function

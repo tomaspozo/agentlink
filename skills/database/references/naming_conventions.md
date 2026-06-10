@@ -71,16 +71,20 @@ CREATE POLICY members_read_own_tenant ON public.tenants ...
 
 ## Schema File Naming
 
+Schema files are **one object per file** — name each file for the object it contains. pg-delta topologically sorts statements by dependency at apply time, so file count and order are irrelevant.
+
 | Folder | File Name | Contains |
 |--------|-----------|----------|
-| `public/` | `{entity_plural}.sql` | `charts.sql` — table + indexes + triggers + policies |
-| `public/` | `_auth_{entity}.sql` | `_auth_tenant.sql` — `_auth_*` helper functions for an entity |
-| `public/` | `{related_entities}.sql` | `multitenancy.sql` — multiple related tables with FK dependencies |
-| `public/` | `_internal_admin.sql` | Shared `_internal_admin_*` utility functions |
-| `public/` | `_hook_{hook_name}.sql` | Supabase auth hook PG functions |
-| `api/` | `{entity_singular}.sql` | `chart.sql` — `api.*` functions + grants |
+| `public/tables/` | `{table}.sql` | `charts.sql` — one table + its grants/RLS/indexes/triggers |
+| `public/functions/` | `_auth_{entity}_{check}.sql` | `_auth_chart_owner.sql` — one `_auth_*` helper |
+| `public/functions/` | `_internal_{name}.sql` | `_internal_admin_handle_new_user.sql` — one internal util |
+| `public/functions/` | `_hook_{hook_name}.sql` | `_hook_custom_access_token.sql` — one auth hook |
+| `api/functions/` | `{entity}_{action}.sql` | `chart_create.sql` — one `api.*` RPC + its grants |
+| `api/tables/` | `{table}.sql` | `agentlink_tasks.sql` — PGMQ queue table |
+| `api/cron/` | `{job}.sql` | `process-stale-tasks.sql` — one cron job |
 | (root) | `_schemas.sql` | `CREATE SCHEMA api;` + role grants |
+| (root) | `_extensions.sql` | extension installs |
 
-- `public/` files use **plural** names (match table names)
-- `api/` files use **singular** names (match entity)
+- Table files are named for the table; function files are named for the function
+- One object per file — never bundle multiple tables or functions into one file
 - `_` prefix = shared/infrastructure files

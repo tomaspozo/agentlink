@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **Project-update model replaced: one-object-per-file schemas + a committed base snapshot, no more `@agentlink` annotations.** The old `-- @agentlink` SQL comment annotations and the function-level SQL merge engine are gone. Schema files are now split **one object per file** under `supabase/schemas/`: `public/tables/<table>.sql` (a table with its grants/RLS/indexes/triggers), `public/functions/<fn>.sql` (one function each — `_auth_*`, `_internal_*`, `_hook_*`), `api/functions/<rpc>.sql` (one RPC each), `api/tables/agentlink_tasks.sql` (PGMQ queue), and `api/cron/*.sql`; `_schemas.sql` / `_extensions.sql` stay at root. pg-delta topologically sorts statements at apply time, so file count and order are irrelevant. Updates now run a **file-level merge against a committed base snapshot** at `.agentlink/template-base/`: pristine files (disk == base) fast-forward to the new template; files you edited are preserved silently as `customized`; files you and upstream both changed surface as a `conflict` (disk preserved, 3-way reconcile captured under the gitignored `.agentlink/.incoming/`); files with no base entry are preserved (fail-safe). A deleted base is fail-safe, `git restore`-able, and reconstructable by re-scaffolding the `appliedVersion` recorded in `agentlink.json` (`npx agentlink-sh@<appliedVersion> <name> --skip-env --skip-install`). Customizing a managed resource is now just "edit the per-object file, run `db apply`" — no annotation dance. `info` (`npx agentlink-sh info`) reads a CLI-shipped catalog (`components.json`) instead of parsing inline annotations. `config.toml` `db.migrations.schema_paths` is now the recursive glob `["./schemas/**/*.sql"]`, and `agentlink.json` gains an `appliedVersion` field. Docs swept across `agents/builder.md`, `skills/database/SKILL.md` + `references/naming_conventions.md`, `skills/auth/SKILL.md`, `skills/rpc/SKILL.md`, `skills/cli/SKILL.md` + `references/{upgrading.md,migration_system.md,troubleshooting.md}`.
+
 ## [0.29.0] - 2026-06-08
 
 ### Added

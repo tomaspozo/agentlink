@@ -13,28 +13,36 @@ Schema files, migrations, and type generation. Architecture and core rules are i
 
 ```
 supabase/schemas/
-├── _schemas.sql              # CREATE SCHEMA api; + role grants
+├── _schemas.sql                       # CREATE SCHEMA api; + role grants (root level)
+├── _extensions.sql                    # extensions (root level)
 ├── public/
-│   ├── profiles.sql           # table + indexes + triggers + policies
-│   ├── multitenancy.sql       # tenants + memberships + invitations (FK order)
-│   ├── charts.sql             # custom entity table (example)
-│   ├── _auth_tenant.sql       # Scaffolded _auth_* tenant helpers
-│   ├── _auth_chart.sql        # Custom _auth_* helpers (if needed)
-│   └── _internal_admin.sql    # Shared _internal_admin_* utility functions
+│   ├── tables/
+│   │   ├── profiles.sql                # one table + its grants/RLS/indexes/triggers
+│   │   ├── tenants.sql
+│   │   └── charts.sql                  # custom entity table (example)
+│   └── functions/
+│       ├── _auth_tenant_id.sql         # one function per file
+│       ├── _internal_admin_handle_new_user.sql
+│       └── _hook_custom_access_token.sql
 └── api/
-    ├── tenant.sql             # Scaffolded api.tenant_* + invitation + membership RPCs
-    ├── profile.sql            # Scaffolded api.profile_* RPCs
-    └── chart.sql              # Custom api.chart_* functions
+    ├── tables/
+    │   └── agentlink_tasks.sql         # PGMQ queue
+    ├── functions/
+    │   ├── tenant_create.sql           # one RPC per file
+    │   ├── profile_get.sql
+    │   └── chart_create.sql            # custom api.chart_create
+    └── cron/
+        └── process-stale-tasks.sql     # cron jobs
 ```
 
-Files are grouped by Postgres schema (`public/`, `api/`) with entity-centric files inside. Statement ordering is handled automatically by `pgdelta declarative apply`.
+Files are **one object per file** — each table (with its grants, RLS, indexes, triggers) and each function lives in its own file, grouped by Postgres schema (`public/`, `api/`) and kind (`tables/`, `functions/`, `cron/`). Statement ordering is handled automatically: pg-delta topologically sorts statements by dependency at apply time, so file count and order are irrelevant.
 
 **Conventions:**
-- `public/` files = **plural** (match table names): `charts.sql`
-- `api/` files = **singular** (match entity): `chart.sql`
-- `_` prefix = shared/infrastructure: `_auth_{entity}.sql`, `_internal_admin.sql`, `_schemas.sql`
-- Entity files in `public/` contain everything for that entity: table, indexes, triggers, policies
-- Tables with FK dependencies that must be created in order go in a single file (e.g., `multitenancy.sql` for tenants → memberships → invitations)
+- `public/tables/<table>.sql` — one table, named for the table (plural): `charts.sql`, contains the table + its indexes, triggers, grants, RLS policies
+- `public/functions/<fn>.sql` — one function, named for the function: `_auth_chart_owner.sql`, `_internal_admin_handle_new_user.sql`
+- `api/functions/<rpc>.sql` — one RPC, named for the function: `chart_create.sql`, `chart_get.sql`
+- `_schemas.sql` and `_extensions.sql` stay at the root level
+- Even tables with FK dependencies get their own files — pg-delta orders the `CREATE` statements by dependency, so `tenants.sql`, `memberships.sql`, and `invitations.sql` can each be separate
 
 ### Schema File Style Rules
 
@@ -45,22 +53,16 @@ Files are grouped by Postgres schema (`public/`, `api/`) with entity-centric fil
 - `DROP` statements belong in migrations only (for renaming/cleanup)
 - Reason: schema files represent desired state for `pgdelta`; unnecessary drops create phantom diffs
 
-### `@agentlink` Annotations
+### Managed files (no annotations)
 
-Never add `-- @agentlink` comment annotations to SQL files. These are reserved CLI metadata — the `info` command parses them, and `--force-update` uses them to decide which functions to update vs. preserve.
+`-- @agentlink` annotations no longer exist — never add them. The CLI tracks managed resources via a committed base snapshot at `.agentlink/template-base/` (one entry per template file), not via inline comments. Plain SQL comments are always fine:
 
-```sql
--- @agentlink my_function    ← WRONG, agent must not add this
--- @type function             ← WRONG
-```
-
-Regular comments are fine:
 ```sql
 -- Creates a new chart for the authenticated user
 CREATE OR REPLACE FUNCTION api.chart_create(...)
 ```
 
-**To customize a managed function**, remove its `@agentlink` annotation block (the `-- @agentlink`, `-- @type`, `-- @summary`, etc. comment lines) but keep the `CREATE OR REPLACE FUNCTION` statement. This makes that specific function project-owned — `--force-update` will skip it while still updating other annotated functions in the same file. Keep the same function name and schema. See the builder agent's "Customizing a managed function" section for a full example.
+**To customize a managed function**, just edit its per-object file (e.g., `supabase/schemas/public/functions/_internal_admin_handle_new_user.sql`) and run `npx agentlink-sh@latest db apply`. On the next update the base-snapshot merge detects your edit and preserves it — silently when only you changed it, or as a surfaced conflict when the template also changed. Keep the same function name and schema. See the builder agent's "Customizing a managed function" section for the full model.
 
 **Which schema for what:**
 - `api.*` — Client-facing RPCs (the only things exposed via the Data API)
