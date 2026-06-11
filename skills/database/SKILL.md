@@ -1,6 +1,6 @@
 ---
 name: database
-description: Schema files, migrations, and type generation for Supabase Postgres. Use when the task involves creating or modifying tables, columns, indexes, triggers, RLS policies, or database functions. Activate whenever the task touches supabase/schemas/, supabase/migrations/, or involves structural database changes.
+description: Schema files, migrations, and type generation for Supabase Postgres. Use when the task involves creating or modifying tables, columns, indexes, triggers, RLS policies, or database functions. Activate whenever the task touches supabase/database/, supabase/migrations/, or involves structural database changes.
 ---
 
 # Database
@@ -12,37 +12,59 @@ Schema files, migrations, and type generation. Architecture and core rules are i
 ## Schema File Organization
 
 ```
-supabase/schemas/
-├── _schemas.sql                       # CREATE SCHEMA api; + role grants (root level)
-├── _extensions.sql                    # extensions (root level)
-├── public/
-│   ├── tables/
-│   │   ├── profiles.sql                # one table + its grants/RLS/indexes/triggers
-│   │   ├── tenants.sql
-│   │   └── charts.sql                  # custom entity table (example)
-│   └── functions/
-│       ├── _auth_tenant_id.sql         # one function per file
-│       ├── _internal_admin_handle_new_user.sql
-│       └── _hook_custom_access_token.sql
-└── api/
-    ├── tables/
-    │   └── agentlink_tasks.sql         # PGMQ queue
-    ├── functions/
-    │   ├── tenant_create.sql           # one RPC per file
-    │   ├── profile_get.sql
-    │   └── chart_create.sql            # custom api.chart_create
-    └── cron/
-        └── process-stale-tasks.sql     # cron jobs
+supabase/database/
+├── cluster/
+│   └── extensions/                     # one file per extension (cluster-level)
+│       ├── pg_graphql.sql
+│       ├── pg_net.sql
+│       ├── pg_cron.sql
+│       └── pgmq.sql
+└── schemas/
+    ├── api/
+    │   ├── schema.sql                  # CREATE SCHEMA api + grants / default privileges
+    │   ├── tables/
+    │   │   └── agentlink_tasks.sql     # PGMQ queue
+    │   ├── functions/
+    │   │   ├── tenant_create.sql       # one RPC per file
+    │   │   ├── profile_get.sql
+    │   │   └── chart_create.sql        # custom api.chart_create
+    │   └── cron/
+    │       └── process-stale-tasks.sql # cron jobs
+    └── public/
+        ├── schema.sql                  # public schema-level grants (e.g. supabase_auth_admin USAGE)
+        ├── tables/
+        │   ├── profiles.sql            # one table + its grants/RLS/indexes/triggers
+        │   ├── tenants.sql
+        │   └── charts.sql              # custom entity table (example)
+        └── functions/
+            ├── _auth_tenant_id.sql     # one function per file
+            ├── _internal_admin_handle_new_user.sql
+            └── _hook_custom_access_token.sql
 ```
 
-Files are **one object per file** — each table (with its grants, RLS, indexes, triggers) and each function lives in its own file, grouped by Postgres schema (`public/`, `api/`) and kind (`tables/`, `functions/`, `cron/`). Statement ordering is handled automatically: pg-delta topologically sorts statements by dependency at apply time, so file count and order are irrelevant.
+Files are **one object per file** — each table (with its grants, RLS, indexes, triggers) and each function lives in its own file, grouped by Postgres schema (`schemas/public/`, `schemas/api/`) and kind (`tables/`, `functions/`, `cron/`). Statement ordering is handled automatically: pg-delta topologically sorts statements by dependency at apply time, so file count and order are irrelevant.
 
 **Conventions:**
-- `public/tables/<table>.sql` — one table, named for the table (plural): `charts.sql`, contains the table + its indexes, triggers, grants, RLS policies
-- `public/functions/<fn>.sql` — one function, named for the function: `_auth_chart_owner.sql`, `_internal_admin_handle_new_user.sql`
-- `api/functions/<rpc>.sql` — one RPC, named for the function: `chart_create.sql`, `chart_get.sql`
-- `_schemas.sql` and `_extensions.sql` stay at the root level
+- `schemas/<schema>/tables/<table>.sql` — one table, named for the table (plural): `charts.sql`, contains the table + its indexes, triggers, grants, RLS policies
+- `schemas/<schema>/functions/<fn>.sql` — one function, named for the function: `_auth_chart_owner.sql`, `_internal_admin_handle_new_user.sql`, `chart_create.sql`
+- `schemas/<schema>/schema.sql` — the `CREATE SCHEMA` (for `api`) plus that schema's grants / default privileges; `public/schema.sql` holds only public's schema-level grants (public already exists, so it's not `CREATE`d)
+- `cluster/extensions/<ext>.sql` — one file per extension (cluster-level, not schema-scoped)
 - Even tables with FK dependencies get their own files — pg-delta orders the `CREATE` statements by dependency, so `tenants.sql`, `memberships.sql`, and `invitations.sql` can each be separate
+
+### Where to put new objects (create / edit guidelines)
+
+When creating or editing schema objects, put each in its own file under `supabase/database/`. pg-delta resolves dependency order at apply time, so don't worry about file naming for ordering.
+
+| Creating / editing | File |
+|---|---|
+| A table (+ its grants, `ENABLE ROW LEVEL SECURITY`, policies, indexes, triggers — all in this one file) | `supabase/database/schemas/<schema>/tables/<table>.sql` |
+| An RPC or any function (+ its `REVOKE`/`GRANT EXECUTE`) | `supabase/database/schemas/<schema>/functions/<name>.sql` |
+| A new extension | `supabase/database/cluster/extensions/<ext>.sql` |
+| A new schema, or schema-level grants / default privileges | `supabase/database/schemas/<schema>/schema.sql` |
+| A cron job (`cron.schedule(...)`) | `supabase/database/schemas/<schema>/cron/<name>.sql` |
+
+- One object per file. A table file is **self-contained**: table definition + constraints + indexes + `ENABLE ROW LEVEL SECURITY` + policies + triggers + grants all live together.
+- To edit an existing object, edit its file in place (don't create a parallel file) — then run `npx agentlink-sh@latest db apply`.
 
 ### Schema File Style Rules
 
@@ -62,7 +84,7 @@ Files are **one object per file** — each table (with its grants, RLS, indexes,
 CREATE OR REPLACE FUNCTION api.chart_create(...)
 ```
 
-**To customize a managed function**, just edit its per-object file (e.g., `supabase/schemas/public/functions/_internal_admin_handle_new_user.sql`) and run `npx agentlink-sh@latest db apply`. On the next update the base-snapshot merge detects your edit and preserves it — silently when only you changed it, or as a surfaced conflict when the template also changed. Keep the same function name and schema. See the builder agent's "Customizing a managed function" section for the full model.
+**To customize a managed function**, just edit its per-object file (e.g., `supabase/database/schemas/public/functions/_internal_admin_handle_new_user.sql`) and run `npx agentlink-sh@latest db apply`. On the next update the base-snapshot merge detects your edit and preserves it — silently when only you changed it, or as a surfaced conflict when the template also changed. Keep the same function name and schema. See the builder agent's "Customizing a managed function" section for the full model.
 
 **Which schema for what:**
 - `api.*` — Client-facing RPCs (the only things exposed via the Data API)
@@ -184,7 +206,7 @@ If something is missing or broken, use `check` to diagnose and `--force-update` 
 | Missing extensions (`pg_net`, `supabase_vault`) | `database.extensions: false` | `npx agentlink-sh@latest --force-update` |
 | Missing vault secrets | `database.secrets: false` | `npx agentlink-sh@latest --force-update` |
 | Missing `api` schema or grants | `database.api_schema: false` | `npx agentlink-sh@latest --force-update` |
-| Missing `supabase/schemas/` structure | `files: false` | `npx agentlink-sh@latest --force-update` |
+| Missing `supabase/database/` structure | `files: false` | `npx agentlink-sh@latest --force-update` |
 
 Use `npx agentlink-sh@latest info <component>` to understand what a missing component does before fixing it.
 

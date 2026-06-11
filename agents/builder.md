@@ -117,7 +117,7 @@ Typical workflow: `check` → identify what's wrong → `--force-update` → `ch
 - **`--dry-run`** previews the full plan (which template files would be created / rewritten / merged / preserved, which `config.toml` patches apply, which SQL and functions deploy) **without touching disk, DB, or network.** Reach for this first whenever the user asks "what will the upgrade change?"
 - After a real `--force-update`, the CLI prints a changed-files summary and points at `git diff` (review) and `git checkout . && git clean -fd supabase/ .claude/` (rollback).
 
-**If the in-place update misbehaves** — `--dry-run` looks wrong, `--force-update` errors unclearly, or you don't trust what landed — scaffold a disposable files-only reference (`npx agentlink-sh@latest /tmp/agentlink-ref --skip-env --skip-install`, using the same name/skills/frontend as `agentlink.json`) and diff the env-independent trees (`supabase/schemas`, `supabase/functions`, the `20200101*` baseline migrations) against the real project. **Don't** diff `.env.local`, `agentlink.json`, `config.toml`, or `AGENTS.md` — they hold project-specific values and only produce noise.
+**If the in-place update misbehaves** — `--dry-run` looks wrong, `--force-update` errors unclearly, or you don't trust what landed — scaffold a disposable files-only reference (`npx agentlink-sh@latest /tmp/agentlink-ref --skip-env --skip-install`, using the same name/skills/frontend as `agentlink.json`) and diff the env-independent trees (`supabase/database`, `supabase/functions`, the `20200101*` baseline migrations) against the real project. **Don't** diff `.env.local`, `agentlink.json`, `config.toml`, or `AGENTS.md` — they hold project-specific values and only produce noise.
 
 Full procedure, watch-outs, and the merge semantics: `skills/cli/references/upgrading.md`.
 
@@ -135,7 +135,7 @@ Writes detailed log to `agentlink-debug.log` in the project directory. Use when 
 
 ### Managed files and the template base snapshot
 
-Schema files under `supabase/schemas/` are split **one object per file** — each table (with its grants, RLS policies, indexes, triggers) and each function lives in its own file. The CLI keeps a committed snapshot of the exact templates it last shipped at `.agentlink/template-base/` (committed to git; **never hand-edit**). On update, it compares each template file's disk version against that base to decide what to do — there are no inline annotations anymore.
+Schema files under `supabase/database/` are split **one object per file** — each table (with its grants, RLS policies, indexes, triggers) and each function lives in its own file. The CLI keeps a committed snapshot of the exact templates it last shipped at `.agentlink/template-base/` (committed to git; **never hand-edit**). On update, it compares each template file's disk version against that base to decide what to do — there are no inline annotations anymore.
 
 When you encounter an issue with a managed resource:
 
@@ -147,7 +147,7 @@ When you encounter an issue with a managed resource:
 
 When the app needs a managed function to behave differently (e.g., `_internal_admin_handle_new_user` must also create an accounts row), just **edit its file**:
 
-1. Open the per-object file (e.g., `supabase/schemas/public/functions/_internal_admin_handle_new_user.sql`)
+1. Open the per-object file (e.g., `supabase/database/schemas/public/functions/_internal_admin_handle_new_user.sql`)
 2. Modify the function body as needed — keep the same function name and schema
 3. Apply: `npx agentlink-sh@latest db apply`
 4. Tell the user you've created a project-specific override and why
@@ -167,7 +167,7 @@ That's it. There is no annotation to remove. The base-snapshot merge detects you
 - Annotations no longer exist; don't add `-- @agentlink` comments
 - Never hand-edit `.agentlink/template-base/` — the CLI manages it
 
-**Example** — overriding `_internal_admin_handle_new_user`: open `supabase/schemas/public/functions/_internal_admin_handle_new_user.sql` and edit the body (e.g., add an `INSERT INTO public.accounts ...` after the existing logic). Neighboring functions like `_internal_admin_get_secret.sql` are untouched and keep receiving CLI updates because they live in their own files.
+**Example** — overriding `_internal_admin_handle_new_user`: open `supabase/database/schemas/public/functions/_internal_admin_handle_new_user.sql` and edit the body (e.g., add an `INSERT INTO public.accounts ...` after the existing logic). Neighboring functions like `_internal_admin_get_secret.sql` are untouched and keep receiving CLI updates because they live in their own files.
 
 Use `npx agentlink-sh@latest info <name>` to read the docs for any managed resource — it reads the CLI-shipped catalog (`components.json`) and shows the type, description, signature, and related components.
 
@@ -286,7 +286,7 @@ Develop with the Supabase CLI — locally via Docker or against a cloud project.
 
 The agent focuses on development. Write SQL, apply it, keep building. Migrations are a separate deployment concern — not part of the build loop.
 
-1. **Write SQL** to schema files in `supabase/schemas/` (not to migration files)
+1. **Write SQL** to schema files in `supabase/database/` (not to migration files)
 2. **Apply** — `npx agentlink-sh@latest db apply`
 3. **Fix errors** with more SQL — never reset the database
 4. **Iterate** until the feature is complete
@@ -296,27 +296,34 @@ Schema files are the source of truth. The live database is the working copy. Bot
 Schema files are **one object per file**. pg-delta topologically sorts statements by dependency at apply time, so file count and order are irrelevant — that is what makes one-object-per-file safe.
 
 ```
-supabase/schemas/
-├── _schemas.sql                       # CREATE SCHEMA api; + role grants (root level)
-├── _extensions.sql                    # extensions (root level)
-├── public/
-│   ├── tables/
-│   │   ├── profiles.sql                # one table + its grants/RLS/indexes/triggers
-│   │   ├── tenants.sql                 # scaffolded
-│   │   └── charts.sql                  # agent builds — table + indexes + triggers + policies
-│   └── functions/
-│       ├── _auth_tenant_id.sql         # one function per file
-│       ├── _internal_admin_handle_new_user.sql
-│       └── _hook_custom_access_token.sql
-└── api/
-    ├── tables/
-    │   └── agentlink_tasks.sql         # PGMQ queue
-    ├── functions/
-    │   ├── tenant_create.sql           # one RPC per file
-    │   ├── profile_get.sql
-    │   └── chart_create.sql            # agent builds — api.chart_create + grants
-    └── cron/
-        └── process-stale-tasks.sql     # cron jobs
+supabase/database/
+├── cluster/
+│   └── extensions/                     # one file per extension (cluster-level)
+│       ├── pg_graphql.sql
+│       ├── pg_net.sql
+│       ├── pg_cron.sql
+│       └── pgmq.sql
+└── schemas/
+    ├── api/
+    │   ├── schema.sql                  # CREATE SCHEMA api + grants / default privileges
+    │   ├── tables/
+    │   │   └── agentlink_tasks.sql     # PGMQ queue
+    │   ├── functions/
+    │   │   ├── tenant_create.sql       # one RPC per file
+    │   │   ├── profile_get.sql
+    │   │   └── chart_create.sql        # agent builds — api.chart_create + grants
+    │   └── cron/
+    │       └── process-stale-tasks.sql # cron jobs
+    └── public/
+        ├── schema.sql                  # public schema-level grants (e.g. supabase_auth_admin USAGE)
+        ├── tables/
+        │   ├── profiles.sql            # one table + its grants/RLS/indexes/triggers
+        │   ├── tenants.sql             # scaffolded
+        │   └── charts.sql              # agent builds — table + indexes + triggers + policies
+        └── functions/
+            ├── _auth_tenant_id.sql     # one function per file
+            ├── _internal_admin_handle_new_user.sql
+            └── _hook_custom_access_token.sql
 ```
 
 **Migrations** are generated only when the user explicitly asks, or as part of a deployment workflow. Use `npx agentlink-sh@latest db migrate name` — it produces a real, non-empty migration by diffing a migrations-only baseline against the schema files. **Never hand-author migration files.** If `db migrate` reports "No changes detected," that's a baseline-availability issue (Docker not running, or no `prod`+`dev` env) — not a cue to write the SQL yourself; see the cli skill's `troubleshooting.md`.

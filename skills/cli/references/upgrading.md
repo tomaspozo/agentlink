@@ -75,7 +75,7 @@ Then diff:
 
 ```bash
 # Compare only the env-independent, CLI-managed trees.
-diff -ru supabase/schemas      /tmp/agentlink-ref/supabase/schemas
+diff -ru supabase/database     /tmp/agentlink-ref/supabase/database
 diff -ru supabase/functions    /tmp/agentlink-ref/supabase/functions
 diff -u  supabase/migrations/20200101000000_initial_agentlink_bootstrap.sql \
          /tmp/agentlink-ref/supabase/migrations/20200101000000_initial_agentlink_bootstrap.sql
@@ -86,7 +86,7 @@ diff -u  supabase/migrations/20200101000000_initial_agentlink_bootstrap.sql \
 **1. Scaffold output is parameterized.** Project name, selected companion skills, and frontend choice are substituted into the output. Read the real project's `agentlink.json` and scaffold the reference with the **same options** (same name, same skills, and frontend on/off via `--no-frontend`), or you'll see spurious diffs everywhere those values appear.
 
 **2. Only trust env-independent files.** Diff these:
-- `supabase/schemas/**` — the managed SQL (this is what matters most)
+- `supabase/database/**` — the managed SQL (this is what matters most)
 - `supabase/functions/**` — edge functions + `_shared`
 - `supabase/migrations/20200101*` — the baseline migrations have **fixed** timestamps, so they line up
 
@@ -111,6 +111,6 @@ diff -u  supabase/migrations/20200101000000_initial_agentlink_bootstrap.sql \
 | Dirty tree blocks the update | commit/stash, or `--force-update --allow-dirty` (messier rollback) |
 | Review what landed | `git diff` |
 | Roll back | `git checkout . && git clean -fd supabase/ .claude/` |
-| Update produced a bad/unclear result | scaffold a `--skip-env --skip-install` reference and diff `supabase/schemas` + `supabase/functions` |
+| Update produced a bad/unclear result | scaffold a `--skip-env --skip-install` reference and diff `supabase/database` + `supabase/functions` |
 | `.agentlink/template-base/` missing (not in git) | reconstruct: `npx agentlink-sh@<appliedVersion> /tmp/ref --skip-env --skip-install`, or let the next `--force-update` rewrite it |
 | Unclear CLI error | add `--debug`, then read/share `agentlink-debug.log` |

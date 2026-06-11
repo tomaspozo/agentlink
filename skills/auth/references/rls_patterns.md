@@ -151,7 +151,7 @@ USING (tenant_id = public._auth_tenant_id());
 Postgres enums are append-only — you can't rename, remove, or reorder values without rebuilding the type. App permissions grow constantly (`charts.create`, `billing.read`, ...), so we model role and permission *sets* as data:
 
 ```sql
--- supabase/schemas/public/tables/roles.sql (scaffolded — excerpt; each RBAC table is its own file)
+-- supabase/database/schemas/public/tables/roles.sql (scaffolded — excerpt; each RBAC table is its own file)
 CREATE TABLE public.roles (
   name TEXT PRIMARY KEY, rank INT NOT NULL,
   description TEXT, invitable BOOLEAN NOT NULL DEFAULT true
@@ -194,7 +194,7 @@ ON CONFLICT DO NOTHING;
 The custom access-token hook reads `role_permissions` and bakes the user's permissions into JWT `app_metadata.permissions`. `_auth_has_permission` then becomes a pure jsonb membership check — no table read at policy-evaluation time:
 
 ```sql
--- supabase/schemas/public/functions/_auth_has_permission.sql (scaffolded)
+-- supabase/database/schemas/public/functions/_auth_has_permission.sql (scaffolded)
 CREATE OR REPLACE FUNCTION public._auth_has_permission(p_permission text)
 RETURNS boolean LANGUAGE plpgsql STABLE SECURITY INVOKER SET search_path = '' AS $$
 BEGIN
@@ -250,7 +250,7 @@ of the read RPC. Reads that should silently return empty instead can branch on
 The legacy hierarchical check is still scaffolded for cases where you want "any role at admin or above" semantics. It reads `rank` from the roles table — the hierarchy is data, not a hardcoded ladder. `LANGUAGE sql STABLE` so the planner can inline it inside RLS predicates:
 
 ```sql
--- supabase/schemas/public/functions/_auth_has_role.sql (scaffolded)
+-- supabase/database/schemas/public/functions/_auth_has_role.sql (scaffolded)
 CREATE OR REPLACE FUNCTION public._auth_has_role(p_minimum_role text)
 RETURNS boolean LANGUAGE sql STABLE SECURITY INVOKER SET search_path = '' AS $$
   SELECT COALESCE(
@@ -287,7 +287,7 @@ The helper is `LANGUAGE sql STABLE` so the planner can also inline it — but th
 ### Core tables
 
 ```sql
--- scaffolded one object per file under supabase/schemas/public/tables/
+-- scaffolded one object per file under supabase/database/schemas/public/tables/
 --   (tenants.sql, memberships.sql, invitations.sql, …); pg-delta resolves FK order
 CREATE TABLE IF NOT EXISTS public.tenants (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -476,7 +476,7 @@ In-flight JWTs keep their old claims until the next refresh (standard JWT limita
 
 ## Invitation Flow
 
-> **Scaffolded by the CLI** as one file per RPC under `supabase/schemas/api/functions/` (`invitation_create.sql`, `invitation_accept.sql`, …). These RPCs already exist.
+> **Scaffolded by the CLI** as one file per RPC under `supabase/database/schemas/api/functions/` (`invitation_create.sql`, `invitation_accept.sql`, …). These RPCs already exist.
 
 ### Invite (admin sends)
 

@@ -98,7 +98,7 @@ Non-destructive — no `db reset` of the dev DB, no data backup/restore. The eph
 4. Compares the shadow DB state against the live local DB
 5. Outputs the SQL delta as a new migration file
 
-**Key implication:** If a schema file references an object that doesn't exist in migrations (e.g., `api` schema), the shadow DB build fails. This is why `_schemas.sql` must be both a migration AND a schema file. This approach is still used by the CLI's scaffold/update flow (Tier 1) but is **not recommended** for application migrations (Tier 2) due to the alphabetical ordering issue.
+**Key implication:** If a schema file references an object that doesn't exist in migrations (e.g., `api` schema), the shadow DB build fails. This is why the `api` schema (`database/schemas/api/schema.sql`) must be created by both a migration AND a schema file. This approach is still used by the CLI's scaffold/update flow (Tier 1) but is **not recommended** for application migrations (Tier 2) due to the alphabetical ordering issue.
 
 ---
 
@@ -106,12 +106,12 @@ Non-destructive — no `db reset` of the dev DB, no data backup/restore. The eph
 
 ```toml
 [db.migrations]
-schema_paths = ["./schemas/**/*.sql"]
+schema_paths = ["./database/**/*.sql"]
 ```
 
-A single recursive glob picks up every schema file. Schema files are **one object per file** (`public/tables/<table>.sql`, `public/functions/<fn>.sql`, `api/functions/<rpc>.sql`), and pg-delta topologically sorts statements by dependency at apply time — so file count and order are irrelevant. The glob doesn't need to list `_schemas.sql` / `_extensions.sql` explicitly; `**/*.sql` matches them at the root.
+A single recursive glob picks up every schema file under `supabase/database/`. Schema files are **one object per file** (`schemas/<schema>/tables/<table>.sql`, `schemas/<schema>/functions/<fn>.sql`, `schemas/<schema>/cron/<job>.sql`), with per-schema `schemas/<schema>/schema.sql` files and per-extension `cluster/extensions/<ext>.sql` files. pg-delta topologically sorts statements by dependency at apply time — so file count and order are irrelevant. The recursive `**/*.sql` glob matches all of them.
 
-The `api` schema itself still has to exist before objects reference it — that's why `_schemas.sql` is also a pre-start migration, independent of `schema_paths`.
+The `api` schema itself still has to exist before objects reference it — that's why `database/schemas/api/schema.sql` is also a pre-start migration, independent of `schema_paths`.
 
 ---
 
@@ -119,7 +119,7 @@ The `api` schema itself still has to exist before objects reference it — that'
 
 1. Add the `CREATE EXTENSION` statement to `cli/src/template/supabase/migrations/001_infrastructure.sql`
 2. Import and register it in `cli/src/templates.ts` (it's already part of the `PRE_START_MIGRATIONS` object via `migration001`)
-3. If the extension needs a schema file for reference, add it to `cli/src/template/supabase/schemas/_extensions.sql`
+3. If the extension needs a schema file for reference, add a per-extension file under `cli/src/template/supabase/database/cluster/extensions/<ext>.sql`
 4. Rebuild the CLI: `npm run build`
 
 For existing projects, `--force-update` will write the new migration template (if the suffix doesn't already exist) and apply the SQL.

@@ -73,17 +73,20 @@ CREATE POLICY members_read_own_tenant ON public.tenants ...
 
 Schema files are **one object per file** — name each file for the object it contains. pg-delta topologically sorts statements by dependency at apply time, so file count and order are irrelevant.
 
+All paths below are relative to `supabase/database/`.
+
 | Folder | File Name | Contains |
 |--------|-----------|----------|
-| `public/tables/` | `{table}.sql` | `charts.sql` — one table + its grants/RLS/indexes/triggers |
-| `public/functions/` | `_auth_{entity}_{check}.sql` | `_auth_chart_owner.sql` — one `_auth_*` helper |
-| `public/functions/` | `_internal_{name}.sql` | `_internal_admin_handle_new_user.sql` — one internal util |
-| `public/functions/` | `_hook_{hook_name}.sql` | `_hook_custom_access_token.sql` — one auth hook |
-| `api/functions/` | `{entity}_{action}.sql` | `chart_create.sql` — one `api.*` RPC + its grants |
-| `api/tables/` | `{table}.sql` | `agentlink_tasks.sql` — PGMQ queue table |
-| `api/cron/` | `{job}.sql` | `process-stale-tasks.sql` — one cron job |
-| (root) | `_schemas.sql` | `CREATE SCHEMA api;` + role grants |
-| (root) | `_extensions.sql` | extension installs |
+| `schemas/public/tables/` | `{table}.sql` | `charts.sql` — one table + its grants/RLS/indexes/triggers |
+| `schemas/public/functions/` | `_auth_{entity}_{check}.sql` | `_auth_chart_owner.sql` — one `_auth_*` helper |
+| `schemas/public/functions/` | `_internal_{name}.sql` | `_internal_admin_handle_new_user.sql` — one internal util |
+| `schemas/public/functions/` | `_hook_{hook_name}.sql` | `_hook_custom_access_token.sql` — one auth hook |
+| `schemas/api/functions/` | `{entity}_{action}.sql` | `chart_create.sql` — one `api.*` RPC + its grants |
+| `schemas/api/tables/` | `{table}.sql` | `agentlink_tasks.sql` — PGMQ queue table |
+| `schemas/api/cron/` | `{job}.sql` | `process-stale-tasks.sql` — one cron job |
+| `schemas/api/` | `schema.sql` | `CREATE SCHEMA api;` + grants / default privileges |
+| `schemas/public/` | `schema.sql` | public schema-level grants (e.g. `supabase_auth_admin` USAGE) |
+| `cluster/extensions/` | `{ext}.sql` | one extension install per file (`pg_net.sql`, `pgmq.sql`, …) |
 
 - Table files are named for the table; function files are named for the function
 - One object per file — never bundle multiple tables or functions into one file

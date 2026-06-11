@@ -171,7 +171,7 @@ What `env deploy` does (each step is gated on the corresponding `supabase/` dire
 2. **Schemas** — `db apply` against the target env's DB (explicit pooler URL — works correctly even when `.env.local` points elsewhere).
 3. **Functions** — `supabase functions deploy --project-ref <ref>` if `supabase/functions/` exists with non-underscore subdirectories.
 
-If ALL three directories are missing (bare project with an empty `supabase/` tree), `env deploy` short-circuits with `Nothing to deploy — no supabase/schemas, supabase/migrations, or supabase/functions found.` and exits 0.
+If ALL three directories are missing (bare project with an empty `supabase/` tree), `env deploy` short-circuits with `Nothing to deploy — no supabase/database, supabase/migrations, or supabase/functions found.` and exits 0.
 
 What it does NOT do — belongs elsewhere:
 
@@ -280,7 +280,7 @@ npx agentlink-sh@latest <name> --link \
 
 - **Dev or prod?** Same as regular `env add`.
 - **Which Supabase organization?** Same org picker as scaffolded flow.
-- **Is this the right trade-off?** Bare mode gives up: the scaffolded `api` schema isolation, RLS helpers, RPC layout, auth hooks, edge-function wrappers, companion skills, and the opinionated `supabase/schemas/` layout. If the user wants any of those, point them at the full scaffold (workflow #1) or `--force-update` to upgrade a bare project later.
+- **Is this the right trade-off?** Bare mode gives up: the scaffolded `api` schema isolation, RLS helpers, RPC layout, auth hooks, edge-function wrappers, companion skills, and the opinionated `supabase/database/` layout. If the user wants any of those, point them at the full scaffold (workflow #1) or `--force-update` to upgrade a bare project later.
 
 **Commands**
 
@@ -318,9 +318,9 @@ Interactive flow when no `agentlink.json` is present:
 |---------|----------|
 | `env add` / `env use` / `env remove` / `env list` | Normal, but `env use` / `env add` skip AGENTS.md writes. |
 | `env config [secrets\|db\|auth\|all] [env]` | Primary way to add server-side config incrementally. |
-| `env deploy [env]` | No-op until the user drops files into `supabase/migrations/`, `supabase/schemas/`, or `supabase/functions/`. Each step gates on its directory. |
+| `env deploy [env]` | No-op until the user drops files into `supabase/migrations/`, `supabase/database/`, or `supabase/functions/`. Each step gates on its directory. |
 | `db password` / `db url` | Normal. |
-| `db apply` | Prints `Skipping schema apply — supabase/schemas/ not found.` and exits 0. |
+| `db apply` | Prints `Skipping schema apply — supabase/database/ not found.` and exits 0. |
 
 **Upgrade path**
 

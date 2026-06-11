@@ -40,15 +40,15 @@ See the `database` skill's table-privileges rule and the `auth` skill's Security
 
 ### `schema "api" does not exist` during `db diff`
 
-**Cause:** `schema_paths` in `config.toml` doesn't cover the schema files, or `_schemas.sql` doesn't exist on disk. The shadow database can't build because schema files reference `api.*` objects but the schema was never created.
+**Cause:** `schema_paths` in `config.toml` doesn't cover the schema files, or `database/schemas/api/schema.sql` doesn't exist on disk. The shadow database can't build because schema files reference `api.*` objects but the schema was never created.
 
 **Fix:**
 ```toml
-# config.toml should use the recursive glob, which matches _schemas.sql at the root:
+# config.toml should use the recursive glob over supabase/database/:
 [db.migrations]
-schema_paths = ["./schemas/**/*.sql"]
+schema_paths = ["./database/**/*.sql"]
 ```
-Also verify `supabase/schemas/_schemas.sql` exists on disk (pg-delta topo-sorts statements, so the `api` schema gets created before objects that reference it). Run `npx agentlink-sh@latest --force-update` to regenerate it.
+Also verify `supabase/database/schemas/api/schema.sql` exists on disk (pg-delta topo-sorts statements, so the `api` schema gets created before objects that reference it). Run `npx agentlink-sh@latest --force-update` to regenerate it.
 
 ---
 
@@ -58,7 +58,7 @@ Also verify `supabase/schemas/_schemas.sql` exists on disk (pg-delta topo-sorts 
 
 **Fix:** Don't use `migration up` to apply SQL on a running local DB where objects exist. Use `psql` to apply schema files directly:
 ```bash
-psql <db_url> -f supabase/schemas/public/my_entity.sql
+psql <db_url> -f supabase/database/schemas/public/tables/my_entity.sql
 ```
 Or use `runSQL` via the CLI. Migrations are for production deployments on clean databases.
 
@@ -227,13 +227,13 @@ Bare projects can upgrade later via `npx agentlink-sh@latest --force-update`.
 
 ### `env deploy` says "Nothing to deploy"
 
-**Symptom:** Running `npx agentlink-sh@latest env deploy <name>` prints `Nothing to deploy — no supabase/schemas, supabase/migrations, or supabase/functions found.` and exits 0 without touching the cloud.
+**Symptom:** Running `npx agentlink-sh@latest env deploy <name>` prints `Nothing to deploy — no supabase/database, supabase/migrations, or supabase/functions found.` and exits 0 without touching the cloud.
 
 **Cause:** The project has no `supabase/` subsystem directories — usually because it's a bare-mode project (workflow #7) where the user hasn't added any SQL or edge functions yet, or someone deleted those directories.
 
 **Fix:** Add at least one of:
 
-- `supabase/schemas/*.sql` for schema changes (then `env deploy` runs `db apply`).
+- `supabase/database/**/*.sql` for schema changes (then `env deploy` runs `db apply`).
 - `supabase/migrations/*.sql` + `supabase/config.toml` for migrations (then `env deploy` runs `supabase db push`).
 - `supabase/functions/<name>/index.ts` for edge functions (then `env deploy` runs `supabase functions deploy`).
 
@@ -349,7 +349,7 @@ DB_URL=$(npx supabase status -o json | jq -r '.DB_URL // .db_url')
 psql "$DB_URL" -c "ALTER TABLE public.charts ADD COLUMN description text;"
 
 # Run a schema file
-psql "$DB_URL" -f supabase/schemas/public/tables/charts.sql
+psql "$DB_URL" -f supabase/database/schemas/public/tables/charts.sql
 ```
 
 ### Fix a broken migration
@@ -396,7 +396,7 @@ rm supabase/migrations/<version>_name.sql
 | Need to push schema / function changes (no config drift) | `npx agentlink-sh@latest env deploy <name>` |
 | Need to push config only (no schemas / functions) | `npx agentlink-sh@latest env config [secrets\|db\|auth\|all] [env]` |
 | Existing codebase, want Supabase env plumbing only | `npx agentlink-sh@latest env add dev` → choose "Continue without full features" (bare mode) |
-| `env deploy` prints "Nothing to deploy" | Add files to `supabase/schemas/` / `supabase/migrations/` / `supabase/functions/`, or run `--force-update` for the full scaffold |
+| `env deploy` prints "Nothing to deploy" | Add files to `supabase/database/` / `supabase/migrations/` / `supabase/functions/`, or run `--force-update` for the full scaffold |
 | Broken migration state on new project | `npx agentlink-sh@latest db rebuild` |
 | DB password was reset in dashboard | `npx agentlink-sh@latest db password "newpass"` |
 | Claude Code not found on PATH | Install via `https://agentlink.sh/start`, open a new terminal |
