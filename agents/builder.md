@@ -295,6 +295,8 @@ Schema files are the source of truth. The live database is the working copy. Bot
 
 Schema files are **one object per file**. pg-delta topologically sorts statements by dependency at apply time, so file count and order are irrelevant — that is what makes one-object-per-file safe.
 
+**Shipping schema to prod is migrations-only.** `db apply` (declarative) is the dev/local loop; on `prod` it's deliberately skipped. So a schema change reaches prod ONLY through a committed migration: build + `db apply` on dev → `db migrate <name>` (review the SQL, commit it) → `env deploy prod` (with explicit user approval) replays the migration via `db push`. Running `env deploy prod` without first generating the migration ships nothing new. See the `cli` skill's "Ship changes to production" workflow.
+
 ```
 supabase/database/
 ├── cluster/
