@@ -34,7 +34,7 @@ So the review/rollback story is already built in — use it before reaching for 
 
 ### File-level merge against the base snapshot (why the upgrade won't clobber your customizations)
 
-Schema files are **one object per file** (`public/tables/<table>.sql`, `public/functions/<fn>.sql`, `api/functions/<rpc>.sql`), and the CLI keeps a committed snapshot of the exact templates it last shipped at `.agentlink/template-base/`. `--force-update` merges per-file by comparing three versions — your disk file, the base, and the new template:
+Schema files are **one object per file** (`database/schemas/public/tables/<table>.sql`, `database/schemas/public/functions/<fn>.sql`, `database/schemas/api/functions/<rpc>.sql`), and the CLI keeps a committed snapshot of the exact templates it last shipped at `.agentlink/template-base/`. `--force-update` merges per-file by comparing three versions — your disk file, the base, and the new template:
 
 - **not on disk** → create
 - **disk == template** → unchanged

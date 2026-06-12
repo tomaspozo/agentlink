@@ -401,7 +401,7 @@ UI and the `/accept-invite` flow.
 All eight RPCs read the current tenant from JWT claims via
 `public._auth_tenant_id()`. **Never accept `p_tenant_id` from the
 client when "current tenant" is what you mean** — match the existing
-convention in the scaffolded `tenant_*` RPCs under `api/functions/`.
+convention in the scaffolded `tenant_*` RPCs under `database/schemas/api/functions/`.
 
 Each permission-bearing RPC enforces its permission with
 `PERFORM public.auth_verify_access('<permission>')` as its first statement

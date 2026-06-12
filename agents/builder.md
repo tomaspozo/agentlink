@@ -412,6 +412,6 @@ Load the `auth` skill for RLS policies, RBAC, and multi-tenancy.
 
 Load the `rpc` skill for CRUD templates, pagination, and error handling.
 
-### Managed files (no annotations)
+### How the CLI tracks schema files (base snapshot)
 
-`-- @agentlink` annotations no longer exist — don't add them. Schema files are **one object per file** (`public/tables/<table>.sql`, `public/functions/<fn>.sql`, `api/functions/<rpc>.sql`), and the CLI tracks managed resources via a committed base snapshot at `.agentlink/template-base/`. On `--force-update` it compares each file's disk version against the base: pristine files fast-forward to the new template, files you edited are preserved, and files that you and upstream both changed surface as a conflict to reconcile. To customize a managed function, just edit its file — see "Customizing a managed function" above. Use plain SQL comments for documentation.
+Schema files are **one object per file** under `supabase/database/` (`database/schemas/public/tables/<table>.sql`, `database/schemas/public/functions/<fn>.sql`, `database/schemas/api/functions/<rpc>.sql`, …). The CLI keeps a committed snapshot of the exact templates it last shipped at `.agentlink/template-base/`. On `--force-update` it compares each file's disk version against that base: pristine files fast-forward to the new template, files you edited are preserved, and files that you and upstream both changed surface as a conflict to reconcile. To customize a CLI-shipped file, just **edit it in place** — the merge preserves your change (see "Customizing a managed function" above). There are **no inline annotations**: don't add `-- @agentlink` comments; use plain SQL comments for documentation.
