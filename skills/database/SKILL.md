@@ -1,6 +1,6 @@
 ---
 name: database
-description: Schema files, migrations, and type generation for Supabase Postgres. Use when the task involves creating or modifying tables, columns, indexes, triggers, RLS policies, or database functions. Activate whenever the task touches supabase/schemas/, supabase/migrations/, or involves structural database changes.
+description: Schema files, migrations, and type generation for Supabase Postgres. Use when the task involves creating or modifying tables, columns, indexes, triggers, RLS policies, or database functions. Activate whenever the task touches supabase/database/, supabase/migrations/, or involves structural database changes.
 ---
 
 # Database
@@ -12,29 +12,75 @@ Schema files, migrations, and type generation. Architecture and core rules are i
 ## Schema File Organization
 
 ```
-supabase/schemas/
-├── _schemas.sql              # CREATE SCHEMA api; + role grants
-├── public/
-│   ├── profiles.sql           # table + indexes + triggers + policies
-│   ├── multitenancy.sql       # tenants + memberships + invitations (FK order)
-│   ├── charts.sql             # custom entity table (example)
-│   ├── _auth_tenant.sql       # Scaffolded _auth_* tenant helpers
-│   ├── _auth_chart.sql        # Custom _auth_* helpers (if needed)
-│   └── _internal_admin.sql    # Shared _internal_admin_* utility functions
-└── api/
-    ├── tenant.sql             # Scaffolded api.tenant_* + invitation + membership RPCs
-    ├── profile.sql            # Scaffolded api.profile_* RPCs
-    └── chart.sql              # Custom api.chart_* functions
+supabase/database/
+├── cluster/
+│   └── extensions/                     # one file per extension (cluster-level)
+│       ├── pg_graphql.sql
+│       ├── pg_net.sql
+│       ├── pg_cron.sql
+│       └── pgmq.sql
+└── schemas/
+    ├── api/
+    │   ├── schema.sql                  # CREATE SCHEMA api + grants / default privileges
+    │   ├── tables/
+    │   │   └── agentlink_tasks.sql     # PGMQ queue
+    │   ├── functions/
+    │   │   ├── tenant_create.sql       # one RPC per file
+    │   │   ├── profile_get.sql
+    │   │   └── chart_create.sql        # custom api.chart_create
+    │   └── cron/
+    │       └── process-stale-tasks.sql # cron jobs
+    └── public/
+        ├── schema.sql                  # public schema-level grants (e.g. supabase_auth_admin USAGE)
+        ├── tables/
+        │   ├── profiles.sql            # one table + its grants/RLS/indexes/triggers
+        │   ├── tenants.sql
+        │   └── charts.sql              # custom entity table (example)
+        └── functions/
+            ├── _auth_tenant_id.sql     # one function per file
+            ├── _internal_admin_handle_new_user.sql
+            └── _hook_custom_access_token.sql
 ```
 
-Files are grouped by Postgres schema (`public/`, `api/`) with entity-centric files inside. Statement ordering is handled automatically by `pgdelta declarative apply`.
+Files are **one object per file** — each table (with its grants, RLS, indexes, triggers) and each function lives in its own file, grouped by Postgres schema (`schemas/public/`, `schemas/api/`) and kind (`tables/`, `functions/`, `cron/`). Statement ordering is handled automatically: pg-delta topologically sorts statements by dependency at apply time, so file count and order are irrelevant.
 
 **Conventions:**
-- `public/` files = **plural** (match table names): `charts.sql`
-- `api/` files = **singular** (match entity): `chart.sql`
-- `_` prefix = shared/infrastructure: `_auth_{entity}.sql`, `_internal_admin.sql`, `_schemas.sql`
-- Entity files in `public/` contain everything for that entity: table, indexes, triggers, policies
-- Tables with FK dependencies that must be created in order go in a single file (e.g., `multitenancy.sql` for tenants → memberships → invitations)
+- `schemas/<schema>/tables/<table>.sql` — one table, named for the table (plural): `charts.sql`, contains the table + its indexes, triggers, grants, RLS policies
+- `schemas/<schema>/functions/<fn>.sql` — one function, named for the function: `_auth_chart_owner.sql`, `_internal_admin_handle_new_user.sql`, `chart_create.sql`
+- `schemas/<schema>/schema.sql` — the `CREATE SCHEMA` (for `api`) plus that schema's grants / default privileges; `public/schema.sql` holds only public's schema-level grants (public already exists, so it's not `CREATE`d)
+- `cluster/extensions/<ext>.sql` — one file per extension (cluster-level, not schema-scoped)
+- Even tables with FK dependencies get their own files — pg-delta orders the `CREATE` statements by dependency, so `tenants.sql`, `memberships.sql`, and `invitations.sql` can each be separate
+
+### Where to put new objects (create / edit guidelines)
+
+When creating or editing schema objects, put each in its own file under `supabase/database/`. pg-delta resolves dependency order at apply time, so don't worry about file naming for ordering.
+
+| Creating / editing | File |
+|---|---|
+| A table (+ its grants, `ENABLE ROW LEVEL SECURITY`, policies, indexes, triggers — all in this one file) | `supabase/database/schemas/<schema>/tables/<table>.sql` |
+| An RPC or any function (+ its `REVOKE`/`GRANT EXECUTE`) | `supabase/database/schemas/<schema>/functions/<name>.sql` |
+| A new extension | `supabase/database/cluster/extensions/<ext>.sql` |
+| A new schema, or schema-level grants / default privileges | `supabase/database/schemas/<schema>/schema.sql` |
+| A cron job (`cron.schedule(...)`) | `supabase/database/schemas/<schema>/cron/<name>.sql` |
+
+- One object per file. A table file is **self-contained**: table definition + constraints + indexes + `ENABLE ROW LEVEL SECURITY` + policies + triggers + grants all live together.
+- To edit an existing object, edit its file in place (don't create a parallel file) — then run `npx agentlink-sh@latest db apply`.
+
+### Migrating an existing `supabase/schemas/` project to `supabase/database/`
+
+Older projects keep declarative SQL under `supabase/schemas/`. The home moved to `supabase/database/` (matching Supabase's `db … generate` default). On `--force-update`, the CLI recreates the **scaffolded** objects under `supabase/database/` and **leaves your old `supabase/schemas/` exactly where it is — untouched, but no longer applied** (pg-delta reads `supabase/database/` only). It then asks the user to have you finish the move. When asked, do this:
+
+1. **Move each CUSTOM object** — anything the app added, i.e. NOT the scaffolded set (`tenants`/`memberships`/`invitations`/`profiles`/`roles`/`permissions`/`role_permissions`/`session_tenants`, the `api.*` RPCs, `_auth_*` / `_internal_*` / `_hook_*` functions, `agentlink_tasks`, `process-stale-tasks`), which already exists under `database/`. Place each in one object per file:
+   - table → `supabase/database/schemas/<schema>/tables/<table>.sql` (table + its grants, `ENABLE ROW LEVEL SECURITY`, policies, indexes, triggers — all together)
+   - function / RPC → `supabase/database/schemas/<schema>/functions/<name>.sql`
+   - extension → `supabase/database/cluster/extensions/<ext>.sql`
+   - `CREATE SCHEMA` / schema-level grants → `supabase/database/schemas/<schema>/schema.sql`
+   - cron job → `supabase/database/schemas/<schema>/cron/<name>.sql`
+   Split any consolidated/multi-object files into one-object-per-file as you go. pg-delta resolves dependency order, so file naming/order doesn't matter.
+2. **Apply:** `npx agentlink-sh@latest db apply` — confirm the `database/` tree applies cleanly.
+3. **Delete `supabase/schemas/`** once everything is migrated and applying — nothing else references it.
+
+Never relocate `supabase/schemas/` into `.agentlink/.incoming/` — that directory is gitignored and cleared on the next update.
 
 ### Schema File Style Rules
 
@@ -45,22 +91,16 @@ Files are grouped by Postgres schema (`public/`, `api/`) with entity-centric fil
 - `DROP` statements belong in migrations only (for renaming/cleanup)
 - Reason: schema files represent desired state for `pgdelta`; unnecessary drops create phantom diffs
 
-### `@agentlink` Annotations
+### How the CLI tracks files (base snapshot)
 
-Never add `-- @agentlink` comment annotations to SQL files. These are reserved CLI metadata — the `info` command parses them, and `--force-update` uses them to decide which functions to update vs. preserve.
+The CLI keeps a committed snapshot of the exact templates it last shipped at `.agentlink/template-base/` (one entry per template file) and merges your project against it on update. There are **no inline annotations** — never add `-- @agentlink` comments. Plain SQL comments are always fine:
 
-```sql
--- @agentlink my_function    ← WRONG, agent must not add this
--- @type function             ← WRONG
-```
-
-Regular comments are fine:
 ```sql
 -- Creates a new chart for the authenticated user
 CREATE OR REPLACE FUNCTION api.chart_create(...)
 ```
 
-**To customize a managed function**, remove its `@agentlink` annotation block (the `-- @agentlink`, `-- @type`, `-- @summary`, etc. comment lines) but keep the `CREATE OR REPLACE FUNCTION` statement. This makes that specific function project-owned — `--force-update` will skip it while still updating other annotated functions in the same file. Keep the same function name and schema. See the builder agent's "Customizing a managed function" section for a full example.
+**To customize a CLI-shipped file**, just edit its per-object file in place (e.g., `supabase/database/schemas/public/functions/_internal_admin_handle_new_user.sql`) and run `npx agentlink-sh@latest db apply`. On the next update the base-snapshot merge detects your edit and preserves it — silently when only you changed it, or as a surfaced conflict when the template also changed. Keep the same function name and schema. See the builder agent's "Customizing a managed function" section for the full model.
 
 **Which schema for what:**
 - `api.*` — Client-facing RPCs (the only things exposed via the Data API)
@@ -182,7 +222,7 @@ If something is missing or broken, use `check` to diagnose and `--force-update` 
 | Missing extensions (`pg_net`, `supabase_vault`) | `database.extensions: false` | `npx agentlink-sh@latest --force-update` |
 | Missing vault secrets | `database.secrets: false` | `npx agentlink-sh@latest --force-update` |
 | Missing `api` schema or grants | `database.api_schema: false` | `npx agentlink-sh@latest --force-update` |
-| Missing `supabase/schemas/` structure | `files: false` | `npx agentlink-sh@latest --force-update` |
+| Missing `supabase/database/` structure | `files: false` | `npx agentlink-sh@latest --force-update` |
 
 Use `npx agentlink-sh@latest info <component>` to understand what a missing component does before fixing it.
 

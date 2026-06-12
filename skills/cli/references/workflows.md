@@ -165,13 +165,22 @@ npx agentlink-sh@latest env deploy prod --dry-run
 npx agentlink-sh@latest env deploy prod --yes --non-interactive
 ```
 
+> **Prod is migrations-only — capture schema changes as a migration FIRST.** On `prod`, `env deploy` does **not** run declarative `db apply` (step 2 below is skipped). So a schema change you made and `db apply`'d on **dev** does **not** reach prod just by running `env deploy prod` — it reaches prod only through a committed **migration**. The repeatable loop is:
+>
+> 1. Edit schema files under `supabase/database/`, `db apply` to **dev**, verify.
+> 2. `npx agentlink-sh@latest db migrate <name>` — generate the migration, **review the SQL**, commit it (with the schema files).
+> 3. `npx agentlink-sh@latest env deploy prod` (explicit user approval) — replays the migration on prod (step 1 below) + deploys functions.
+> 4. Verify prod.
+>
+> Skip step 2 and `env deploy prod` pushes nothing new (db push replays only already-committed migrations; db apply is skipped on prod).
+
 What `env deploy` does (each step is gated on the corresponding `supabase/` directory existing):
 
-1. **Migrations** — `supabase db push --db-url <pooler>` if `supabase/migrations/` and `supabase/config.toml` both exist. Idempotent; Supabase tracks applied entries server-side. Skipped with a loud amber warning if migrations exist but `config.toml` doesn't (bare-with-hand-created-migrations edge case — we never silently fabricate `config.toml` into a user's tree).
-2. **Schemas** — `db apply` against the target env's DB (explicit pooler URL — works correctly even when `.env.local` points elsewhere).
+1. **Migrations** — `supabase db push --db-url <pooler>` if `supabase/migrations/` and `supabase/config.toml` both exist. Idempotent; Supabase tracks applied entries server-side. **This is the only way schema reaches prod.** Skipped with a loud amber warning if migrations exist but `config.toml` doesn't (bare-with-hand-created-migrations edge case — we never silently fabricate `config.toml` into a user's tree).
+2. **Schemas (declarative `db apply`)** — runs **only on dev/local**, against the target env's DB (explicit pooler URL — works even when `.env.local` points elsewhere). **SKIPPED on `prod`** (`prod is migrations-only`): a live declarative apply would bypass the migration review gate, so prod takes schema only via step 1's migrations.
 3. **Functions** — `supabase functions deploy --project-ref <ref>` if `supabase/functions/` exists with non-underscore subdirectories.
 
-If ALL three directories are missing (bare project with an empty `supabase/` tree), `env deploy` short-circuits with `Nothing to deploy — no supabase/schemas, supabase/migrations, or supabase/functions found.` and exits 0.
+If ALL three directories are missing (bare project with an empty `supabase/` tree), `env deploy` short-circuits with `Nothing to deploy — no supabase/database, supabase/migrations, or supabase/functions found.` and exits 0.
 
 What it does NOT do — belongs elsewhere:
 
@@ -280,7 +289,7 @@ npx agentlink-sh@latest <name> --link \
 
 - **Dev or prod?** Same as regular `env add`.
 - **Which Supabase organization?** Same org picker as scaffolded flow.
-- **Is this the right trade-off?** Bare mode gives up: the scaffolded `api` schema isolation, RLS helpers, RPC layout, auth hooks, edge-function wrappers, companion skills, and the opinionated `supabase/schemas/` layout. If the user wants any of those, point them at the full scaffold (workflow #1) or `--force-update` to upgrade a bare project later.
+- **Is this the right trade-off?** Bare mode gives up: the scaffolded `api` schema isolation, RLS helpers, RPC layout, auth hooks, edge-function wrappers, companion skills, and the opinionated `supabase/database/` layout. If the user wants any of those, point them at the full scaffold (workflow #1) or `--force-update` to upgrade a bare project later.
 
 **Commands**
 
@@ -318,9 +327,9 @@ Interactive flow when no `agentlink.json` is present:
 |---------|----------|
 | `env add` / `env use` / `env remove` / `env list` | Normal, but `env use` / `env add` skip AGENTS.md writes. |
 | `env config [secrets\|db\|auth\|all] [env]` | Primary way to add server-side config incrementally. |
-| `env deploy [env]` | No-op until the user drops files into `supabase/migrations/`, `supabase/schemas/`, or `supabase/functions/`. Each step gates on its directory. |
+| `env deploy [env]` | No-op until the user drops files into `supabase/migrations/`, `supabase/database/`, or `supabase/functions/`. Each step gates on its directory. |
 | `db password` / `db url` | Normal. |
-| `db apply` | Prints `Skipping schema apply — supabase/schemas/ not found.` and exits 0. |
+| `db apply` | Prints `Skipping schema apply — supabase/database/ not found.` and exits 0. |
 
 **Upgrade path**
 
