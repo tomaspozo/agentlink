@@ -172,22 +172,28 @@ Renaming a role propagates everywhere via `ON UPDATE CASCADE`. Adding a permissi
 
 ### Adding a domain permission
 
-```sql
--- Register the permission (apps add their own)
-INSERT INTO public.permissions (name, description) VALUES
-  ('charts.create', 'Create charts'),
-  ('charts.delete', 'Delete charts')
-ON CONFLICT DO NOTHING;
+RBAC rows are **reference data**, not schema — they live in `supabase/database/rbac/`, NOT in the table files under `schemas/public/tables/` (which define structure only). Each rbac file fills the `rbac_desired` staging table; the reconcile step (`db apply`, and every `env deploy`) converges the DB to **exactly** the declared set. **Full reconcile**: a row you remove is REVOKED on every env, including prod — which is the only way revokes reach prod, since pg-delta migrations carry DDL only.
 
--- Bind it to roles. Explicit, no computed inheritance — list every (role, perm)
--- pair you want. This keeps non-hierarchical roles (e.g. a future
--- 'billing_admin') possible without restructuring.
-INSERT INTO public.role_permissions (role_name, permission_name) VALUES
+```sql
+-- supabase/database/rbac/permissions.sql — add your rows to the VALUES list:
+INSERT INTO rbac_desired (name, description) VALUES
+  -- … base permissions …
+  ('charts.create', 'Create charts'),
+  ('charts.delete', 'Delete charts');
+```
+
+```sql
+-- supabase/database/rbac/role_permissions.sql — bind to roles. Explicit, no
+-- computed inheritance: list every (role, perm) pair. This keeps
+-- non-hierarchical roles (e.g. a future 'billing_admin') possible.
+INSERT INTO rbac_desired (role_name, permission_name) VALUES
+  -- … base bindings …
   ('owner',  'charts.create'), ('owner',  'charts.delete'),
   ('admin',  'charts.create'), ('admin',  'charts.delete'),
-  ('member', 'charts.create')
-ON CONFLICT DO NOTHING;
+  ('member', 'charts.create');
 ```
+
+Then sync (automatic on deploy, or run `agentlink db rbac-sync` to apply now).
 
 ### `_auth_has_permission` — the primary RBAC primitive
 

@@ -19,6 +19,10 @@ supabase/database/
 │       ├── pg_net.sql
 │       ├── pg_cron.sql
 │       └── pgmq.sql
+├── rbac/                               # RBAC reference DATA (rows, not schema)
+│   ├── roles.sql                       # synced by the reconcile, NOT pg-delta
+│   ├── permissions.sql
+│   └── role_permissions.sql
 └── schemas/
     ├── api/
     │   ├── schema.sql                  # CREATE SCHEMA api + grants / default privileges
@@ -62,6 +66,9 @@ When creating or editing schema objects, put each in its own file under `supabas
 | A new extension | `supabase/database/cluster/extensions/<ext>.sql` |
 | A new schema, or schema-level grants / default privileges | `supabase/database/schemas/<schema>/schema.sql` |
 | A cron job (`cron.schedule(...)`) | `supabase/database/schemas/<schema>/cron/<name>.sql` |
+| RBAC reference data — roles / permissions / role→permission bindings (rows) | `supabase/database/rbac/<entity>.sql` |
+
+**`rbac/` is reference DATA, not schema.** The roles/permissions/role_permissions *tables* live in `schemas/public/tables/` (structure only). Their *rows* live in `rbac/<entity>.sql`, each filling an `rbac_desired` staging table. pg-delta `declarative apply` and migrations carry DDL only — never rows — so a dedicated reconcile step owns this data: `db apply` (local/dev) and **every `env deploy`** (all envs incl. prod) converge the DB to **exactly** the declared set. **Full reconcile** for permissions + bindings (a removed row is REVOKED everywhere — the only way revokes reach prod); roles are **upsert-only** (a referenced role can't be deleted: `memberships.role` FKs into `roles(name)`). Run `agentlink db rbac-sync` to apply a change immediately without a full deploy.
 
 - One object per file. A table file is **self-contained**: table definition + constraints + indexes + `ENABLE ROW LEVEL SECURITY` + policies + triggers + grants all live together.
 - To edit an existing object, edit its file in place (don't create a parallel file) — then run `npx agentlink-sh@latest db apply`.

@@ -23,7 +23,7 @@ Client → api.member_update(...)
                  ↓ isolation RLS on memberships still filters by tenant            (backstop)
 ```
 
-**When you add a capability you touch three layers:** seed the permission key (`role_permissions`), guard the RPC, gate the frontend. RLS only ever does isolation. See the checklist near the end of this file.
+**When you add a capability you touch three layers:** declare the permission key (in `supabase/database/rbac/`), guard the RPC, gate the frontend. RLS only ever does isolation. See the checklist near the end of this file.
 
 ### The guard helpers (`public/_authz.sql`)
 
@@ -48,7 +48,7 @@ BEGIN
      AND tenant_id = (SELECT public._auth_tenant_id());     -- explicit scope; RLS backstops
   RETURN jsonb_build_object('id', p_id, 'name', p_name);
 END; $$;
--- then seed: INSERT INTO public.permissions / role_permissions ('widget.update')
+-- then declare 'widget.update' in supabase/database/rbac/{permissions,role_permissions}.sql
 ```
 
 ### Grants on the `api` schema
@@ -331,9 +331,9 @@ tenants           → Organizations/teams (public/tables/tenants.sql)
 memberships       → Who belongs to which tenant, with what role (public/tables/memberships.sql)
 invitations       → Pending invitations (public/tables/invitations.sql)
 session_tenants   → Per-device tenant pin, keyed on auth.sessions.id (public/tables/session_tenants.sql)
-roles             → Role definitions (public/tables/roles.sql)
-permissions       → Permission catalog (public/tables/permissions.sql)
-role_permissions  → Role → permission matrix (public/tables/role_permissions.sql)
+roles             → Role table (public/tables/roles.sql); rows in rbac/roles.sql
+permissions       → Permission table (public/tables/permissions.sql); rows in rbac/permissions.sql
+role_permissions  → Role→permission table (public/tables/role_permissions.sql); rows in rbac/role_permissions.sql
 tenant-scoped tables → Every row has a tenant_id column (agent creates these)
 ```
 
@@ -414,7 +414,7 @@ table policies are isolation-only — they no longer check the permission.
 
 Do all of these (the guard alone, or the frontend alone, is never enough):
 
-1. **Seed the permission** in `public.permissions` + `public.role_permissions` (which roles get it) in `_rbac.sql`.
+1. **Declare the permission** in `supabase/database/rbac/permissions.sql` and bind it to roles in `supabase/database/rbac/role_permissions.sql` (each file fills the `rbac_desired` staging table — just add `VALUES` rows). The RBAC reconcile (`db apply`, and every `env deploy`) converges the DB to exactly the declared set. **Full reconcile**: removing a row REVOKES that permission on every env (incl. prod). NB: these rows live in `rbac/`, *not* in the table files under `schemas/public/tables/` — those define structure only and are applied by pg-delta, which never carries rows.
 2. **Guard the RPC**: `PERFORM public.auth_verify_access('<key>')` as the first statement of the mutating `api.*` function; scope queries with `WHERE tenant_id = (SELECT public._auth_tenant_id())`.
 3. **Isolate the table**: ensure an isolation-only RLS policy exists (tenant/ownership, no permission predicate).
 4. **Gate the frontend**: route guard `requirePermission('<key>')` + control gating `useHasPermission('<key>')` (UX only).

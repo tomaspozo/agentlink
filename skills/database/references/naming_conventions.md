@@ -87,6 +87,7 @@ All paths below are relative to `supabase/database/`.
 | `schemas/api/` | `schema.sql` | `CREATE SCHEMA api;` + grants / default privileges |
 | `schemas/public/` | `schema.sql` | public schema-level grants (e.g. `supabase_auth_admin` USAGE) |
 | `cluster/extensions/` | `{ext}.sql` | one extension install per file (`pg_net.sql`, `pgmq.sql`, …) |
+| `rbac/` | `{entity}.sql` | RBAC reference DATA (rows): `roles.sql`, `permissions.sql`, `role_permissions.sql` — each fills an `rbac_desired` staging table, synced by the reconcile (NOT pg-delta) |
 
 - Table files are named for the table; function files are named for the function
 - One object per file — never bundle multiple tables or functions into one file
