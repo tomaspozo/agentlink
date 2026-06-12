@@ -14,7 +14,7 @@ Authentication, authorization, and tenant isolation — all enforced by the data
 3. **RLS, isolation-only** (the backstop) — Every table has a cheap policy scoping rows to `tenant_id = _auth_tenant_id()` and/or `user_id = auth.uid()`. It is the safety net against a forgotten `WHERE` — in an agent-built codebase, the worst-case multi-tenant bug. **Never put permission checks in RLS** — isolation only.
 4. **Frontend guard** (UX only) — `useHasPermission()` / route guards hide or redirect. Never security: the backend guard is the real gate; a user who bypasses the UI still hits the 403.
 
-**Prerequisite under all of this — GRANTs (explicit, default-deny).** `api.*` RPCs are `SECURITY INVOKER`, so they touch `public` tables **as the caller**, which needs a Postgres table grant just to access the table at all — a separate layer from RLS (grant = "can this role touch the table?"; RLS = "which rows?"). Supabase stopped auto-granting in 2026, and AgentLink keeps default-deny: **every table you want reachable needs an explicit `GRANT SELECT, INSERT, UPDATE, DELETE … TO authenticated, service_role`** (bundled with `ENABLE ROW LEVEL SECURITY`); an ungranted table stays private. `anon` is never granted on tables (anon-facing RPCs are `SECURITY DEFINER`). For a read-only table, grant `SELECT` to authenticated only. **Functions are default-deny too** — Postgres' built-in `PUBLIC` EXECUTE is revoked, so `anon` can't call a function unless it's granted explicitly; `api.*` RPCs auto-grant `authenticated`/`service_role`, RLS helpers grant `authenticated`. See the `database` skill's table-privileges rule.
+**Prerequisite under all of this — GRANTs (explicit, default-deny).** `api.*` RPCs are `SECURITY INVOKER`, so they touch `public` tables **as the caller**, which needs a Postgres table grant just to access the table at all — a separate layer from RLS (grant = "can this role touch the table?"; RLS = "which rows?"). Supabase stopped auto-granting in 2026, and AgentLink keeps default-deny: **every table you want reachable needs an explicit `GRANT SELECT, INSERT, UPDATE, DELETE … TO authenticated, service_role`** (bundled with `ENABLE ROW LEVEL SECURITY`); an ungranted table stays private. `anon` is never granted on tables (anon-facing RPCs are `SECURITY DEFINER`). For a read-only table, grant `SELECT` to authenticated only. **Functions are default-deny too, granted per object** (no schema-wide `GRANT ON ALL FUNCTIONS`) — each function `REVOKE`s the built-in `PUBLIC` EXECUTE and `GRANT`s only its roles: `api.*` client RPCs → `authenticated, service_role`; `api._admin_*` → `service_role`; RLS helpers → `authenticated`. See the `database` skill's table-privileges rule and the `rpc` skill's Grants section.
 
 ```
 Client → api.member_update(...)
@@ -60,18 +60,24 @@ calling. Pages that render before the session attaches (public home,
 marketing content) need `anon` to have USAGE or every RPC reply is
 `permission denied for schema api`.
 
-`EXECUTE` on each function IS the security boundary. The scaffold
-defaults are:
-
-- `GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA api TO authenticated, service_role;`
-- `ALTER DEFAULT PRIVILEGES IN SCHEMA api GRANT EXECUTE ON FUNCTIONS TO authenticated, service_role;`
-
-`anon` never receives EXECUTE by default. When a function is
-intentionally public (a status page, public metrics, an unauthenticated
-signup-adjacent RPC), grant it explicitly:
+`EXECUTE` on each function IS the security boundary, and it's granted
+**per object** — there is no schema-wide `GRANT ON ALL FUNCTIONS` (a blanket
+grant let pg-delta's apply ordering override per-function revokes, exposing
+`api._admin_*` on dev). Every `api` function carries its own grant:
 
 ```sql
-GRANT EXECUTE ON FUNCTION api.public_metrics() TO anon;
+-- client RPC (default for authenticated users; RLS filters rows)
+REVOKE ALL ON FUNCTION api.<fn>(<arg-types>) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION api.<fn>(<arg-types>) TO authenticated, service_role;
+```
+
+`anon` never receives EXECUTE unless you add it. When a function is
+intentionally public (a status page, public metrics, an unauthenticated
+signup-adjacent RPC), grant it explicitly and make it `SECURITY DEFINER`:
+
+```sql
+REVOKE ALL ON FUNCTION api.public_metrics() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION api.public_metrics() TO anon, authenticated, service_role;
 ```
 
 Think of it this way: USAGE opens the door; EXECUTE decides who walks

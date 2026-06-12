@@ -537,27 +537,30 @@ RETURN jsonb_build_object('success', true, 'chart_id', v_id);
 
 ## Grants
 
-Schema-level default privileges handle grants automatically. The `supabase/database/schemas/api/schema.sql` file contains:
+EXECUTE is granted **per object** — **every** `api` function carries its own grant lines, right after its definition. There is **no** schema-wide `GRANT ON ALL FUNCTIONS` or `ALTER DEFAULT PRIVILEGES`. `supabase/database/schemas/api/schema.sql` grants only schema USAGE:
 
 ```sql
 GRANT USAGE ON SCHEMA api TO anon, authenticated, service_role;
-GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA api TO anon, authenticated, service_role;
-ALTER DEFAULT PRIVILEGES IN SCHEMA api
-  GRANT EXECUTE ON FUNCTIONS TO anon, authenticated, service_role;
 ```
 
-Every function created in the `api` schema is automatically callable by `anon`, `authenticated`, AND `service_role`. For client RPCs that's correct — RLS does the filtering, no per-function `GRANT EXECUTE` is needed.
+> **Why per-object, not a blanket grant.** A bulk `GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA api TO authenticated` put every function within reach of `authenticated`, and pg-delta's declarative apply ordered that grant **after** the per-function REVOKEs — so `SECURITY DEFINER` admin internals (`api._admin_*`) ended up callable by `authenticated` on `db apply` (dev) while the linear migration locked them on prod. A real dev/prod divergence. Per-object grants keep dev == prod and make a forgotten grant fail fast (42501) — callable by no one — exactly like the table model.
 
-**Exception — admin-only RPCs (`api._admin_*`):** the auto-grant to anon/authenticated is wrong here, since these functions exist precisely because they shouldn't be reachable by users. You MUST add explicit revoke + grant lines after the function definition:
+Add the right block after each function:
 
 ```sql
-CREATE OR REPLACE FUNCTION api._admin_do_thing(...)
-RETURNS ... LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$ ... $$;
+-- Client RPC (the common case): authenticated calls it, RLS filters rows.
+REVOKE ALL ON FUNCTION api.<fn>(<arg-types>) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION api.<fn>(<arg-types>) TO authenticated, service_role;
 
-REVOKE ALL ON FUNCTION api._admin_do_thing(...) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION api._admin_do_thing(...) TO service_role;
+-- Anon-callable RPC (e.g. invitation_preview): add anon, make it SECURITY DEFINER.
+REVOKE ALL ON FUNCTION api.<fn>(<arg-types>) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION api.<fn>(<arg-types>) TO anon, authenticated, service_role;
+
+-- Admin-only RPC (api._admin_*): service_role only.
+REVOKE ALL ON FUNCTION api._admin_do_thing(<arg-types>) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION api._admin_do_thing(<arg-types>) TO service_role;
 ```
 
-Both lines are required. Grants don't override defaults — only revokes do. Without the REVOKE, anon keeps EXECUTE despite the narrower GRANT, and the database linter fires lint 0028 (`anon_security_definer_function_executable`).
+The `REVOKE ALL … FROM PUBLIC` strips Postgres' built-in PUBLIC-EXECUTE default — without it `anon` keeps EXECUTE via PUBLIC, and DEFINER admin functions trip lint 0028 (`anon_security_definer_function_executable`). The signature uses the argument **types**, e.g. `api.tenant_create(text, text)`.
 
 `_auth_*` and `_internal_admin_*` functions in `public` are different: they're called internally by RLS policies and INVOKER api wrappers, not by clients. They get explicit grants too — typically `REVOKE ALL FROM PUBLIC, anon` then `GRANT EXECUTE TO authenticated, service_role` so api wrappers (running as `authenticated` under INVOKER) can reach them. See the SKILL.md "Where DEFINER is allowed" table for the matrix.

@@ -60,7 +60,7 @@ $$;
 - **Permission gate first** — mutating RPCs `PERFORM public.auth_verify_access('<entity>.<action>')` as the first statement, then scope queries with `WHERE tenant_id = (SELECT public._auth_tenant_id())`. Permissions live in the RPC, not in RLS (which is isolation-only).
 - **`SET search_path = ''`** — prevents search path injection
 - **Fully qualified names** — `public.charts`, `public._auth_*`, `public._internal_admin_*` — never bare names
-- **No per-function `GRANT EXECUTE` for client RPCs** — the `api` schema's default privilege grants EXECUTE on every new `api` function to `authenticated` and `service_role` (NOT `anon`). Functions are otherwise **default-deny**: Postgres' built-in `PUBLIC` EXECUTE is revoked (the scaffold migration and `db migrate` append a blanket `REVOKE EXECUTE ON ALL FUNCTIONS … FROM PUBLIC`), so `anon` cannot call a client RPC unless you grant it explicitly. For an **anon-callable** RPC: add `GRANT EXECUTE ON FUNCTION api.<fn>(<args>) TO anon;` and make it `SECURITY DEFINER`. **`api._admin_*`** functions are already restricted to `service_role` by their explicit `REVOKE … FROM PUBLIC, anon, authenticated; GRANT EXECUTE … TO service_role` block (keep it — it also silences DEFINER lint 0028).
+- **Grant EXECUTE per function — every `api` RPC** (default-deny, like tables; there is no schema-wide `GRANT ON ALL FUNCTIONS`). After the definition add `REVOKE ALL ON FUNCTION api.<fn>(<arg-types>) FROM PUBLIC;` then `GRANT EXECUTE ON FUNCTION api.<fn>(<arg-types>) TO authenticated, service_role;`. The REVOKE strips Postgres' built-in `PUBLIC` EXECUTE (so `anon` can't reach it); a forgotten grant fails fast (42501). **Anon-callable** RPC: `GRANT … TO anon, authenticated, service_role` and make it `SECURITY DEFINER`. **`api._admin_*`** (service_role-only): `REVOKE … FROM PUBLIC, anon, authenticated; GRANT EXECUTE … TO service_role` (also silences DEFINER lint 0028). See the Grants section in `references/rpc_patterns.md`.
 - **`p_` prefix** on parameters, `v_` prefix on local variables
 
 ## Security Context
@@ -174,7 +174,7 @@ $$;
 
 When an RPC is called only by trusted server-side code — edge functions using `supabaseAdmin.rpc()`, cron handlers, the queue worker, etc. — and **never** by a logged-in user, name it `api._admin_{action}` and lock it down with explicit grants.
 
-**Why the explicit grant is mandatory:** the `api` default privilege grants EXECUTE on every new `api` function to `authenticated` and `service_role`. For an admin RPC that's still too broad — `authenticated` users shouldn't reach it. So `REVOKE` it from everyone and `GRANT` only to `service_role`. (Functions are otherwise default-deny — `anon`/`PUBLIC` are already revoked — but you must still strip `authenticated`, which the api default privilege grants.)
+**Why the explicit grant is mandatory:** like every `api` function (default-deny, per-object grants), an `_admin_*` RPC needs its own grant — but a narrower one. `REVOKE` it from everyone and `GRANT` only to `service_role`, so `authenticated`/`anon` can never reach it.
 
 ```sql
 -- ✅ CORRECT — admin-only RPC with explicit grants
@@ -197,7 +197,7 @@ REVOKE ALL ON FUNCTION api._admin_purge_old_records(int) FROM PUBLIC, anon, auth
 GRANT EXECUTE ON FUNCTION api._admin_purge_old_records(int) TO service_role;
 ```
 
-**Both lines are required.** `REVOKE ALL FROM PUBLIC, anon, authenticated` strips the `authenticated` grant the api default privilege added (and re-asserts the `PUBLIC`/`anon` revoke for clarity); `GRANT EXECUTE TO service_role` re-grants only to the service-role principal that actually needs it.
+**Both lines are required.** `REVOKE ALL FROM PUBLIC, anon, authenticated` strips Postgres' built-in `PUBLIC` EXECUTE default (and asserts no anon/authenticated access); `GRANT EXECUTE TO service_role` grants only the service-role principal that actually needs it.
 
 **When to use `api._admin_*` vs. `public._internal_admin_*`:**
 
@@ -263,5 +263,5 @@ RETURN jsonb_build_object(
 - [ ] **Scope queries explicitly**: tenant-scoped reads/writes include `WHERE tenant_id = (SELECT public._auth_tenant_id())` (and ownership `user_id` where relevant). Isolation RLS backstops a forgotten scope, but write it explicitly — don't rely on RLS as the only filter.
 - [ ] Validate input parameters before use
 - [ ] If you wrote a `_internal_admin_*` helper: revalidate `auth.uid() = p_user_id` inside the helper (defense in depth)
-- [ ] If your function name starts with `api._admin_*`: explicit `REVOKE ALL ON FUNCTION ... FROM PUBLIC, anon, authenticated;` AND `GRANT EXECUTE ON FUNCTION ... TO service_role;` — strips the `authenticated` grant the api default privilege adds, leaving service_role only
+- [ ] **Grant the function** (every `api` RPC — default-deny, no schema-wide grant): client RPC → `REVOKE ALL ON FUNCTION api.<fn>(<arg-types>) FROM PUBLIC;` + `GRANT EXECUTE ON FUNCTION api.<fn>(<arg-types>) TO authenticated, service_role;`. `api._admin_*` → `REVOKE … FROM PUBLIC, anon, authenticated;` + `GRANT EXECUTE … TO service_role;`. Anon-callable → add `anon` to the GRANT. A missing grant = uncallable (42501).
 - [ ] **Underlying table is granted**: because this INVOKER RPC reads/writes `public.*` AS the caller, every table it touches needs an explicit `GRANT SELECT, INSERT, UPDATE, DELETE ON public.<table> TO authenticated, service_role;` in the table's per-table file under `database/schemas/public/tables/` (default-deny — an ungranted table raises `42501 permission denied for table …`). `SELECT`-only to authenticated for read-only tables; never grant `anon`. See the `database` skill's table-privileges rule.

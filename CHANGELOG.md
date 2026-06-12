@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Security
+
+- **Docs: `api` functions are granted per-object (default-deny), never via a schema-wide blanket grant.** A bulk `GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA api` re-granted every function to `authenticated`, and pg-delta's declarative apply ordered it after the per-function revokes — exposing `SECURITY DEFINER` `api._admin_*` functions to `authenticated` on `db apply` (dev) while migrations locked them on prod. The skills now teach the per-object rule: every `api` RPC carries its own `REVOKE ALL … FROM PUBLIC` + `GRANT EXECUTE … TO authenticated, service_role` (anon-callable → +anon; `_admin_*` → service_role only) — like tables. Updated the `rpc` skill (SKILL.md + references/rpc_patterns.md Grants section), `database/SKILL.md`, and `auth/SKILL.md` (removed the stale "auto-grant / `GRANT ON ALL FUNCTIONS`" guidance).
+
 ### Fixed
 
 - **Corrected the production-deploy process in the docs (prod is migrations-only).** The `cli` skill's "Ship changes to production" workflow + `agents/builder.md` now make clear that `env deploy prod` **skips** declarative `db apply` — schema reaches prod only through a committed migration. The required loop is: build + `db apply` on dev → `db migrate <name>` (review + commit the migration) → `env deploy prod` (explicit approval) replays it. The old docs implied `db apply` runs against the deploy target, which on prod would have shipped **no** schema change.
