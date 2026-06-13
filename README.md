@@ -1,120 +1,125 @@
+<div align="center">
+
 # Agent Link
 
-> **Beta** — Agent Link is under active development. Skills, agent behavior, and APIs may change between versions.
+**An opinionated skill set that tells your AI agents exactly how to build on Supabase.**
 
-An opinionated way to build on Supabase with AI agents.
+Production-ready Supabase patterns, optimized so agents get it right on the first try.
+Fewer errors. Fewer wasted tokens. One backend that serves every client.
 
-Agent Link is a [Claude Code plugin](https://docs.anthropic.com/en/docs/claude-code/plugins) with composable skills and an app development agent. Each skill covers a specific domain — CLI, schema development, RPCs, edge functions, auth, frontend — and Claude loads whichever skills are relevant to the current task automatically. The agent bundles all skills together with architecture enforcement.
+[Website](https://agentlink.sh) · [CLI on npm](https://www.npmjs.com/package/agentlink-sh) · [Report an issue](https://github.com/tomaspozo/agentlink/issues)
 
-It ships alongside the [`agentlink-sh` CLI](https://www.npmjs.com/package/agentlink-sh) — the plugin's hands. The CLI scaffolds new Supabase projects (cloud or local Docker), manages multiple environments (`local` / `dev` / `prod`), applies schemas, generates migrations, and deploys schemas + edge functions to any cloud env. The agent reasons about _what_ to build; the CLI does the work the agent shouldn't do itself — OAuth, project creation, environment switching, deploys.
+</div>
 
 ---
 
-## Install
+Agent Link is a [Claude Code plugin](https://docs.anthropic.com/en/docs/claude-code/plugins) — a builder agent plus six composable skills — that teaches AI agents a single, opinionated architecture for full-stack apps on Supabase. Instead of letting the model improvise a different backend every time, it gives it one well-worn path: schema isolation, RPC-first data access, RLS on every table, edge functions for the outside world, and Postgres-native background jobs.
+
+It ships with the [`agentlink-sh` CLI](https://www.npmjs.com/package/agentlink-sh) — the plugin's hands. The agent reasons about _what_ to build; the CLI does the work the agent shouldn't do itself: OAuth, project creation, applying schemas, generating migrations, switching environments, and deploying. Designed for internal tools, business software, and operational apps.
+
+## Why Agent Link
+
+- **DB Functions, not raw queries.** All data access goes through Postgres functions exposed as RPCs in an `api` schema. Tables stay invisible to clients — one backend serves every frontend.
+- **Secure by default.** Schema isolation, row-level security on every table, no exceptions. The patterns are default-deny, so a forgotten grant fails fast instead of leaking.
+- **Multi-tenancy built in.** Tenants, memberships, invitations, RBAC, and tenant-isolation RLS are wired together from day one.
+- **Edge functions for externals.** Webhooks, third-party APIs, and anything outside the database run in typed Deno edge functions via `withSupabase`.
+- **Cron + queues in Postgres.** Background work runs on `pg_cron` and `pgmq` — no external job runners to operate.
+- **Deploy-ready from day one.** Local Docker or Supabase Cloud, `local` / `dev` / `prod` environments, diff-based migrations, and exact production parity.
+- **Tuned for agents.** Every pattern is shaped so the model lands it on the first try — less back-and-forth, fewer tokens.
+
+## Get started
+
+### Scaffold a new project (recommended)
+
+One command runs an interactive wizard — no install step. It creates the project, wires up the database, installs the plugin and companion skills, configures Claude Code, and hands off to the agent with your prompt:
 
 ```bash
-# Run via npx — always pulls the latest version, no install step
-npx agentlink-sh@latest <project-name>
-
-# From the Claude Code plugin marketplace
-/plugin marketplace add tomaspozo/agentlink
-/plugin install link@agentlink
-
-# Local directory (development)
-claude --plugin-dir ./path/to/agentlink
+npx agentlink-sh@latest my-app
 ```
 
-Every CLI command runs through `npx agentlink-sh@latest <subcommand>` — `npx agentlink-sh@latest check`, `npx agentlink-sh@latest db apply`, `npx agentlink-sh@latest env deploy prod`, etc.
+The wizard asks where your first environment should live — **Supabase Cloud** (no Docker) or **local Docker** — and sets it up for you. To skip the prompt and go straight to local Docker:
 
----
+```bash
+npx agentlink-sh@latest my-app --local
+```
+
+Then just describe what you want to build and let the agent take it from there.
+
+### Add the plugin to an existing setup
+
+Already have a project? Install the plugin from the Claude Code marketplace:
+
+```bash
+/plugin marketplace add tomaspozo/agentlink
+/plugin install link@agentlink
+```
+
+For local development of the plugin itself, point Claude Code at this directory:
+
+```bash
+claude --plugin-dir ./agent
+```
+
+Every CLI command runs through `npx agentlink-sh@latest <subcommand>` — e.g. `npx agentlink-sh@latest check`, `db apply`, `env deploy prod`.
 
 ## Usage
 
-Describe what you want to build. The agent handles the rest — prerequisites, architecture, and the right skills for the job.
+Open Claude Code and start prompting the agent — describe what you want and it takes it from there, loading the right skills, writing the SQL and TypeScript, applying the changes, and iterating until it works.
+
+**Build something new** — e.g. an internal tool with public form submissions:
 
 ```
-Build me an uptime monitor that checks endpoints every 5 minutes.
+Build an internal tool where the public can submit support requests through a
+form, and our team triages them in a dashboard behind auth.
 ```
 
-```
-Review my db schema and suggest improvements.
-```
+**Harden what you already have** — e.g. lock down an existing project with schema isolation:
 
 ```
-Add a multi-tenant invitation flow to my app..
+Optimize my project's security: move everything behind an api schema, put RLS on
+every table, and replace the direct table access with RPCs.
 ```
 
-You can also call it directly with `@link:builder`.
+## How it works
 
-### Use skills directly
+The CLI owns setup; the agent builds.
 
-Skills also activate automatically when Claude detects a relevant task. You can invoke them explicitly with slash commands:
+- **New project:** `npx agentlink-sh@latest my-app` — runs the wizard, which asks whether your first (dev) environment is Supabase Cloud or local Docker, then scaffolds schemas, vault secrets, edge functions, and a React + TanStack Start (SPA) frontend. `prod` is added later with `env add prod`.
+- **Skip the prompt:** pass `--local` to go straight to local Docker.
+- **Validate setup:** `npx agentlink-sh@latest check` — verifies extensions, internal functions, vault secrets, the `api` schema, and file layout.
+- **After a CLI upgrade:** `npx agentlink-sh@latest --force-update` — re-applies managed templates, config, and SQL.
 
-- `/link:cli` — `npx agentlink-sh@latest` commands, env management, deploys
-- `/link:database` — schema files, migrations, type generation
-- `/link:rpc` — RPC-first data access, CRUD templates, pagination
-- `/link:edge-functions` — `withSupabase` wrapper, webhooks, secrets
-- `/link:auth` — RLS policies, RBAC, multi-tenancy, invitation flows
-- `/link:frontend` — Supabase client setup, RPC calls, auth state, TanStack Start (SPA) rendering
-
----
-
-## Agent Configuration
-
-The app development agent ships with opinionated defaults:
-
-### Setup
-
-The CLI handles all project setup. The agent builds — it does not scaffold.
-
-- **New project (cloud, default):** `npx agentlink-sh@latest my-app` — creates a Supabase Cloud project, scaffolds schemas, vault secrets, edge functions, and a frontend
-- **Local Docker mode:** `npx agentlink-sh@latest my-app --local` — runs Supabase locally instead of cloud
-- **Validate setup:** `npx agentlink-sh@latest check` — verifies extensions, internal functions, vault secrets, api schema, file layout
-- **Re-apply managed resources:** `npx agentlink-sh@latest --force-update` — patches templates, config, and SQL after a CLI upgrade
-
-### Cloud vs local mode
-
-Cloud is the default. The CLI authenticates with Supabase via OAuth, creates a project in the user's chosen org/region, and stores credentials in `~/.config/agentlink/credentials.json`. Database operations go through the Supabase Management API; SQL runs against the connection pooler.
-
-Local mode (`--local`) runs Supabase in Docker via `supabase start`. SQL executes via `psql` against `localhost:54322`, and a Supabase MCP server is installed at `http://localhost:54321/mcp` for migration and advisor tooling. The MCP server is **not** installed in cloud mode.
+In cloud mode the CLI authenticates via OAuth, creates the project in your chosen org/region, and runs database operations through the Supabase Management API. In local mode SQL runs via `psql` against `localhost:54322` and a Supabase MCP server is installed for migration and advisor tooling.
 
 ### Production guardrail
 
-The agent deploys autonomously to `local` and `dev` environments — `db apply` and `env deploy` against your `dev` environment run without prompting.
-
-**Production is gated.** Any command targeting `prod` requires explicit user approval at call time. Approval is per-command, not a blanket pass.
+The agent works autonomously against `local` and `dev` — `db apply` and `env deploy` to `dev` run without prompting. **Production is gated:** any command targeting `prod` requires explicit user approval at call time, per command — never a blanket pass.
 
 ### Blocked commands
 
-A PreToolUse hook (`hooks/block-destructive-db.sh`) blocks the agent from running:
+A PreToolUse hook (`hooks/block-destructive-db.sh`) stops the agent from running:
 
 - `npx supabase db reset` — destroys and recreates the local database
 - `npx supabase db push --force` / `-f` — overwrites remote schema without diffing
 
-If you need these, run them manually on your terminal outside Claude Code.
+Run these yourself in a terminal if you really need them.
 
----
+## Companion skills
 
-## Companion Skills
+The CLI installs a curated set of companion skills automatically — the agent assumes they're present. Pass `--no-skills` to skip auto-install.
 
-The CLI installs a curated set of companion skills automatically — the agent assumes they are present. To skip auto-install, pass `--no-skills` to `npx agentlink-sh@latest`.
-
-**Auto-installed for every project:**
-
-- `supabase/agent-skills@supabase-postgres-best-practices` (required)
-- `supabase/server` (required)
+- `supabase/agent-skills@supabase-postgres-best-practices` _(required)_
+- `supabase/server` _(required)_
 - `anthropics/skills@frontend-design`
 - `shadcn/ui`
 - `vercel-labs/agent-skills@vercel-react-best-practices`
 - `resend/react-email`, `resend/email-best-practices`, `resend/resend-skills`
 
-To install or update a companion skill manually use the `skills` cli:
+Install or update one manually with the [`skills`](https://www.npmjs.com/package/skills) CLI:
 
 ```bash
 npx skills add supabase/agent-skills@supabase-postgres-best-practices
 ```
-
----
 
 ## License
 
