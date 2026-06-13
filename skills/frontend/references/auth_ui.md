@@ -1,6 +1,6 @@
 # Auth UI Patterns
 
-Client-side authentication UI: sign-in, sign-up, password reset, email confirmation, magic links, and workspace-invitation acceptance. The scaffold ships a complete canonical flow in the React + TanStack Start (SPA) template — this doc explains how the pieces fit together so you can customize without breaking it.
+Client-side authentication UI: sign-in, sign-up, password reset, email confirmation, magic links, and workspace-invitation acceptance. The CLI scaffolds a complete canonical flow in the React + TanStack Start (SPA) frontend — this doc explains how the pieces fit together so you can customize without breaking it.
 
 ## Contents
 
@@ -16,15 +16,13 @@ Client-side authentication UI: sign-in, sign-up, password reset, email confirmat
 
 ## Canonical flow
 
-One diagram, both templates.
-
 ```
-                         ┌─── /auth/sign-in ───► /dashboard (session created)
+                         ┌─── /sign-in ────────► /dashboard (session created)
                          │       │
                          │       └── magic link ─► sends email
                          │                          │
                          ▼                          ▼
-            /auth/sign-up ─signup─► /auth/check-inbox?type=signup|magiclink|recovery
+            /sign-up ─────signup─► /check-inbox?type=signup|magiclink|recovery
                          │                          │
                          │                  ┌───────┴────────┐
                          │              click link        paste OTP
@@ -38,7 +36,7 @@ One diagram, both templates.
                          │              type=recovery        → /update-password
                          │              type=email_change    → success page
                          │
-            /auth/forgot-password ─► /auth/check-inbox?type=recovery
+            /forgot-password ────► /check-inbox?type=recovery
                          │
                          ▼
                   /update-password ─► /dashboard
@@ -46,7 +44,7 @@ One diagram, both templates.
             /accept-invite?token=&[code=]
                          │
                          ├─ ?code present (new user)   → exchangeCodeForSession → invitation_accept → refreshSession → /dashboard
-                         └─ no ?code (existing user)   → if no session: /auth/sign-in?next=/accept-invite?token=...
+                         └─ no ?code (existing user)   → if no session: /sign-in?next=/accept-invite?token=...
                                                        → else: invitation_accept → refreshSession → /dashboard
 
             /settings/members  (in-app, gated)
@@ -63,7 +61,7 @@ Two consolidations to keep in mind:
 
 1. **One `/auth/confirm` route** handles signup / magiclink / recovery / email_change link-clicks. It reads `?type=…` and branches. Invites are NOT routed through here — they have `/accept-invite` because the URL also carries `?token=` for the `invitation_accept` RPC.
 
-2. **One `/auth/check-inbox` page** replaces the old `sign-up-success`. It's parameterized by `?type=signup|magiclink|recovery` and renders the same shell with type-specific copy. Resend + OTP-paste are baked in.
+2. **One `/check-inbox` page** replaces the old `sign-up-success`. It's parameterized by `?type=signup|magiclink|recovery` and renders the same shell with type-specific copy. Resend + OTP-paste are baked in.
 
 ---
 
@@ -71,13 +69,13 @@ Two consolidations to keep in mind:
 
 | Path | Purpose | Hook used | Navigation targets |
 |------|---------|-----------|--------------------|
-| `/auth/sign-in` | Email+password sign-in with magic-link toggle | `useSignInFlow`, `useMagicLinkFlow` | password ok → `next \|\| /dashboard`; magic-link ok → `/auth/check-inbox?type=magiclink&email=…` |
-| `/auth/sign-up` | New account creation | `useSignUpFlow` | session returned → `/dashboard`; pending → `/auth/check-inbox?type=signup&email=…` |
-| `/auth/check-inbox` | Pending email state — Resend + OTP entry | `useResendEmail`, `useVerifyOtpFlow` | recovery → `/update-password`; signup/magiclink → `/dashboard` |
-| `/auth/forgot-password` | Request a recovery email | `useResetPasswordFlow` | success → `/auth/check-inbox?type=recovery&email=…` |
+| `/sign-in` | Email+password sign-in with magic-link toggle | `useSignInFlow`, `useMagicLinkFlow` | password ok → `next \|\| /dashboard`; magic-link ok → `/check-inbox?type=magiclink&email=…` |
+| `/sign-up` | New account creation | `useSignUpFlow` | session returned → `/dashboard`; pending → `/check-inbox?type=signup&email=…` |
+| `/check-inbox` | Pending email state — Resend + OTP entry | `useResendEmail`, `useVerifyOtpFlow` | recovery → `/update-password`; signup/magiclink → `/dashboard` |
+| `/forgot-password` | Request a recovery email | `useResetPasswordFlow` | success → `/check-inbox?type=recovery&email=…` |
 | `/update-password` | Set a new password (recovery destination + in-app change) | `useUpdatePasswordFlow` | success → `/dashboard` |
 | `/auth/confirm` | Single PKCE callback for link clicks | `useEffect` `exchangeCodeForSession` | branches on `?type=` |
-| `/accept-invite` | Workspace invitation acceptance | `useAcceptInvite` | accepted → `/dashboard`; logged out → `/auth/sign-in?next=…` |
+| `/accept-invite` | Workspace invitation acceptance | `useAcceptInvite` | accepted → `/dashboard`; logged out → `/sign-in?next=…` |
 | `/settings/members` | Admin: list, invite, revoke, resend, update role, remove | RPC calls (no hooks layer needed) | mutations refresh the table |
 
 ### Route layout
@@ -138,7 +136,7 @@ The hook checks `data.session`, not `data.user.email_confirmed_at`. The latter c
 ```typescript
 const result = await signUp.submit({ email, password, displayName, organizationName });
 if (result?.kind === "pending") {
-  // Email confirmation required → router to /auth/check-inbox?type=signup&email=…
+  // Email confirmation required → router to /check-inbox?type=signup&email=…
 } else if (result?.kind === "authenticated") {
   // Confirmation disabled (scaffold dev default) → /dashboard
 }
@@ -181,7 +179,7 @@ What's load-bearing — never change:
 
 PKCE stores a `code_verifier` in `localStorage` on the device that *initiated* the auth flow. If the user signs up on a laptop and opens the email on their phone, the verifier isn't there → `exchangeCodeForSession` fails with "invalid request: both auth code and code verifier should be non-empty".
 
-This is the single biggest reason the OTP-paste input on `/auth/check-inbox` is **always visible**, not hidden behind a toggle. Pasting the 8-digit code carries no verifier requirement and works regardless of device.
+This is the single biggest reason the OTP-paste input on `/check-inbox` is **always visible**, not hidden behind a toggle. Pasting the 8-digit code carries no verifier requirement and works regardless of device.
 
 Don't change this UX. Hiding the OTP input is a footgun.
 
@@ -303,7 +301,7 @@ The `formatAuthError` helper in `lib/auth-errors.ts` maps these to friendly copy
 > hits the 403. Permissions come from the JWT `app_metadata.permissions` for
 > the **active workspace**.
 
-`useHasPermission(permission, mode?)` (both templates) returns a boolean,
+`useHasPermission(permission, mode?)` returns a boolean,
 failing safe to `false` while loading. Disable mutating buttons; hide nav.
 
 ```tsx

@@ -389,7 +389,7 @@ a tenant of one.
 
 ### Membership & invitation RPC contract
 
-The `api` schema exposes seven RPCs for managing workspace members.
+The `api` schema exposes eight RPCs for managing workspace members.
 Match this contract — it's wired into the scaffolded `/settings/members`
 UI and the `/accept-invite` flow.
 

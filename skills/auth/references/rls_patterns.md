@@ -632,7 +632,7 @@ BEGIN
   v_result := public._internal_admin_complete_invitation(v_user_id, p_token);
   IF v_session_id IS NOT NULL THEN
     PERFORM public._internal_admin_set_session_tenant(
-      v_session_id, v_user_id, (v_result->>'id')::uuid, v_result->>'role'
+      v_user_id, (v_result->>'id')::uuid, v_result->>'role'
     );
   END IF;
   RETURN v_result;

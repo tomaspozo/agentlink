@@ -162,6 +162,8 @@ AS $$
 DECLARE
   v_items jsonb;
   v_total_count bigint;
+  v_limit int;
+  v_offset int;
 BEGIN
   v_limit := LEAST(GREATEST(p_limit, 1), 100);
   v_offset := GREATEST(p_offset, 0);

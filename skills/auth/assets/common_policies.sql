@@ -2,7 +2,7 @@
 -- COMMON RLS POLICIES: Reusable patterns
 -- =============================================================================
 -- These are templates — replace table names and column names with your own.
--- Copy the relevant patterns into the entity file: supabase/schemas/public/<table>.sql
+-- Copy the relevant patterns into the table file: supabase/database/schemas/public/tables/<table>.sql
 -- Policy names use snake_case: {role}_{action}_{table}
 --
 -- AUTHORIZATION MODEL: RLS is ISOLATION-ONLY (scope rows by tenant/owner). It
@@ -17,27 +17,29 @@
 -- ---------------------------------------------------------------------------
 -- Use when: each row belongs to one user, no team/tenant concept
 -- Requires: table has a `user_id` column
+-- Always target `TO authenticated` and wrap auth.uid() in (SELECT ...) so it's
+-- evaluated once per query (InitPlan), not once per row.
 
 DROP POLICY IF EXISTS users_read_own_<table> ON public.<table>;
 CREATE POLICY users_read_own_<table>
-ON public.<table> FOR SELECT
-USING (user_id = auth.uid());
+ON public.<table> FOR SELECT TO authenticated
+USING (user_id = (SELECT auth.uid()));
 
 DROP POLICY IF EXISTS users_insert_own_<table> ON public.<table>;
 CREATE POLICY users_insert_own_<table>
-ON public.<table> FOR INSERT
-WITH CHECK (user_id = auth.uid());
+ON public.<table> FOR INSERT TO authenticated
+WITH CHECK (user_id = (SELECT auth.uid()));
 
 DROP POLICY IF EXISTS users_update_own_<table> ON public.<table>;
 CREATE POLICY users_update_own_<table>
-ON public.<table> FOR UPDATE
-USING (user_id = auth.uid())
-WITH CHECK (user_id = auth.uid());
+ON public.<table> FOR UPDATE TO authenticated
+USING (user_id = (SELECT auth.uid()))
+WITH CHECK (user_id = (SELECT auth.uid()));
 
 DROP POLICY IF EXISTS users_delete_own_<table> ON public.<table>;
 CREATE POLICY users_delete_own_<table>
-ON public.<table> FOR DELETE
-USING (user_id = auth.uid());
+ON public.<table> FOR DELETE TO authenticated
+USING (user_id = (SELECT auth.uid()));
 
 
 -- ---------------------------------------------------------------------------
@@ -65,25 +67,28 @@ WITH CHECK (tenant_id = (SELECT public._auth_tenant_id()));
 -- ---------------------------------------------------------------------------
 -- Use when: content is publicly visible but only authors can create/edit
 
+-- Published rows are readable by everyone (anon + authenticated); the write
+-- and draft-read policies target authenticated only.
+
 DROP POLICY IF EXISTS anon_read_published_<table> ON public.<table>;
 CREATE POLICY anon_read_published_<table>
-ON public.<table> FOR SELECT
+ON public.<table> FOR SELECT TO anon, authenticated
 USING (status = 'published');
 
 DROP POLICY IF EXISTS authors_read_own_drafts ON public.<table>;
 CREATE POLICY authors_read_own_drafts
-ON public.<table> FOR SELECT
-USING (user_id = auth.uid());
+ON public.<table> FOR SELECT TO authenticated
+USING (user_id = (SELECT auth.uid()));
 
 DROP POLICY IF EXISTS users_insert_<table> ON public.<table>;
 CREATE POLICY users_insert_<table>
-ON public.<table> FOR INSERT
-WITH CHECK (user_id = auth.uid());
+ON public.<table> FOR INSERT TO authenticated
+WITH CHECK (user_id = (SELECT auth.uid()));
 
 DROP POLICY IF EXISTS authors_update_own_<table> ON public.<table>;
 CREATE POLICY authors_update_own_<table>
-ON public.<table> FOR UPDATE
-USING (user_id = auth.uid());
+ON public.<table> FOR UPDATE TO authenticated
+USING (user_id = (SELECT auth.uid()));
 
 
 -- ---------------------------------------------------------------------------
@@ -94,23 +99,23 @@ USING (user_id = auth.uid());
 
 DROP POLICY IF EXISTS users_read_own_or_public_<table> ON public.<table>;
 CREATE POLICY users_read_own_or_public_<table>
-ON public.<table> FOR SELECT
-USING (user_id = auth.uid() OR is_public = true);
+ON public.<table> FOR SELECT TO authenticated
+USING (user_id = (SELECT auth.uid()) OR is_public = true);
 
 DROP POLICY IF EXISTS users_insert_own_<table> ON public.<table>;
 CREATE POLICY users_insert_own_<table>
-ON public.<table> FOR INSERT
-WITH CHECK (user_id = auth.uid());
+ON public.<table> FOR INSERT TO authenticated
+WITH CHECK (user_id = (SELECT auth.uid()));
 
 DROP POLICY IF EXISTS users_update_own_<table> ON public.<table>;
 CREATE POLICY users_update_own_<table>
-ON public.<table> FOR UPDATE
-USING (user_id = auth.uid());
+ON public.<table> FOR UPDATE TO authenticated
+USING (user_id = (SELECT auth.uid()));
 
 DROP POLICY IF EXISTS users_delete_own_<table> ON public.<table>;
 CREATE POLICY users_delete_own_<table>
-ON public.<table> FOR DELETE
-USING (user_id = auth.uid());
+ON public.<table> FOR DELETE TO authenticated
+USING (user_id = (SELECT auth.uid()));
 
 
 -- ---------------------------------------------------------------------------
@@ -120,8 +125,10 @@ USING (user_id = auth.uid());
 -- `auth_verify_access` raises a 403 (SQLSTATE 42501) when the caller's active
 -- workspace lacks the permission; `auth_has_access` is the boolean form for
 -- branching. The matching table keeps an isolation-only policy (Pattern 2) as
--- the backstop. Seed the permission key in _rbac.sql (permissions +
--- role_permissions) so the access-token hook bakes it into the JWT.
+-- the backstop. Declare the permission key in the RBAC reference data under
+-- supabase/database/rbac/ (permissions.sql + role_permissions.sql, which fill
+-- rbac_desired and are reconciled on db apply / env deploy) so the access-token
+-- hook bakes it into the JWT.
 
 CREATE OR REPLACE FUNCTION api.<table>_update(p_id uuid, p_name text)
 RETURNS jsonb

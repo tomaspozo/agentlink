@@ -307,10 +307,15 @@ TanStack Router with file-based routing. Route files in `src/routes/` map direct
 
 ```
 src/routes/
-├── __root.tsx                # Root layout — QueryClientProvider, AuthProvider, Toaster
-├── index.tsx                 # PUBLIC /  (auth-aware landing page)
-├── login.tsx                 # Public /login (sign-in + sign-up)
-├── _auth.tsx                 # Pathless gate — beforeLoad redirects to /login when no session
+├── __root.tsx                # Root shell + providers — QueryClientProvider, AuthProvider, AppToaster
+├── index.tsx                 # PUBLIC /  (landing page)
+├── _anon.tsx                 # Pathless layout — anon-only (redirects signed-in users to /dashboard)
+├── _anon/                    # Logged-out-only pages
+│   ├── sign-in.tsx           # /sign-in
+│   ├── sign-up.tsx           # /sign-up
+│   ├── forgot-password.tsx   # /forgot-password
+│   └── check-inbox.tsx       # /check-inbox
+├── _auth.tsx                 # Pathless gate — beforeLoad redirects to /sign-in when no session
 └── _auth/                    # Everything here is gated
     ├── dashboard.tsx         # /dashboard
     ├── animals/
@@ -318,7 +323,7 @@ src/routes/
     │   ├── $animalId.tsx     # /animals/:animalId
     │   └── -components/      # Route-scoped components (ignored by router)
     │       └── AnimalCard.tsx
-    └── settings.tsx          # /settings
+    └── settings/members.tsx  # /settings/members
 ```
 
 **Per-section gating is the whole API.** A file in `src/routes/*` is
@@ -336,8 +341,8 @@ machines. Specifically, do not:
   no public anything). Customer portals, SaaS apps, and most
   products want a public `/` and gated `/dashboard`.
 
-- `__root.tsx` — root providers (QueryClient, Auth, Toaster). No auth logic.
-- `_auth.tsx` — pathless layout with `beforeLoad` `throw redirect({ to: "/login" })`.
+- `__root.tsx` — root shell (`shellComponent`) + app providers (QueryClient, Auth, AppToaster) in `component`. TanStack Start owns the entry point; there is no `main.tsx`/`index.html`.
+- `_auth.tsx` — pathless layout with `beforeLoad` `throw redirect({ to: "/sign-in" })`. In SPA mode this guard is client-only (UX, not security).
 - `$param` — dynamic route segments.
 - `-components/` — folders prefixed with `-` are ignored by the router.
 
@@ -401,7 +406,7 @@ export const animalStatusLabels: Record<AnimalStatus, string> = {
 const { data: { subscription } } = supabase.auth.onAuthStateChange(
   (event, session) => {
     if (event === "SIGNED_OUT") {
-      window.location.href = "/login";
+      window.location.href = "/sign-in";
     }
   }
 );
@@ -480,9 +485,9 @@ before the AFTER-INSERT trigger materializes the user's default
 membership. The session returned from `signUp()` lacks `tenant_id` until
 a refresh re-runs the hook. The scaffold handles this in two places:
 
-1. The scaffolded `/login` route calls
+1. The scaffolded `/sign-up` route calls
    `await supabase.auth.refreshSession()` immediately after `signUp()`
-   succeeds. Keep this whenever you replace or extend the login flow.
+   succeeds. Keep this whenever you replace or extend the sign-up flow.
 
 2. `useTenantGuard` is the safety net. When a gated page reads
    tenant-scoped data and the JWT lacks `tenant_id`, the hook calls
@@ -590,8 +595,8 @@ it. You are not starting from zero.
 **What the scaffold provides:**
 - **`useAuth` hook** — `@/contexts/auth-context.tsx`. `{ user, session, loading }`; manages auth state via `onAuthStateChange`.
 - **`useTenantGuard` hook** — `@/hooks/use-tenant-guard.ts`. Gates tenant-scoped reads on a fresh JWT (see the previous subsection).
-- **`_auth.tsx` layout route** — pathless gate. Throws `redirect({ to: "/login" })` when no session; all child routes are protected.
-- **`login.tsx` route** — minimal email/password page with sign-in ⇄ sign-up toggle. Calls `supabase.auth.refreshSession()` right after `signUp` so `tenant_id` lands on the first JWT. Post-auth redirects to `/dashboard`.
+- **`_auth.tsx` layout route** — pathless gate. Throws `redirect({ to: "/sign-in" })` when no session; all child routes are protected.
+- **`_anon/sign-in.tsx` + `_anon/sign-up.tsx` routes** — email/password pages under the anon-only `_anon` layout (signed-in users bounce to `/dashboard`). `sign-up.tsx` calls `supabase.auth.refreshSession()` right after `signUp` so `tenant_id` lands on the first JWT. Post-auth redirects to `/dashboard`.
 - **Public `index.tsx`** — auth-aware landing with a CTA that flips between "Sign in" and "Go to dashboard" based on `useAuth().user`.
 - **`ErrorBoundary`** — wraps the auth layout's `<Outlet />` to catch render errors.
 
@@ -620,7 +625,7 @@ Build only what's needed. An invitation-only app with OAuth doesn't need a sign-
 export const Route = createFileRoute("/_auth")({
   beforeLoad: async () => {
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session) throw redirect({ to: "/login" });
+    if (!session) throw redirect({ to: "/sign-in" });
     return { session };
   },
   component: AuthLayout,

@@ -13,7 +13,7 @@ claude --plugin-dir ./
 ```
 .claude-plugin/plugin.json   # Plugin manifest (name, version, metadata)
 agents/builder.md             # Main agent definition
-skills/                       # Domain skills (database, rpc, auth, edge-functions, frontend)
+skills/                       # Domain skills (cli, database, rpc, auth, edge-functions, frontend)
 hooks/                        # PreToolUse hooks (block destructive DB commands)
 scripts/release.sh            # Release automation
 settings.json                 # Default agent config
@@ -61,10 +61,10 @@ Releases are cut with `scripts/release.sh`. The script handles the full flow:
 git status
 
 # 2. Preview what will happen
-./scripts/release.sh 0.9.0 --dry-run
+./scripts/release.sh 1.0.0 --dry-run
 
 # 3. Cut the release
-./scripts/release.sh 0.9.0
+./scripts/release.sh 1.0.0
 ```
 
 ### Rules

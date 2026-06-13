@@ -16,53 +16,100 @@ File-based routing with TanStack Router for Vite + React projects. Covers router
 
 Three files form the routing foundation. The CLI scaffolds all three.
 
-### `src/router.tsx` -- createRouter with typed context
+This is **TanStack Start in SPA mode** (`tanstackStart({ spa: { enabled: true } })` in `vite.config.ts`). Start owns the entry point -- there is **no hand-written `src/main.tsx` and no `index.html`**. You never call `createRoot(...).render(...)` or mount a `<RouterProvider>` yourself.
+
+### `src/router.tsx` -- getRouter factory with typed context
 
 ```typescript
-import { createRouter } from "@tanstack/react-router";
+import { createRouter as createTanStackRouter } from "@tanstack/react-router";
 import { routeTree } from "./routeTree.gen";
 import { queryClient } from "./lib/query-client";
 
-export const router = createRouter({
-  routeTree,
-  context: { queryClient },
-  defaultPreload: "intent",
-});
+export interface RouterContext {
+  queryClient: typeof queryClient;
+}
+
+// TanStack Start calls this factory to create the router. Keep it a function
+// (not a module-level singleton) so Start can construct the router for the
+// generated client entry; in SPA mode it runs once on the client.
+export function getRouter() {
+  return createTanStackRouter({
+    routeTree,
+    context: { queryClient },
+    defaultPreload: "intent",
+    scrollRestoration: true,
+  });
+}
 
 declare module "@tanstack/react-router" {
   interface Register {
-    router: typeof router;
+    router: ReturnType<typeof getRouter>;
   }
 }
 ```
 
 Key points:
+- TanStack Start calls `getRouter()` -- export the factory, not a singleton, and do not render the router yourself
 - `context: { queryClient }` makes the query client available to all route loaders via `routeContext`
 - `defaultPreload: "intent"` prefetches routes on hover/focus for snappy navigation
 - The `Register` module declaration enables type-safe `Link` components and `useNavigate` across the app
 
-### `src/routes/__root.tsx` -- root route with context
+### `src/routes/__root.tsx` -- root shell + app providers
+
+The root route has two parts: a `shellComponent` (the server-prerendered `<html>`/`<head>`/`<body>` document, kept free of any browser/Supabase code) and a `component` that holds the client-only app providers. This is where `QueryClientProvider`, `AuthProvider`, and the toaster nest -- there is no separate `main.tsx`.
 
 ```typescript
-import { createRootRouteWithContext, Outlet } from "@tanstack/react-router";
+import {
+  createRootRouteWithContext,
+  HeadContent,
+  Outlet,
+  Scripts,
+} from "@tanstack/react-router";
+import { QueryClientProvider } from "@tanstack/react-query";
 import type { QueryClient } from "@tanstack/react-query";
+import { AppToaster } from "@/components/app-toaster";
+import { AuthProvider } from "@/contexts/auth-context";
+import { queryClient } from "@/lib/query-client";
 
-export interface RouterContext {
+interface RouterContext {
   queryClient: QueryClient;
 }
 
 export const Route = createRootRouteWithContext<RouterContext>()({
-  component: RootComponent,
+  shellComponent: RootDocument, // prerendered <html> shell, no app code
+  component: RootComponent, // client-only app providers (SPA)
 });
 
+function RootDocument({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="en">
+      <head>
+        <HeadContent />
+      </head>
+      <body>
+        {children}
+        <Scripts />
+      </body>
+    </html>
+  );
+}
+
 function RootComponent() {
-  return <Outlet />;
+  return (
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <Outlet />
+        <AppToaster />
+      </AuthProvider>
+    </QueryClientProvider>
+  );
 }
 ```
 
 Key points:
 - `createRootRouteWithContext<RouterContext>()` types the context for all child routes
-- The root component renders `<Outlet />` -- child routes render inside it
+- `shellComponent` is server-prerendered -- keep it free of code that touches the browser or the Supabase client; app providers belong in `component`, which SPA mode renders on the client only
+- The `component` renders `<Outlet />` (the matched route tree) and nests the app providers around it
 - Add global error boundaries or not-found handlers here if needed
 
 ### `routeTree.gen.ts` -- auto-generated route tree
@@ -79,35 +126,40 @@ All routes live in `src/routes/`. The file name determines the URL path.
 
 ### Directory structure
 
+This is the route tree the CLI scaffolds:
+
 ```
 src/routes/
-  __root.tsx              --> root layout (wraps everything)
-  login.tsx               --> /login
-  invitacion.tsx          --> /invitacion
-  _auth.tsx               --> layout route (no URL segment)
+  __root.tsx              --> root shell + providers
+  index.tsx               --> PUBLIC landing page (at "/")
+  _anon.tsx               --> layout for logged-out-only pages
+  _anon/
+    sign-in.tsx           --> /sign-in
+    sign-up.tsx           --> /sign-up
+    forgot-password.tsx   --> /forgot-password
+    check-inbox.tsx       --> /check-inbox
+  _auth.tsx               --> layout that gates authenticated pages
   _auth/
-    index.tsx             --> / (dashboard, under _auth layout)
-    ganado/
-      index.tsx           --> /ganado
-      nuevo.tsx           --> /ganado/nuevo
-      $animalId.tsx       --> /ganado/:animalId
-      -components/
-        animal-card.tsx   --> (ignored by router)
-    fertilidad/
-      index.tsx           --> /fertilidad
-      -components/
-        fertility-form-modal.tsx
-    configuracion/
-      index.tsx           --> /configuracion
+    dashboard.tsx         --> /dashboard
+    forbidden.tsx         --> /forbidden
+    settings/
+      members.tsx         --> /settings/members
+  accept-invite.tsx       --> /accept-invite
+  auth.confirm.tsx        --> /auth/confirm
+  update-password.tsx     --> /update-password
 ```
+
+Routes are flat-file based: `_anon/sign-in.tsx` renders at `/sign-in`, NOT `/_anon/sign-in`. The landing page is the public `index.tsx` at `/`. The gated app lives under `_auth/` (e.g. `/dashboard`). The sign-in page is at `/sign-in`. When you add feature pages, nest them under `_auth/` (e.g. `_auth/animals.tsx` → `/animals`).
 
 ### Convention reference
 
 | Pattern | Example | URL |
 |---------|---------|-----|
-| Index route | `_auth/index.tsx` | `/` (parent path) |
-| Static segment | `ganado/nuevo.tsx` | `/ganado/nuevo` |
-| Dynamic param | `$animalId.tsx` | `/ganado/:animalId` |
+| Index route | `index.tsx` | `/` (parent path) |
+| Static segment | `_auth/dashboard.tsx` | `/dashboard` |
+| Nested segment | `_auth/settings/members.tsx` | `/settings/members` |
+| Dotted segment | `auth.confirm.tsx` | `/auth/confirm` |
+| Dynamic param | `$animalId.tsx` | `/:animalId` |
 | Layout route | `_auth.tsx` | No URL segment, wraps children |
 | Pathless group | `_auth/` prefix | Groups routes under a layout |
 | Co-located files | `-components/` | Ignored by the router |
@@ -117,9 +169,9 @@ src/routes/
 Files prefixed with `_` create layout routes. They render an `<Outlet />` that child routes fill in. They do not add a URL segment.
 
 ```
-_auth.tsx         --> layout (sidebar, header, auth guard)
-_auth/index.tsx   --> renders at /
-_auth/ganado/     --> renders at /ganado/*
+_auth.tsx           --> layout (TopBar + auth guard)
+_auth/dashboard.tsx --> renders at /dashboard
+_anon.tsx           --> layout for logged-out-only pages (sign-in, sign-up, ...)
 ```
 
 Layout routes are the right place for:
@@ -147,14 +199,14 @@ _auth/sanidad/
 
 The `_auth.tsx` layout route guards all its children. Any route under `_auth/` requires authentication.
 
+> **SPA caveat:** In SPA mode the `beforeLoad` guard runs **client-side only** -- there is no server-side gating. It controls navigation/UX, not data access. The real access gate is the backend `auth_verify_access()` check inside every RPC. Never rely on a client guard to protect data.
+
 ```typescript
 // src/routes/_auth.tsx
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
 import { supabase } from "@/lib/supabase";
-import { Sidebar } from "@/components/layout/sidebar";
-import { MobileNav } from "@/components/layout/mobile-nav";
-import { Header } from "@/components/layout/header";
 import { ErrorBoundary } from "@/components/error-boundary";
+import { TopBar } from "@/components/topbar";
 
 export const Route = createFileRoute("/_auth")({
   beforeLoad: async () => {
@@ -162,7 +214,7 @@ export const Route = createFileRoute("/_auth")({
       data: { session },
     } = await supabase.auth.getSession();
     if (!session) {
-      throw redirect({ to: "/login" });
+      throw redirect({ to: "/sign-in" });
     }
     return { session };
   },
@@ -171,31 +223,22 @@ export const Route = createFileRoute("/_auth")({
 
 function AuthLayout() {
   return (
-    <div className="flex h-dvh overflow-hidden bg-cream">
-      <div className="hidden lg:block">
-        <Sidebar />
-      </div>
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <Header />
-        <main className="flex-1 overflow-y-auto p-4 pb-24 sm:p-6 sm:pb-24 lg:pb-6">
-          <ErrorBoundary>
-            <Outlet />
-          </ErrorBoundary>
-        </main>
-      </div>
-      <div className="lg:hidden">
-        <MobileNav />
-      </div>
-    </div>
+    <main className="min-h-dvh bg-background">
+      <TopBar />
+      <ErrorBoundary>
+        <Outlet />
+      </ErrorBoundary>
+    </main>
   );
 }
 ```
 
 Key points:
-- `beforeLoad` runs before any child route loads -- if the user is not authenticated, they are redirected before any content renders
+- `beforeLoad` runs before any child route loads -- if the user is not authenticated, they are redirected (to `/sign-in`) before any content renders
 - The `session` is returned from `beforeLoad` and available to child routes via `routeContext`
-- All shared chrome (sidebar, header, mobile nav) lives in this layout -- child routes only render their own content
-- Routes outside `_auth/` (like `login.tsx`, `invitacion.tsx`) are public and skip the auth check
+- Shared chrome (the `TopBar` with workspace switcher + user menu) lives in this layout -- child routes only render their own content
+- The mirror layout `_anon.tsx` guards logged-out-only pages: if a session exists, it redirects to `/dashboard`
+- The public landing `index.tsx` and routes like `accept-invite.tsx` live outside `_auth/` and skip the auth check
 
 ### Permission route guard (per page)
 
@@ -227,7 +270,7 @@ beforeLoad: async ({ location }) => {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) {
     throw redirect({
-      to: "/login",
+      to: "/sign-in",
       search: { redirect: location.href },
     });
   }
@@ -244,16 +287,16 @@ When a route file grows beyond ~150 lines, extract components into a `-component
 ### Before (everything in one file)
 
 ```
-routes/_auth/ganado/index.tsx     --> 400+ lines: list, card, form, filters, empty state
+routes/_auth/animals/index.tsx    --> 400+ lines: list, card, form, filters, empty state
 ```
 
 ### After (decomposed)
 
 ```
-routes/_auth/ganado/
+routes/_auth/animals/
   index.tsx                        --> page shell (~100 lines)
   $animalId.tsx                    --> detail page
-  nuevo.tsx                        --> create page
+  new.tsx                          --> create page
   -components/
     animal-card.tsx                --> extracted card component
     animal-form.tsx                --> form modal (if using modal pattern)
@@ -295,7 +338,7 @@ import {
 
 export const navItems = [
   {
-    to: "/" as const,
+    to: "/dashboard" as const,
     label: "Dashboard",
     title: "Dashboard",
     icon: LayoutDashboard,
@@ -414,20 +457,20 @@ TanStack Router supports typed search params via `validateSearch`. Use this for 
 ```typescript
 import { createFileRoute } from "@tanstack/react-router";
 
-interface LoginSearch {
+interface SignInSearch {
   redirect?: string;
 }
 
-export const Route = createFileRoute("/login")({
-  validateSearch: (search: Record<string, unknown>): LoginSearch => ({
+export const Route = createFileRoute("/_anon/sign-in")({
+  validateSearch: (search: Record<string, unknown>): SignInSearch => ({
     redirect: search.redirect as string | undefined,
   }),
-  component: LoginPage,
+  component: SignInPage,
 });
 
-function LoginPage() {
+function SignInPage() {
   const { redirect } = Route.useSearch();
-  // Use redirect after successful login
+  // Use redirect after successful sign-in
 }
 ```
 

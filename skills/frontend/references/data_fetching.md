@@ -275,7 +275,7 @@ const { data } = await supabase.rpc("animal_get_by_id", { p_animal_id: id });
 ```typescript
 // src/lib/supabase.ts
 import { createClient } from "@supabase/supabase-js";
-import type { Database } from "@/types/database.types";
+import type { Database } from "@/types/database";
 import type { RpcReturnMap } from "@/types/models";
 
 export const supabase = createClient<Database>(
@@ -469,32 +469,40 @@ if (items.length === 0 && hasFilters) {
 
 ## Provider Nesting Order
 
-The provider hierarchy in `src/main.tsx` follows a specific nesting order:
+This is **TanStack Start in SPA mode** -- there is no hand-written `src/main.tsx` and no `index.html`. TanStack Start owns the entry point: the router is created in `src/router.tsx` (via `getRouter()`), and the root shell lives in `src/routes/__root.tsx`. App providers nest inside the root route's `component`, which SPA mode renders on the client only.
 
 ```typescript
-// src/main.tsx
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
+// src/routes/__root.tsx (the app-providers component)
+import { QueryClientProvider } from "@tanstack/react-query";
+import { Outlet } from "@tanstack/react-router";
+import { AppToaster } from "@/components/app-toaster";
+import { AuthProvider } from "@/contexts/auth-context";
+import { queryClient } from "@/lib/query-client";
+
+function RootComponent() {
+  return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <RouterProvider router={router} />
-        <Toaster position="top-right" />
+        <Outlet />
+        <AppToaster />
       </AuthProvider>
     </QueryClientProvider>
-  </StrictMode>,
-);
+  );
+}
 ```
+
+The `__root.tsx` route registers this as `component` (the client-rendered app providers) alongside a separate `shellComponent` -- the server-prerendered `<html>`/`<head>`/`<body>` document, which stays free of any code that touches the browser or Supabase client. `<Outlet />` renders the matched route tree.
 
 ### Why this order
 
 ```
 QueryClientProvider     <-- outermost: available to everything including auth
-  AuthProvider          <-- auth state: available to router and all routes
-    RouterProvider      <-- routing: renders route tree, has access to auth + queries
-    Toaster             <-- toast notifications: sibling to router, always visible
+  AuthProvider          <-- auth state: available to beforeLoad hooks and all routes
+    Outlet              <-- the route tree (rendered by TanStack Router)
+    AppToaster          <-- toast notifications: sibling to the outlet, always visible
 ```
 
-- **QueryClientProvider** is outermost because auth logic and route loaders both need access to the query client
-- **AuthProvider** wraps the router so auth state is available in `beforeLoad` hooks and all route components
-- **RouterProvider** renders the actual route tree
-- **Toaster** is a sibling to the router (not nested inside) so toasts are visible during route transitions
+- **QueryClientProvider** is outermost because auth logic and route loaders both need access to the query client. The same `queryClient` instance is also passed into the router context in `src/router.tsx`, so `beforeLoad` hooks and loaders can reach it.
+- **AuthProvider** wraps the outlet so auth state is available in `beforeLoad` hooks and all route components
+- **`<Outlet />`** renders the actual route tree (TanStack Router handles routing; you do not mount a `<RouterProvider>` by hand in SPA mode)
+- **AppToaster** is a sibling to the outlet (not nested inside) so toasts are visible during route transitions
