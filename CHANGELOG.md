@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-06-12
+
 ### Security
 
 - **Docs: `api` functions are granted per-object (default-deny), never via a schema-wide blanket grant.** A bulk `GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA api` re-granted every function to `authenticated`, and pg-delta's declarative apply ordered it after the per-function revokes — exposing `SECURITY DEFINER` `api._admin_*` functions to `authenticated` on `db apply` (dev) while migrations locked them on prod. The skills now teach the per-object rule: every `api` RPC carries its own `REVOKE ALL … FROM PUBLIC` + `GRANT EXECUTE … TO authenticated, service_role` (anon-callable → +anon; `_admin_*` → service_role only) — like tables. Updated the `rpc` skill (SKILL.md + references/rpc_patterns.md Grants section), `database/SKILL.md`, and `auth/SKILL.md` (removed the stale "auto-grant / `GRANT ON ALL FUNCTIONS`" guidance).
