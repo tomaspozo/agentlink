@@ -415,25 +415,21 @@ const { data: { subscription } } = supabase.auth.onAuthStateChange(
 subscription.unsubscribe();
 ```
 
-**Critical: async callbacks can deadlock.** `onAuthStateChange` callbacks run synchronously during auth state processing. If your callback `await`s another Supabase method, it can deadlock because the auth state lock is still held.
+**Version floor: supabase-js ≥ 2.107.0.** v2.107.0 (PR #2392) removed the `navigator.locks`-based auth mutex, which was the root cause of the async-callback deadlocks and "Lock broken by another request" errors. The scaffold pins this floor; keep it. The patterns below are written for ≥ 2.107.0 — on older versions you would additionally need `setTimeout(…, 0)` deferral around every Supabase call made from a listener.
 
-Use the `setTimeout` dispatch pattern to safely call Supabase functions after the callback completes:
+**Caveat: avoid `await`-ing inside the callback anyway.** Even post-fix, the async `onAuthStateChange` overload remains `@deprecated`, and `refreshSession()` from inside a `TOKEN_REFRESHED` handler still carries a residual re-entry risk. Keep callbacks synchronous and dispatch any Supabase work outside them:
 
 ```typescript
 supabase.auth.onAuthStateChange((event, session) => {
   if (event === "TOKEN_REFRESHED") {
-    // ❌ WRONG — can deadlock
-    // await supabase.rpc("some_function");
-
-    // ✅ CORRECT — dispatch async work outside the callback
-    setTimeout(async () => {
-      await supabase.rpc("some_function");
-    }, 0);
+    // ✅ Keep the callback synchronous; run the RPC outside it.
+    void supabase.rpc("some_function");
+    // Avoid `await supabase.rpc(...)` directly in the callback.
   }
 });
 ```
 
-**Critical: dual-path race when combining `onAuthStateChange` + `getSession()`.** Auth callback pages that read a URL hash fragment (e.g., `#access_token=...`) have two paths that resolve concurrently: `onAuthStateChange` fires when the fragment is consumed, and `getSession()` resolves once the session is established. If both paths trigger the same post-auth action (e.g., `invitation_accept` RPC + `refreshSession()`), three operations compete for the auth lock and produce "Lock broken by another request" errors.
+**Dual-path race when combining `onAuthStateChange` + `getSession()`.** This is a *logic* race, not a locking one — and it survives the ≥ 2.107.0 fix. Auth callback pages that read a URL hash fragment (e.g., `#access_token=...`) have two paths that resolve concurrently: `onAuthStateChange` fires when the fragment is consumed, and `getSession()` resolves once the session is established. If both trigger the same post-auth action (e.g., an `invitation_accept` RPC), it runs **twice**. The "Lock broken" symptom is gone, but the double execution is still a bug.
 
 Use a guard flag so only the first path to resolve executes the action:
 
@@ -444,18 +440,17 @@ async function handlePostAuthAction() {
   if (handled) return;
   handled = true;
   await supabase.rpc("invitation_accept", { p_token: token });
-  // Defer refreshSession — do NOT call it in the same tick as the initial auth flow
-  setTimeout(() => supabase.auth.refreshSession(), 0);
+  await supabase.auth.refreshSession();
 }
 
 supabase.auth.onAuthStateChange((event, session) => {
   if (event === "SIGNED_IN" && session) {
-    handlePostAuthAction(); // non-async — do not hold the auth lock
+    void handlePostAuthAction(); // keep the callback itself synchronous
   }
 });
 
 supabase.auth.getSession().then(({ data: { session } }) => {
-  if (session) handlePostAuthAction();
+  if (session) void handlePostAuthAction();
 });
 ```
 

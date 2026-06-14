@@ -240,18 +240,17 @@ For the OAuth-via-magic-link case where `auth.callback` does the same thing as `
 
 ## Post-auth actions
 
-When the auth callback must perform an action after sign-in (e.g., accept an invitation, claim a referral), two concurrent paths race for the auth lock:
+When the auth callback must perform an action after sign-in (e.g., accept an invitation, claim a referral), two concurrent paths resolve and can both fire:
 
 1. `onAuthStateChange` fires `SIGNED_IN` when the URL hash fragment is consumed
 2. `getSession()` resolves once the session is established
 
-If both trigger the same async work, the SDK's serializer competes with itself and produces **"Lock broken by another request"** errors.
+If both trigger the same work, the action runs **twice** (e.g., a double `invitation_accept`). On supabase-js < 2.107.0 this also surfaced as **"Lock broken by another request"** errors from the `navigator.locks`-based auth mutex; that mutex was removed in v2.107.0 (PR #2392), so the lock error is gone — but the double-execution is a plain logic bug that remains. The guard flag below fixes it regardless of SDK version.
 
 The `useAcceptInvite` hook already implements the canonical guard pattern. If you build a similar flow, mirror it:
 
 - **Guard flag**: `let handled = false` — only the first path executes
-- **Non-async `onAuthStateChange` callback** — do not `await` inside (holds the lock)
-- **Defer `refreshSession()`** — call it in a `setTimeout(0)` after the RPC succeeds
+- **Keep the `onAuthStateChange` callback synchronous** — dispatch the async work (`void doWork()`) rather than `await`-ing inside the listener (the async overload is still `@deprecated`)
 
 ```typescript
 useEffect(() => {
@@ -262,15 +261,16 @@ useEffect(() => {
     handled = true;
     const { error } = await supabase.rpc("invitation_accept", { p_token: token });
     if (error) { /* ... */ return; }
-    setTimeout(() => supabase.auth.refreshSession().then(() => navigate("/dashboard")), 0);
+    await supabase.auth.refreshSession();
+    navigate("/dashboard");
   }
 
   const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-    if (event === "SIGNED_IN") doWork(); // NOT async, no await here
+    if (event === "SIGNED_IN") void doWork(); // dispatch — keep the listener synchronous
   });
 
   supabase.auth.getSession().then(({ data: { session } }) => {
-    if (session) doWork();
+    if (session) void doWork();
   });
 
   return () => subscription.unsubscribe();
@@ -286,7 +286,7 @@ useEffect(() => {
 | Sign-up returns "User already registered" but the user never finished confirmation | Auth keeps the unconfirmed user. Looks like a duplicate. | Send them to resend (`useResendEmail({ type: 'signup' })`) |
 | Sign-in returns "Email not confirmed" | Session not issued yet | Render the "resend confirmation" CTA — don't ask for a different password |
 | "Email rate limit exceeded" | ~4 signups from the same IP within an hour | Show the rate-limit copy, not a generic error. The 30s cooldown on `useResendEmail` reduces the chance of hitting this. |
-| `refreshSession()` deadlock | Called inside `onAuthStateChange` callback | Refresh after explicit user actions (signup, invite accept), not inside listeners |
+| `refreshSession()` deadlock / "Lock broken by another request" | supabase-js < 2.107.0 `navigator.locks` mutex + `await` inside `onAuthStateChange` | Pin supabase-js ≥ 2.107.0 (PR #2392 removed the mutex). Still keep listeners synchronous and refresh after explicit user actions (signup, invite accept), not from inside `TOKEN_REFRESHED` handlers |
 | Invite link "Invalid or expired" on second click | `invitation_accept` checks `accepted_at IS NULL` | The scaffold's `_internal_admin_complete_invitation` is idempotent — it returns success when the user already has a membership in the invited tenant |
 
 The `formatAuthError` helper in `lib/auth-errors.ts` maps these to friendly copy. Use it everywhere instead of surfacing raw Supabase strings.
