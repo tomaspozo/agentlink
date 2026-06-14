@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-06-13
+
 ### Changed
 
 - **`frontend` skill: auth-listener guidance updated for the supabase-js ≥ 2.107.0 deadlock fix.** v2.107.0 (PR #2392) removed the `navigator.locks`-based auth mutex that caused `onAuthStateChange` async-callback deadlocks and "Lock broken by another request" errors, so the old advice to wrap every in-listener Supabase call in `setTimeout(…, 0)` is obsolete. `skills/frontend/SKILL.md` and `references/auth_ui.md` now state the ≥ 2.107.0 version floor, reframe the `onAuthStateChange` + `getSession()` dual-path guard as a *logic* race (the action runs twice — a plain bug that survives the lock fix) rather than lock contention, switch the listener examples to synchronous dispatch (`void doWork()` instead of `setTimeout`), and keep the narrower caveat that the async overload is still `@deprecated` and `refreshSession()` from inside `TOKEN_REFRESHED` retains a residual re-entry risk. The quirks table's `refreshSession()`-deadlock row now points at the version floor as the fix. Verified end-to-end: the e2e auth suite (sign-up, sign-in, magic-link, password-reset, invite→accept, wrong-account) passes 6/6 against a fresh scaffold on the new floor.
