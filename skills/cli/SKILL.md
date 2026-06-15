@@ -509,6 +509,7 @@ Always prefer the CLI (`--force-update`) first. Only fix manually when the CLI c
 
 ## Reference Files
 
+- **[Scaffold Map](./references/scaffold-map.md)** — The deterministic starting inventory of a fresh project: every scaffolded table, RPC, auth/RLS helper, hook, RBAC role + permission, and frontend route/hook/component. Read this **instead of** doing a discovery pass on a freshly scaffolded project — it's version-matched, so trust it and skip reading the files.
 - **[Workflows](./references/workflows.md)** — Common user scenarios as a flow-by-flow playbook: start a new project from zero, add prod, switch envs, deploy, recover from a failed deploy. Each entry lists the user trigger, questions to ask, commands to run, and watch-outs.
 - **[Upgrading](./references/upgrading.md)** — Moving an existing project onto a newer AgentLink version: `check` → `--dry-run` → `--force-update` → `check`, the base-snapshot file-level merge (fast-forward / customized / conflict / preserved), and the disposable `--skip-env --skip-install` reference for base reconstruction and diffing.
 - **[Migration System](./references/migration_system.md)** — Deep dive: two-tier migrations, how db diff works, adding extensions
