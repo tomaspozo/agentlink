@@ -73,138 +73,35 @@ Check `AGENTS.md` in the project root for the project mode (**cloud** or **local
 
 ### New project setup
 
-Scaffold via the AgentLink CLI — never via the Supabase connector MCP. The agent has no browser for Supabase OAuth, so use `--skip-env`:
-
-```bash
-npx agentlink-sh@latest <name> --skip-env
-# or, to scaffold into the current directory:
-npx . --skip-env
-```
-
-This writes all files, installs deps, configures Claude Code, and registers the plugin + companion skills — without touching Supabase. Then hand off to the user:
+Scaffold via the AgentLink CLI — never the Supabase connector MCP. The agent has no browser for Supabase OAuth, so scaffold with `--skip-env` (`npx agentlink-sh@latest <name> --skip-env`, or `npx . --skip-env` for the current dir): it writes all files, installs deps, configures Claude Code, and registers the plugin + companion skills without touching Supabase. Then hand off:
 
 > "Scaffold done. Open Claude Code in `<path>` and run `npx agentlink-sh@latest env add dev` in a terminal — it needs a browser for OAuth, which I don't have."
 
-After the user completes `env add dev`, run `npx agentlink-sh@latest check` to confirm `ready: true`. For the full workflow (questions to ask, frontend flags, local-Docker opt-in), load the `cli` skill — see Workflow #1 in `skills/cli/references/workflows.md`.
+After the user completes `env add dev`, run `check` to confirm `ready: true`.
 
-**The Supabase connector MCP is not used for project creation, schema application, SQL execution, or edge-function deploys.** All database and deploy work goes through the AgentLink CLI (`db apply`, `db migrate`, `env deploy`). The MCP tools (`apply_migration`, `execute_sql`, `create_project`, etc.) must not substitute for CLI commands.
+**The Supabase connector MCP is never used for project creation, schema application, SQL execution, or edge-function deploys** — all database and deploy work goes through the CLI (`db apply`, `db migrate`, `env deploy`); MCP tools (`apply_migration`, `execute_sql`, `create_project`) must not substitute. Load the `cli` skill for the full setup workflow (questions to ask, frontend flags, local-Docker opt-in) — Workflow #1 in `references/workflows.md`.
 
-### Ongoing development
+### Everyday CLI ops
 
-**Local mode:**
-- **Stack down?** Run `npx supabase start`. If that fails, ask the user to check their Supabase CLI.
-- **MCP missing?** `supabase:apply_migration` should be available. If not, configure: name `supabase`, type HTTP, URL `http://localhost:54321/mcp`.
+Check `AGENTS.md` for the mode and its commands; in **cloud mode never run `npx supabase start`/`stop`** — the DB is remote. The core loop:
 
-**Cloud mode:**
-- The database runs in the cloud — do NOT run `npx supabase start` or `npx supabase stop`.
-- There is no local MCP server. Use Supabase CLI commands directly.
-- DB URL uses the Supabase connection pooler (IPv4-compatible): `postgresql://postgres.[project_id]:[password]@aws-0-[region].pooler.supabase.com:5432/postgres` — stored in `.env.local`.
-- See `AGENTS.md` for the cloud-specific commands and connection details.
+- **`check`** (`npx agentlink-sh@latest check`) — read-only JSON health report (`ready`, `database`, `files`). Run it before starting work, after errors, or when something seems missing; look at which fields are `false`.
+- **`--force-update`** — re-applies template files, `config.toml` patches, and SQL setup to fix what `check` flags (Supabase must be running). Typical loop: `check` → `--force-update` → `check`.
+- **`info <name>`** — prints a managed component's docs (type, signature, related) from the CLI catalog (`components.json`).
+- **`--debug`** — writes `agentlink-debug.log`; use on unclear scaffold/update failures (ask the user to share it if needed).
+- **Upgrading** a project: `check` → `--dry-run` (previews every change, touches nothing) → `--force-update` → `check`.
 
-### Diagnose with `check`
+Load the `cli` skill for the full command set, env/deploy flows, and recovery — `references/upgrading.md` for the merge semantics, `references/troubleshooting.md` for specific errors.
 
-Command: `npx agentlink-sh@latest check`
+### Managed files
 
-Outputs JSON with `ready`, `supabase_running`, `database` (extensions, queues, functions, secrets, api_schema), and `files`. Use it before starting work, after errors, or when something seems missing. Look at which fields are `false` to pinpoint the issue.
+Schema files under `supabase/database/` are **one object per file**. The CLI tracks a committed base snapshot at `.agentlink/template-base/` (**never hand-edit it**) and 3-way merges your files against it on `--force-update`: pristine files fast-forward to the new template, your edits are preserved silently, and edits that collide with an upstream change surface as a conflict to reconcile.
 
-**`check` is read-only** — it reports problems but does not fix them.
+**To customize a managed function** (e.g. make `_internal_admin_handle_new_user` also insert an accounts row), just **edit its per-object file in place**, keep the same name + schema, run `npx agentlink-sh@latest db apply`, and tell the user it's a project-specific override. There are no inline annotations — never add `-- @agentlink` comments. Load the `cli` skill (and `references/upgrading.md`) for the full merge model.
 
-### Fix with `--force-update`
+### Command reference
 
-Command: `npx agentlink-sh@latest --force-update`
-
-Overwrites template files, patches `config.toml`, applies SQL setup, and generates migrations if schema changed. Requires Supabase to be running. Use after `check` reports missing components or after a CLI version upgrade.
-
-Typical workflow: `check` → identify what's wrong → `--force-update` → `check` again to confirm `ready: true`.
-
-### Upgrading to a newer AgentLink version
-
-`npx agentlink-sh@latest` auto-detects an existing project and runs the update flow — there's no separate `upgrade` command. The order of operations is `check` → `--dry-run` → `--force-update` → `check`:
-
-- **`--dry-run`** previews the full plan (which template files would be created / rewritten / merged / preserved, which `config.toml` patches apply, which SQL and functions deploy) **without touching disk, DB, or network.** Reach for this first whenever the user asks "what will the upgrade change?"
-- After a real `--force-update`, the CLI prints a changed-files summary and points at `git diff` (review) and `git checkout . && git clean -fd supabase/ .claude/` (rollback).
-
-**If the in-place update misbehaves** — `--dry-run` looks wrong, `--force-update` errors unclearly, or you don't trust what landed — scaffold a disposable files-only reference (`npx agentlink-sh@latest /tmp/agentlink-ref --skip-env --skip-install`, using the same name/skills/frontend as `agentlink.json`) and diff the env-independent trees (`supabase/database`, `supabase/functions`, the `20200101*` baseline migrations) against the real project. **Don't** diff `.env.local`, `agentlink.json`, `config.toml`, or `AGENTS.md` — they hold project-specific values and only produce noise.
-
-Full procedure, watch-outs, and the merge semantics: `skills/cli/references/upgrading.md`.
-
-### Look up components with `info`
-
-Commands: `npx agentlink-sh@latest info` (summary list) or `npx agentlink-sh@latest info <name>` (detail for one component).
-
-Outputs JSON with type, summary, description, signature, and related components. Use after `check` reports a missing component and you need to understand what it does before deciding how to fix it.
-
-### Debug failures
-
-Flag: `npx agentlink-sh@latest --debug`
-
-Writes detailed log to `agentlink-debug.log` in the project directory. Use when scaffold or `--force-update` fails with an unclear error. Tell the user to share the log contents if you can't resolve the issue.
-
-### Managed files and the template base snapshot
-
-Schema files under `supabase/database/` are split **one object per file** — each table (with its grants, RLS policies, indexes, triggers) and each function lives in its own file. The CLI keeps a committed snapshot of the exact templates it last shipped at `.agentlink/template-base/` (committed to git; **never hand-edit**). On update, it compares each template file's disk version against that base to decide what to do — there are no inline annotations anymore.
-
-When you encounter an issue with a managed resource:
-
-1. **Check for updates:** `npx agentlink-sh@latest check` — a newer CLI version may ship a fix
-2. **Update resources:** `npx agentlink-sh@latest --force-update` — re-applies the latest managed versions
-3. **Verify:** `npx agentlink-sh@latest check` — confirm `ready: true`
-
-#### Customizing a managed function (project-scoped override)
-
-When the app needs a managed function to behave differently (e.g., `_internal_admin_handle_new_user` must also create an accounts row), just **edit its file**:
-
-1. Open the per-object file (e.g., `supabase/database/schemas/public/functions/_internal_admin_handle_new_user.sql`)
-2. Modify the function body as needed — keep the same function name and schema
-3. Apply: `npx agentlink-sh@latest db apply`
-4. Tell the user you've created a project-specific override and why
-
-That's it. There is no annotation to remove. The base-snapshot merge detects your edit on the next update and preserves it automatically.
-
-**How it works:** `--force-update` merges at the **file level** against the base snapshot in `.agentlink/template-base/`. For each template file it compares the disk version, the base version, and the new template:
-
-- **disk == base (pristine)** → fast-forwarded to the new template (deterministic, no agent needed)
-- **you edited it, no upstream change** → preserved **silently** as a customization — never nagged
-- **you edited it AND the template also changed** → **conflict**: your disk file is preserved and an actionable 3-way reconcile is surfaced (previous base vs new template vs your version, captured under `.agentlink/.incoming/`)
-- **no base entry / base missing** → preserved (fail-safe)
-
-**Rules:**
-- Keep the same function name and schema — pg-delta matches by `CREATE OR REPLACE FUNCTION <schema>.<name>`
-- One object per file — don't merge multiple functions/tables into a single file
-- Annotations no longer exist; don't add `-- @agentlink` comments
-- Never hand-edit `.agentlink/template-base/` — the CLI manages it
-
-**Example** — overriding `_internal_admin_handle_new_user`: open `supabase/database/schemas/public/functions/_internal_admin_handle_new_user.sql` and edit the body (e.g., add an `INSERT INTO public.accounts ...` after the existing logic). Neighboring functions like `_internal_admin_get_secret.sql` are untouched and keep receiving CLI updates because they live in their own files.
-
-Use `npx agentlink-sh@latest info <name>` to read the docs for any managed resource — it reads the CLI-shipped catalog (`components.json`) and shows the type, description, signature, and related components.
-
-#### Tools reference
-
-| Task | Local | Cloud |
-| ---- | ----- | ----- |
-| Apply SQL (all schemas) | `npx agentlink-sh@latest db apply` | `npx agentlink-sh@latest db apply` |
-| Apply SQL (single statement) | `npx agentlink-sh@latest db sql "<query>"` or `psql` | `npx agentlink-sh@latest db sql "<query>"` |
-| Generate types | `npx agentlink-sh@latest db types` | `npx agentlink-sh@latest db types` |
-| Edge functions (dev) | `npx supabase functions serve` | `npx supabase functions deploy` |
-| Set secrets | `npx supabase secrets set KEY=value` | `npx supabase secrets set KEY=value` |
-| Security review | `supabase:get_advisors` (MCP) | N/A |
-| Get connection info | `npx supabase status` | Read `.env.local` |
-| Generate migration (artifact) | `npx agentlink-sh@latest db migrate name` | `npx agentlink-sh@latest db migrate name` |
-| Push migration (artifact) | N/A (already applied locally) | `npx supabase db push` |
-| Deploy schemas + functions to a cloud env | N/A | `npx agentlink-sh@latest env deploy <dev\|prod>` |
-| Switch active environment | `npx agentlink-sh@latest env use <name>` | `npx agentlink-sh@latest env use <name>` |
-| List environments | `npx agentlink-sh@latest env list` | `npx agentlink-sh@latest env list` |
-| Add environment | `npx agentlink-sh@latest env add prod` | `npx agentlink-sh@latest env add prod` |
-| Remove environment | `npx agentlink-sh@latest env remove staging -y` | `npx agentlink-sh@latest env remove staging -y` |
-| Relink to new project | `npx agentlink-sh@latest env add dev` (prompts to relink) | `npx agentlink-sh@latest env add dev` |
-| Re-apply full setup (recovery / config drift) | N/A | `npx agentlink-sh@latest env add <name> --retry` |
-| Set DB password | N/A | `npx agentlink-sh@latest db password "value"` |
-| Fix DB URL | N/A | `npx agentlink-sh@latest db url --fix` |
-| Rebuild migrations | `npx agentlink-sh@latest db rebuild` | `npx agentlink-sh@latest db rebuild` |
-| Re-apply config (all) | N/A | `npx agentlink-sh@latest env config all` |
-| Re-apply vault secrets | N/A | `npx agentlink-sh@latest env config secrets` |
-| Re-apply auth config | N/A (restart Supabase) | `npx agentlink-sh@latest env config auth` |
-| Re-apply PostgREST config | N/A (restart Supabase) | `npx agentlink-sh@latest env config db` |
+The full Local/Cloud command table — `db apply`/`types`/`migrate`/`sql`/`rebuild`/`password`/`url`, `supabase functions deploy` / `secrets set`, and `env deploy`/`use`/`list`/`add`/`remove`/`config` — lives in the `cli` skill. Load it when you need a specific command.
 
 ### Deployment
 
@@ -318,53 +215,14 @@ How to handle technical/architecture choices while building:
 
 ### Database workflow
 
-The agent focuses on development. Write SQL, apply it, keep building. Migrations are a separate deployment concern — not part of the build loop.
+The agent focuses on development: write SQL, apply it, keep building. Migrations are a separate deployment concern.
 
-1. **Write SQL** to schema files in `supabase/database/` (not to migration files)
-2. **Apply** — `npx agentlink-sh@latest db apply`
-3. **Fix errors** with more SQL — never reset the database
-4. **Iterate** until the feature is complete
+1. **Write SQL** to schema files in `supabase/database/` (one object per file) — not to migration files.
+2. **Apply** — `npx agentlink-sh@latest db apply`.
+3. **Fix errors with more SQL — never reset the database.**
+4. **Iterate** until the feature is complete.
 
-Schema files are the source of truth. The live database is the working copy. Both must always reflect the same state.
-
-Schema files are **one object per file**. pg-delta topologically sorts statements by dependency at apply time, so file count and order are irrelevant — that is what makes one-object-per-file safe.
-
-**Shipping schema to prod is migrations-only.** `db apply` (declarative) is the dev/local loop; on `prod` it's deliberately skipped. So a schema change reaches prod ONLY through a committed migration: build + `db apply` on dev → `db migrate <name>` (review the SQL, commit it) → `env deploy prod` (with explicit user approval) replays the migration via `db push`. Running `env deploy prod` without first generating the migration ships nothing new. See the `cli` skill's "Ship changes to production" workflow.
-
-```
-supabase/database/
-├── cluster/
-│   └── extensions/                     # one file per extension (cluster-level)
-│       ├── pg_graphql.sql
-│       ├── pg_net.sql
-│       ├── pg_cron.sql
-│       └── pgmq.sql
-└── schemas/
-    ├── api/
-    │   ├── schema.sql                  # CREATE SCHEMA api + grants / default privileges
-    │   ├── tables/
-    │   │   └── agentlink_tasks.sql     # PGMQ queue
-    │   ├── functions/
-    │   │   ├── tenant_create.sql       # one RPC per file
-    │   │   ├── profile_get.sql
-    │   │   └── chart_create.sql        # agent builds — api.chart_create + grants
-    │   └── cron/
-    │       └── process-stale-tasks.sql # cron jobs
-    └── public/
-        ├── schema.sql                  # public schema-level grants (e.g. supabase_auth_admin USAGE)
-        ├── tables/
-        │   ├── profiles.sql            # one table + its grants/RLS/indexes/triggers
-        │   ├── tenants.sql             # scaffolded
-        │   └── charts.sql              # agent builds — table + indexes + triggers + policies
-        └── functions/
-            ├── _auth_tenant_id.sql     # one function per file
-            ├── _internal_admin_handle_new_user.sql
-            └── _hook_custom_access_token.sql
-```
-
-**Migrations** are generated only when the user explicitly asks, or as part of a deployment workflow. Use `npx agentlink-sh@latest db migrate name` — it produces a real, non-empty migration by diffing a migrations-only baseline against the schema files. **Never hand-author migration files.** If `db migrate` reports "No changes detected," that's a baseline-availability issue (Docker not running, or no `prod`+`dev` env) — not a cue to write the SQL yourself; see the cli skill's `troubleshooting.md`.
-
-Load the `database` skill for the full workflow, schema file conventions, and worked examples.
+Schema files are the source of truth; the live database is the working copy — keep them in sync. **Shipping schema to prod is migrations-only:** `db apply` (declarative) is the dev/local loop and is deliberately skipped on prod, so a schema change reaches prod ONLY through a committed migration — build + `db apply` on dev → `db migrate <name>` (review, commit) → `env deploy prod` (with explicit user approval) replays it via `db push`. **Never hand-author migration files**; if `db migrate` reports "No changes detected," that's a baseline-availability issue (Docker not running, or no `prod`+`dev` env) — not a cue to write the SQL yourself. Load the `database` skill for schema-file conventions, the full directory layout, and worked examples.
 
 ### Always schema-qualify
 
@@ -374,67 +232,27 @@ Load the `database` skill for full NOT THIS / THIS examples.
 
 ### Schema usage
 
-Every schema has one job. Put things in the right place.
+Every schema has one job: **`api`** = RPC functions only (the entire exposed data surface for all code); **`public`** = tables, RLS policies, `_auth_*` and `_internal_admin_*` functions (NOT exposed); **`extensions`** = all Postgres extensions (always `CREATE EXTENSION … WITH SCHEMA extensions`). Never create tables in `api`. Load the `database` skill for schema-file conventions, naming, and setup.
 
-| Schema       | Purpose             | Contains                                                                                       |
-| ------------ | ------------------- | ---------------------------------------------------------------------------------------------- |
-| `api`        | Exposed to Data API | RPC functions only — the entire data access surface for all code. Use `rpc` skill.             |
-| `public`     | NOT exposed         | Tables, RLS policies, `_auth_*` and `_internal_admin_*` functions. Use `database` and `auth` skills. |
-| `extensions` | Postgres extensions | All extensions (`pg_cron`, `pgmq`, `pgcrypto`, etc.). Always `WITH SCHEMA extensions`.         |
+### Never use `.from()` — always `.rpc()`
 
-```sql
--- ❌ WRONG — extension in wrong schema
-CREATE EXTENSION IF NOT EXISTS pg_cron WITH SCHEMA pg_catalog;
-
--- ✅ CORRECT
-CREATE EXTENSION IF NOT EXISTS pg_cron WITH SCHEMA extensions;
-```
-
-Load the `database` skill for schema file conventions, naming, and setup.
-
-### Never use `.from()` — all data goes through `.rpc()`
-
-`.from()` queries tables via the Data API, but only the `api` schema is exposed — and `api` has no tables, only functions. This means `.from()` will always fail or return nothing, regardless of whether you use a publishable key or a service role key. **This applies to all code** — frontend, edge functions, webhooks, cron handlers, server routes.
+`.from()` queries tables via the Data API, but only the `api` schema is exposed and it has no tables, only functions — so `.from()` always fails or returns nothing, regardless of whether you use a publishable or service-role key. **This applies to all code** — frontend, edge functions, webhooks, cron handlers, server routes.
 
 ```typescript
-// ❌ WRONG — .from() cannot reach tables in the public schema
-const { data } = await supabase.from("charts").select("*");
-
-// ❌ ALSO WRONG — service role key doesn't change which schema is exposed
-const admin = createClient(url, secretKey, { db: { schema: "public" } });
-const { data } = await admin.from("charts").select("*");
-
-// ✅ CORRECT
 const { data } = await supabase.rpc("chart_create", { p_name: "My Chart" });
-
-// ✅ CORRECT — within withSupabase context
-const { data } = await ctx.supabase.rpc("chart_get_by_id", { p_chart_id: id });
-const { data } = await ctx.supabaseAdmin.rpc("chart_admin_cleanup");
 ```
 
-Load the `rpc` skill for function patterns. Load the `frontend` skill for client setup and auth state.
+Load the `rpc` skill for function patterns and the `frontend` skill for client setup and auth state.
 
 ### Security context: SECURITY INVOKER by default
 
+`api.*` RPCs are `SECURITY INVOKER` with `SET search_path = ''`, and every **mutating** RPC calls the permission guard first:
+
 ```sql
--- ✅ CORRECT — permission guard first, then explicit tenant scope (RLS isolates as backstop)
-CREATE FUNCTION api.chart_update(p_chart_id uuid, p_name text)
-RETURNS jsonb LANGUAGE plpgsql SECURITY INVOKER SET search_path = '' AS $$
-BEGIN
-  PERFORM public.auth_verify_access('chart.update');   -- primary permission gate (403)
-  UPDATE public.charts SET name = p_name
-   WHERE id = p_chart_id
-     AND tenant_id = (SELECT public._auth_tenant_id()); -- explicit scope; isolation RLS backstops
-END; $$;
+PERFORM public.auth_verify_access('chart.update');   -- primary permission gate (403), before any work
 ```
 
-**SECURITY DEFINER only when required:**
-
-- `_auth_*` functions called by RLS policies (bypass RLS to query the table they protect)
-- `_internal_admin_*` utility functions that need elevated access (vault secrets, auth.users)
-- Always document WHY: `-- SECURITY DEFINER: required because ...`
-
-Load the `auth` skill for RLS policies, RBAC, and multi-tenancy.
+Use **SECURITY DEFINER only when required** — `_auth_*` functions called by RLS policies (bypass RLS to query the table they protect), and `_internal_admin_*` utilities needing elevated access (vault secrets, `auth.users`) — and always document why (`-- SECURITY DEFINER: required because ...`). Load the `auth` skill for the security model, RLS, RBAC, and multi-tenancy; the `rpc` skill for function templates.
 
 ### Function prefixes
 
@@ -447,7 +265,3 @@ Load the `auth` skill for RLS policies, RBAC, and multi-tenancy.
 | Auth hooks     | `public._hook_{hook_name}`       | DEFINER  |
 
 Load the `rpc` skill for CRUD templates, pagination, and error handling.
-
-### How the CLI tracks schema files (base snapshot)
-
-Schema files are **one object per file** under `supabase/database/` (`database/schemas/public/tables/<table>.sql`, `database/schemas/public/functions/<fn>.sql`, `database/schemas/api/functions/<rpc>.sql`, …). The CLI keeps a committed snapshot of the exact templates it last shipped at `.agentlink/template-base/`. On `--force-update` it compares each file's disk version against that base: pristine files fast-forward to the new template, files you edited are preserved, and files that you and upstream both changed surface as a conflict to reconcile. To customize a CLI-shipped file, just **edit it in place** — the merge preserves your change (see "Customizing a managed function" above). There are **no inline annotations**: don't add `-- @agentlink` comments; use plain SQL comments for documentation.
