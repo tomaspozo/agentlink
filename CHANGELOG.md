@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-06-15
+
 ### Added
 
 - **`builder` agent: orchestration recipes reference (`agents/references/recipes.md`).** Cross-cutting, end-to-end worked examples that combine the layers the architecture keeps separate — `api.*` RPCs, edge functions, and `pg_cron` + PGMQ wired through the prebuilt admin functions. Three recipes: a scheduled outbound-HTTP "ping engine" (with a PGMQ fan-out variant), a queued side-effect (invite-member email), and a periodic third-party sync — each ending with a "what goes where" mapping back to the principles. The `database` and `edge-functions` skills' background-work sections link to it.
