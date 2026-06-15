@@ -7,6 +7,25 @@ description: Supabase Edge Functions. Use when the task involves creating, modif
 
 Edge Functions handle everything that needs to talk to the outside world — webhooks, third-party APIs, scheduled triggers, service-to-service calls. They are **not** for CRUD or business logic (that belongs in database functions via RPCs).
 
+## Outbound HTTP always runs in an edge function — this is not a choice
+
+Any request to a URL **outside Postgres** — pinging a monitored endpoint, calling a third-party API, hitting an LLM, sending a webhook — runs in an **edge function**, driven by **cron + a queue**. **Never** make the outbound request from in-database `pg_net`. This is settled architecture: don't surface it as a decision to the user, don't ask "edge function worker vs. in-database `pg_net`" — the answer is always the edge function.
+
+- `pg_net` (`net.http_post`) is **only** the trigger transport: `pg_cron` → `public._internal_admin_call_edge_function(...)` makes **one** HTTP call to wake an edge function. That is its entire sanctioned role. It is **never** the HTTP client for business logic — no per-row fetches, no fan-out to third parties, no response handling in SQL.
+- Why the edge function wins every time: it gets timeouts, retries, redirect handling, secrets, real error handling, observability, and the Deno ecosystem. `pg_net` is fire-and-forget from inside a transaction with none of that — N outbound calls from SQL tie up the database and silently drop failures.
+
+Canonical flow for "do work against the outside world on a schedule":
+
+```
+pg_cron (e.g. every 1m)
+  └─ public._internal_admin_call_edge_function('internal-<worker>')   ← pg_net's ONLY job: one call to wake the worker
+       └─ edge fn: RPC to fetch the due set (api._admin_… reads the queue / due rows)
+       └─ edge fn: fetch each external URL (timeout, redirects, retries)
+       └─ edge fn: RPC to write results back
+```
+
+For bursty or per-item work, enqueue into PGMQ (`api.agentlink_tasks`) and let `internal-queue-worker` drain it — cron just wakes the worker. See the [database](../database/SKILL.md) cron + queue conventions, and [recipes.md](../../agents/references/recipes.md) for full worked examples (scheduled URL pinger, queued email, periodic sync).
+
 ## IMPORTANT!
 
 - **All database access uses `.rpc()` — never `.from()`.** The `public` schema is not exposed via the Data API, so `.from()` cannot reach tables. Use `ctx.supabase.rpc()` or `ctx.supabaseAdmin.rpc()` to call functions in the `api` schema.

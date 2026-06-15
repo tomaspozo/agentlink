@@ -43,6 +43,13 @@ Then pin the **visual identity** — colors, typography, overall mood. Propose o
 
 **3. The product itself.** The value proposition (one line — who it's for and the problem it solves), the core features for a first version, and the **main entities** — the nouns the app revolves around, which become your first tables and RPCs.
 
+**Ask about the product, not the architecture.** Two kinds of decisions, and only one is the user's:
+
+- **Product decisions** (ask, when genuinely unclear) — what a tenant represents, what lives at `/`, what the app does and for whom. These change *what* you build.
+- **Architecture & runtime mechanics** (decide yourself, never ask) — what runs where, how data flows, what triggers background work. These are settled by the stack; the [Architecture decision matrix](#architecture) is the source of truth, and the skills carry the *how*.
+
+So: outbound HTTP / scheduled work is **always** an edge function driven by cron + a queue, never in-database `pg_net` (see the `edge-functions` skill); data access is **always** an `api.*` RPC, never `.from()`; every table gets RLS. If you catch yourself drafting a question like "edge function worker vs. in-database `pg_net`?" or "RPC vs. direct table query?", stop — that's a mechanics decision the stack already answers (and the [Decision protocol](#decision-protocol) covers the rare uncovered case). Only ask when a genuine *product* fork changes what you build.
+
 ### Write the brief into `AGENTS.md`
 
 Once scope is confirmed and **before** you plan the technical architecture or write any SQL/UI, record the brief in the project's `AGENTS.md`. It's a doc, not code — writing it is the kickoff, the same as `/init`. Capture:
@@ -240,6 +247,17 @@ When the user explicitly says "deploy to prod" / "ship this" / "run env deploy p
 
 100% Supabase — one platform, no extra infrastructure. Know what each layer is for and use the right one.
 
+**These are decisions you make, not questions you ask.** The stack is opinionated on purpose: each concern below has one right home. Pick it yourself from the matrix and build — never surface "edge function vs. `pg_net`?" or "RPC vs. `.from()`?" as a choice for the user (see [Decision protocol](#decision-protocol) below). Worked, end-to-end examples that combine these layers live in **[references/recipes.md](./references/recipes.md)**.
+
+| Concern | Default decision | Owning skill |
+|---|---|---|
+| Data access / business logic | `api.*` RPC (`SECURITY INVOKER`, never `.from()`) | `rpc` |
+| Outbound HTTP / third-party APIs / webhooks | Edge function (`withSupabase`) | `edge-functions` |
+| Background / scheduled / async work | `pg_cron` + PGMQ via the prebuilt admin functions | `database` |
+| Authorization | `auth_verify_access('<entity>.<action>')` guard in the RPC + RLS isolation | `auth` |
+| Multi-tenancy | scaffolded `tenants` / `memberships` / `invitations` | `auth` |
+| Frontend | TanStack Start + `typedRpc` | `frontend` |
+
 ### RPC-First → `rpc` skill
 
 Business logic lives in Postgres functions exposed as RPCs. The `public` schema is **not** exposed via the Data API — **all** data operations go through functions in a dedicated `api` schema. This applies everywhere: frontend components, edge functions, webhooks, cron jobs, server-side code — no exceptions.
@@ -266,7 +284,15 @@ Edge Functions handle webhooks, third-party APIs, and anything outside the datab
 
 ### Cron + Queues in Postgres
 
-Background work runs on `pg_cron` and `pgmq`. No external job runners.
+Background work runs on `pg_cron` and `pgmq` — no external job runners. **Reuse the prebuilt building blocks; don't reinvent them** (full inventory in `cli/references/scaffold-map.md`):
+
+- `public._internal_admin_call_edge_function(function_name, payload)` — fires one `pg_net` call to wake an edge function. This is `pg_net`'s **only** sanctioned use; it is never the HTTP client for business logic.
+- `api._admin_enqueue_task(function_name, payload, delay_seconds)` — enqueue a job into the `agentlink_tasks` PGMQ queue (and auto-wakes the worker).
+- `api._admin_queue_read` / `_admin_queue_archive` / `_admin_queue_delete` — the queue lifecycle helpers the worker uses.
+- `internal-queue-worker` (edge function, `allow: "secret"`) — drains the queue and dispatches each task to its target function.
+- `process-stale-tasks` (scaffolded `pg_cron` job) — wakes the worker every minute so stuck tasks retry.
+
+Canonical flow for scheduled work against the outside world: `pg_cron → _internal_admin_call_edge_function('internal-<worker>') → edge fn: RPC fetch the due set → fetch each URL → RPC write results back`. For bursty/per-item work, enqueue with `api._admin_enqueue_task` and let `internal-queue-worker` drain it. See **[references/recipes.md](./references/recipes.md)** for full worked examples.
 
 ### Authorization (four layers) → `auth` skill
 
@@ -277,6 +303,14 @@ Schema isolation is the table boundary (only `api.*` is exposed). **Permission/a
 ### Development → `database` skill
 
 Develop with the Supabase CLI — locally via Docker or against a cloud project. Check `AGENTS.md` for mode-specific commands.
+
+### Decision protocol
+
+How to handle technical/architecture choices while building:
+
+1. **Default — decide, don't ask.** Make architecture and runtime choices yourself from the matrix above. They're settled by the stack; never turn them into user-facing questions.
+2. **User dictates an implementation → confirm.** If the user specifies *how* to build something, confirm it back before proceeding. If their instruction conflicts with a principle (e.g. "query the table directly with `.from()`", "ping the API from a trigger with `pg_net`"), name the conflict and propose the principled alternative — then follow their call.
+3. **Uncovered use case → research, then decide.** When no skill or principle covers a pattern, consult the official Supabase docs (the Supabase MCP docs search if the project has it wired, otherwise the web), then choose the option that **best aligns with these base principles** and proceed. Record non-obvious calls under "Decisions to track" in `AGENTS.md`.
 
 ---
 

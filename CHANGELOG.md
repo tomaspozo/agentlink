@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Added
+
+- **`builder` agent: orchestration recipes reference (`agents/references/recipes.md`).** Cross-cutting, end-to-end worked examples that combine the layers the architecture keeps separate — `api.*` RPCs, edge functions, and `pg_cron` + PGMQ wired through the prebuilt admin functions. Three recipes: a scheduled outbound-HTTP "ping engine" (with a PGMQ fan-out variant), a queued side-effect (invite-member email), and a periodic third-party sync — each ending with a "what goes where" mapping back to the principles. The `database` and `edge-functions` skills' background-work sections link to it.
+- **`cli` skill: Scaffold Map reference (`skills/cli/references/scaffold-map.md`).** A deterministic, version-matched inventory of everything a fresh scaffold ships with — every table, RPC, `_auth_*`/`_internal_admin_*`/`_hook_*` function, RBAC role + permission, and frontend route/hook/component — so the agent reads it instead of doing a discovery pass on a freshly scaffolded project.
+
+### Changed
+
+- **`builder` agent: the Architecture section is now a decision framework, not just a description of layers.** Added a decision matrix (concern → default decision → owning skill), a **Decision protocol** (decide from the principles by default; confirm when the user dictates an implementation; research the Supabase docs then decide for uncovered patterns), and named the prebuilt cron/queue building blocks the agent must reuse (`_internal_admin_call_edge_function`, `api._admin_enqueue_task`, the queue lifecycle helpers, `internal-queue-worker`, `process-stale-tasks`). Reworded the discovery-phase guidance into two explicit buckets — *product decisions* (ask) vs. *architecture & runtime mechanics* (decide) — so the agent stops surfacing settled choices like "edge function vs. in-database `pg_net`?" as user questions.
+- **`edge-functions` skill: outbound HTTP is always an edge function, never in-database `pg_net`.** Added an explicit rule (with the canonical `cron → call edge fn → RPC fetch → fetch URLs → RPC write` flow) scoping `pg_net` to its only sanctioned use — waking an edge function via `_internal_admin_call_edge_function`. The `database` skill's cron-file convention now points to it.
+
 ## [1.0.1] - 2026-06-13
 
 ### Changed
