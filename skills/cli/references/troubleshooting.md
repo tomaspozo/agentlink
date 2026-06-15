@@ -132,6 +132,20 @@ npx agentlink-sh@latest --force-update
 
 ---
 
+### After `supabase db reset`, custom roles / cron jobs / storage buckets are gone
+
+**Symptom:** A raw `supabase db reset` leaves the database missing your custom roles or permissions (membership role dropdowns empty, `auth_verify_access` failing), the queue cron job, or storage buckets/policies.
+
+**Cause:** `supabase db reset` replays **migrations only**. The imperative resources in `supabase/database/{rbac,cron,storage}/` are deliberately **excluded from migrations** (RBAC is reference data; pg-delta filters the cron + storage schemas out of plans). The migration replay restores the *baseline* defaults but not anything you added after scaffold.
+
+**Fix:** Use the AgentLink wrapper instead of a raw reset — it replays migrations **and** re-applies the imperative resources in one step:
+```bash
+npx agentlink-sh@latest db reset
+```
+If you already ran a raw `supabase db reset`, just run `npx agentlink-sh@latest db apply` to restore them (it runs the same imperative step). Local-only; the agent is blocked from running either reset directly — resets are user-initiated.
+
+---
+
 ## Supabase & DB Connection Issues
 
 ### DB URL is wrong / connection refused

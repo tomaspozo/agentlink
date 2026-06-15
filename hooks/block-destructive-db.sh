@@ -31,16 +31,21 @@ fi
 # Normalize: collapse multiline commands into a single line for matching
 normalized=$(echo "$command" | tr '\n' ' ' | sed 's/  */ /g')
 
-# Block: supabase db reset (with any flags)
-# Matches even inside chained commands (&&, ;, |) by checking the whole string
-if echo "$normalized" | grep -qE '(^|[;&|])[[:space:]]*(supabase|[^[:space:]]*supabase)[[:space:]]+db[[:space:]]+reset([[:space:]]|$)'; then
-  echo "BLOCKED: 'npx supabase db reset' destroys and recreates the local database." >&2
+# Block: `db reset` in any form — `supabase db reset` AND `agentlink db reset`
+# (with npx / path / @latest prefixes and any flags). Blocking the agentlink
+# wrapper too keeps the "resets are user-initiated" rule from being bypassed.
+# Matches even inside chained commands (&&, ;, |) by checking the whole string.
+if echo "$normalized" | grep -qE '(^|[;&|]|[[:space:]])([^[:space:]]*supabase|agentlink[^[:space:]]*)[[:space:]]+db[[:space:]]+reset([[:space:]]|$)'; then
+  echo "BLOCKED: 'db reset' destroys and recreates the local database." >&2
   echo "" >&2
   echo "Rule: \"The database is never reset unless the user explicitly requests it.\"" >&2
   echo "Source: skills/database/references/workflow.md" >&2
   echo "" >&2
   echo "Alternative: Fix errors with more SQL via psql." >&2
-  echo "If the user explicitly asked for a reset, ask them to run it manually." >&2
+  echo "If the user explicitly asked for a reset, have them run it manually:" >&2
+  echo "  npx agentlink-sh@latest db reset" >&2
+  echo "(the agentlink wrapper replays migrations AND re-applies the imperative" >&2
+  echo " resources — rbac, cron, storage — that a raw 'supabase db reset' drops.)" >&2
   exit 2
 fi
 

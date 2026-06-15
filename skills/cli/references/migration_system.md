@@ -109,7 +109,7 @@ Non-destructive — no `db reset` of the dev DB, no data backup/restore. The eph
 schema_paths = ["./database/**/*.sql"]
 ```
 
-A single recursive glob picks up every schema file under `supabase/database/`. Schema files are **one object per file** (`schemas/<schema>/tables/<table>.sql`, `schemas/<schema>/functions/<fn>.sql`, `schemas/<schema>/cron/<job>.sql`), with per-schema `schemas/<schema>/schema.sql` files and per-extension `cluster/extensions/<ext>.sql` files. pg-delta topologically sorts statements by dependency at apply time — so file count and order are irrelevant. The recursive `**/*.sql` glob matches all of them.
+A single recursive glob picks up every schema file under `supabase/database/`. Schema files are **one object per file** (`schemas/<schema>/tables/<table>.sql`, `schemas/<schema>/functions/<fn>.sql`), with per-schema `schemas/<schema>/schema.sql` files and per-extension `cluster/extensions/<ext>.sql` files. pg-delta topologically sorts statements by dependency at apply time — so file count and order are irrelevant. The recursive `**/*.sql` glob matches all of them. The top-level `cron/`, `storage/`, and `rbac/` folders are **imperative** (applied at deploy, not diffed into migrations) — they're excluded from this declarative path.
 
 The `api` schema itself still has to exist before objects reference it — that's why `database/schemas/api/schema.sql` is also a pre-start migration, independent of `schema_paths`.
 

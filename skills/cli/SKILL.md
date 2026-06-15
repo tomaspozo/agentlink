@@ -216,6 +216,14 @@ npx agentlink-sh@latest db rebuild
 
 Nukes all migration files, re-applies schemas via pgdelta, and regenerates a single clean migration file. For recovering from broken migration state on new projects (duplicate migrations, failed pushes, timestamp conflicts). Does not recreate the Supabase project — only resets the migration layer.
 
+### Database reset (local)
+
+```bash
+npx agentlink-sh@latest db reset
+```
+
+Resets the **local** database the right way: runs `supabase db reset` (replays migrations) **then** `db apply`, which re-applies schema files and the **imperative resources** (`rbac/`, `cron/`, `storage/`). A raw `supabase db reset` replays migrations only, so it silently DROPS custom roles/permissions, cron jobs, and storage buckets/policies (those are excluded from migrations) — this wrapper restores them. Local-only (errors on a cloud env). **The agent is blocked from running any `db reset` (supabase or agentlink) — resets are user-initiated**; if a reset is needed, point the user at this command. If the user already ran a raw `supabase db reset`, `db apply` alone restores the imperative resources.
+
 ### Database URL check
 
 ```bash
@@ -480,7 +488,7 @@ The `schema_paths` setting in `config.toml` tells `db diff` where to find schema
 schema_paths = ["./database/**/*.sql"]
 ```
 
-Schema files are **one object per file** under `supabase/database/` (`schemas/<schema>/tables/<table>.sql`, `schemas/<schema>/functions/<fn>.sql`, `schemas/<schema>/cron/<job>.sql`, plus `schemas/<schema>/schema.sql` and `cluster/extensions/<ext>.sql`). Order doesn't matter: pg-delta topologically sorts statements by dependency at apply time, so a single recursive glob safely picks up every file regardless of count or naming.
+Schema files are **one object per file** under `supabase/database/` (`schemas/<schema>/tables/<table>.sql`, `schemas/<schema>/functions/<fn>.sql`, plus `schemas/<schema>/schema.sql` and `cluster/extensions/<ext>.sql`). Order doesn't matter: pg-delta topologically sorts statements by dependency at apply time, so a single recursive glob safely picks up every file regardless of count or naming. The top-level `cron/`, `storage/`, and `rbac/` folders are **imperative** — excluded from declarative apply and from migrations, applied by the deploy step instead.
 
 `db diff` bridges the two: it reads schema files to know the desired state, replays migrations on a shadow DB for the current state, and outputs the delta.
 

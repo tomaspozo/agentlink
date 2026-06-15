@@ -55,7 +55,7 @@ a schedule — the textbook case for cron + an edge worker.
 fire-and-forget calls inside a transaction with no timeouts, retries, or error capture, and ties
 up the database. Outbound HTTP is *always* the edge function's job.
 
-### 1. Cron wakes the worker — `supabase/database/schemas/api/cron/ping-due-monitors.sql`
+### 1. Cron wakes the worker — `supabase/database/cron/ping-due-monitors.sql`
 
 ```sql
 SELECT cron.schedule(
@@ -243,7 +243,7 @@ worker dispatches it generically.
 **Goal:** every hour, pull data from an external API and persist it. Same cron + edge shape as
 Recipe 1, but the external call is a *read* and the result is upserted through an admin RPC.
 
-### 1. Cron — `supabase/database/schemas/api/cron/sync-exchange-rates.sql`
+### 1. Cron — `supabase/database/cron/sync-exchange-rates.sql`
 
 ```sql
 SELECT cron.schedule(

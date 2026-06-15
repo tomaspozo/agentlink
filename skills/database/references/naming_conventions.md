@@ -83,7 +83,8 @@ All paths below are relative to `supabase/database/`.
 | `schemas/public/functions/` | `_hook_{hook_name}.sql` | `_hook_custom_access_token.sql` — one auth hook |
 | `schemas/api/functions/` | `{entity}_{action}.sql` | `chart_create.sql` — one `api.*` RPC + its grants |
 | `schemas/api/tables/` | `{table}.sql` | `agentlink_tasks.sql` — PGMQ queue table |
-| `schemas/api/cron/` | `{job}.sql` | `process-stale-tasks.sql` — one cron job |
+| `cron/` (top-level, imperative) | `{job}.sql` | `process-stale-tasks.sql` — one cron job |
+| `storage/` (top-level, imperative) | `{name}.sql` | `avatars.sql` — bucket + its `storage.objects` policies |
 | `schemas/api/` | `schema.sql` | `CREATE SCHEMA api;` + grants / default privileges |
 | `schemas/public/` | `schema.sql` | public schema-level grants (e.g. `supabase_auth_admin` USAGE) |
 | `cluster/extensions/` | `{ext}.sql` | one extension install per file (`pg_net.sql`, `pgmq.sql`, …) |

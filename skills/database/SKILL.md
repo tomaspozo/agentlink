@@ -46,7 +46,7 @@ supabase/database/
             └── _hook_custom_access_token.sql
 ```
 
-Files are **one object per file** — each table (with its grants, RLS, indexes, triggers) and each function lives in its own file, grouped by Postgres schema (`schemas/public/`, `schemas/api/`) and kind (`tables/`, `functions/`, `cron/`). Statement ordering is handled automatically: pg-delta topologically sorts statements by dependency at apply time, so file count and order are irrelevant.
+Files are **one object per file** — each table (with its grants, RLS, indexes, triggers) and each function lives in its own file, grouped by Postgres schema (`schemas/public/`, `schemas/api/`) and kind (`tables/`, `functions/`). Statement ordering is handled automatically: pg-delta topologically sorts statements by dependency at apply time, so file count and order are irrelevant. The top-level `cron/`, `storage/`, and `rbac/` folders are **imperative** — applied at deploy, not by declarative apply (see below).
 
 **Conventions:**
 - `schemas/<schema>/tables/<table>.sql` — one table, named for the table (plural): `charts.sql`, contains the table + its indexes, triggers, grants, RLS policies
@@ -65,10 +65,14 @@ When creating or editing schema objects, put each in its own file under `supabas
 | An RPC or any function (+ its `REVOKE`/`GRANT EXECUTE`) | `supabase/database/schemas/<schema>/functions/<name>.sql` |
 | A new extension | `supabase/database/cluster/extensions/<ext>.sql` |
 | A new schema, or schema-level grants / default privileges | `supabase/database/schemas/<schema>/schema.sql` |
-| A cron job (`cron.schedule(...)`) | `supabase/database/schemas/<schema>/cron/<name>.sql` — the job's body calls `public._internal_admin_call_edge_function('internal-<worker>')`; it never makes the outbound HTTP itself — `pg_net` only wakes the worker. See the [edge-functions](../edge-functions/SKILL.md) outbound-HTTP rule and [recipes.md](../../agents/references/recipes.md) for worked examples |
-| RBAC reference data — roles / permissions / role→permission bindings (rows) | `supabase/database/rbac/<entity>.sql` |
+| A cron job (`cron.schedule(...)`) | `supabase/database/cron/<name>.sql` (imperative — see below). The job's body calls `public._internal_admin_call_edge_function('internal-<worker>')`; it never makes the outbound HTTP itself — `pg_net` only wakes the worker. See the [edge-functions](../edge-functions/SKILL.md) outbound-HTTP rule and [recipes.md](../../agents/references/recipes.md) for worked examples |
+| A storage bucket + its `storage.objects` policies | `supabase/database/storage/<name>.sql` (imperative — see below) |
+| RBAC reference data — roles / permissions / role→permission bindings (rows) | `supabase/database/rbac/<entity>.sql` (imperative — see below) |
 
-**`rbac/` is reference DATA, not schema.** The roles/permissions/role_permissions *tables* live in `schemas/public/tables/` (structure only). Their *rows* live in `rbac/<entity>.sql`, each filling an `rbac_desired` staging table. pg-delta `declarative apply` and migrations carry DDL only — never rows — so a dedicated reconcile step owns this data: `db apply` (local/dev) and **every `env deploy`** (all envs incl. prod) converge the DB to **exactly** the declared set. **Full reconcile** for permissions + bindings (a removed row is REVOKED everywhere — the only way revokes reach prod); roles are **upsert-only** (a referenced role can't be deleted: `memberships.role` FKs into `roles(name)`). Run `agentlink db rbac-sync` to apply a change immediately without a full deploy.
+**Imperative folders — `cron/`, `storage/`, `rbac/`.** These three top-level folders under `supabase/database/` are **excluded** from pg-delta `declarative apply` (`db apply`) *and* from the migration diff, and applied imperatively by the deploy step on **every** path — `db apply` (local/dev), `db rebuild`, and **every `env deploy`** (all envs incl. prod, which is migrations-only). Reason: pg-delta's `--integration supabase` filter drops the `cron` and `storage` schemas from plans, so `cron.schedule()`, buckets, and storage policies never survive a migration; and RBAC is reference DATA, not DDL. This deploy step is the only path that reliably reaches prod — **do not** hand-append these to migration files.
+
+- **`cron/` and `storage/` must be IDEMPOTENT** (they re-run on every deploy): `cron.schedule(name, …)` upserts by job name (`cron.unschedule(name)` to remove); storage buckets use `INSERT … ON CONFLICT (id) DO UPDATE`; storage policies use `DROP POLICY IF EXISTS` + `CREATE POLICY`. Each folder's files run in sorted order, one transaction per folder.
+- **`rbac/` is reference DATA, not schema.** The roles/permissions/role_permissions *tables* live in `schemas/public/tables/` (structure only). Their *rows* live in `rbac/<entity>.sql`, each filling an `rbac_desired` staging table, converged to **exactly** the declared set: **full reconcile** for permissions + bindings (a removed row is REVOKED everywhere — the only way revokes reach prod); roles are **upsert-only** (a referenced role can't be deleted: `memberships.role` FKs into `roles(name)`). Run `agentlink db rbac-sync` to apply an RBAC change immediately without a full deploy.
 
 - One object per file. A table file is **self-contained**: table definition + constraints + indexes + `ENABLE ROW LEVEL SECURITY` + policies + triggers + grants all live together.
 - To edit an existing object, edit its file in place (don't create a parallel file) — then run `npx agentlink-sh@latest db apply`.
@@ -82,7 +86,8 @@ Older projects keep declarative SQL under `supabase/schemas/`. The home moved to
    - function / RPC → `supabase/database/schemas/<schema>/functions/<name>.sql`
    - extension → `supabase/database/cluster/extensions/<ext>.sql`
    - `CREATE SCHEMA` / schema-level grants → `supabase/database/schemas/<schema>/schema.sql`
-   - cron job → `supabase/database/schemas/<schema>/cron/<name>.sql`
+   - cron job → `supabase/database/cron/<name>.sql` (imperative)
+   - storage bucket + policies → `supabase/database/storage/<name>.sql` (imperative)
    Split any consolidated/multi-object files into one-object-per-file as you go. pg-delta resolves dependency order, so file naming/order doesn't matter.
 2. **Apply:** `npx agentlink-sh@latest db apply` — confirm the `database/` tree applies cleanly.
 3. **Delete `supabase/schemas/`** once everything is migrated and applying — nothing else references it.

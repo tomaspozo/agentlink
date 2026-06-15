@@ -38,7 +38,6 @@ irrelevant.
 
 ### `api` schema (`schemas/api/`) — the ONLY schema exposed to the Data API
 - `tables/agentlink_tasks.sql` — PGMQ-backed task queue.
-- `cron/process-stale-tasks.sql` — pg_cron job.
 - **RPCs** (`functions/`), all callable via `supabase.rpc(...)`:
   - Tenants: `tenant_create`, `tenant_list`, `tenant_select`
   - Profile: `profile_get`, `profile_update`
@@ -62,6 +61,20 @@ irrelevant.
   `set_session_tenant`, `sync_session_tenants_on_membership`, `get_secret`,
   `call_edge_function`.
 - `set_updated_at` — generic `updated_at` trigger function.
+
+### Imperative resources (`cron/`, `storage/`, `rbac/`) — applied at deploy, NOT in migrations
+These three top-level folders under `supabase/database/` are **excluded** from
+`declarative apply` and from the migration diff, and applied imperatively on
+every deploy (all envs incl. prod) by the deploy step. Reason: pg-delta's
+Supabase integration filters the `cron` and `storage` schemas out of plans, and
+RBAC is reference *data*. Put new objects here (not under `schemas/`):
+- `cron/` — `cron.schedule(...)` jobs. Scaffolded: `process-stale-tasks.sql`
+  (fires the queue worker every minute). Must be **idempotent** (`cron.schedule`
+  upserts by job name).
+- `storage/` — buckets + `storage.objects` policies. Scaffolded: `avatars.sql`
+  (example private per-user bucket — edit or delete it). Must be **idempotent**
+  (`INSERT … ON CONFLICT DO UPDATE`; `DROP POLICY IF EXISTS` + `CREATE POLICY`).
+- `rbac/` — RBAC reference data (see below).
 
 ---
 
