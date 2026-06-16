@@ -405,36 +405,42 @@ function AnimalsPage() {
   const { data, isLoading } = useQuery(animalQueries.list(params));
   const items = data?.items ?? [];
 
-  if (isLoading) {
-    return (
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {[...Array(6)].map((_, i) => (
-          <Skeleton key={i} className="h-32" />
-        ))}
-      </div>
-    );
-  }
-
-  if (items.length === 0) {
-    return (
-      <EmptyState
-        icon={CowIcon}
-        title="No animals registered"
-        description="Start by registering your first animal."
-        action={{ label: "Register animal", to: "/animals/new", icon: Plus }}
-      />
-    );
-  }
-
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-      {items.map((animal) => (
-        <AnimalCard key={animal.id} animal={animal} />
-      ))}
-    </div>
+    <PageShell>
+      <PageHeader
+        title="Animals"
+        description="Everything registered in this workspace."
+        actions={
+          <Button asChild>
+            <Link to="/animals/new">Register animal</Link>
+          </Button>
+        }
+      />
+
+      {isLoading ? (
+        <ListSkeleton count={6} />
+      ) : items.length === 0 ? (
+        <EmptyState
+          icon={CowIcon}
+          title="No animals registered"
+          description="Start by registering your first animal."
+          action={{ label: "Register animal", to: "/animals/new", icon: Plus }}
+        />
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {items.map((animal) => (
+            <AnimalCard key={animal.id} animal={animal} />
+          ))}
+        </div>
+      )}
+    </PageShell>
   );
 }
 ```
+
+`PageShell` + `PageHeader` give the page its chrome; `ListSkeleton` / `EmptyState` are the shared
+loading and empty states. For a table-shaped list, swap the card grid for shadcn `Table` (see
+`routes/_auth/settings/members.tsx`).
 
 ### Skeleton loading
 

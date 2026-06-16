@@ -356,11 +356,37 @@ Reusable components that provide consistent UI patterns across the app. Check `s
 
 | Component | Purpose | When to use |
 |-----------|---------|-------------|
-| `PageShell` | Page wrapper with title, description, and optional action button | Every page — provides consistent header layout |
+| `PageShell` | Page **wrapper** — centers content, caps column width, applies page padding | Wraps every gated page; `PageHeader` is its first child |
+| `PageHeader` | Page **hero** — eyebrow + title + description + right-aligned `actions` slot | Top of every page; pass page-level buttons/filters to `actions` |
 | `ListSkeleton` | Loading placeholder for list views | While query data is loading in list pages |
-| `EmptyState` | Illustration + message + action for empty collections | When a list query returns zero items |
+| `EmptyState` | Icon + message + action for empty collections | When a list query returns zero items |
 | `ErrorBoundary` | Catches render errors, shows recovery UI | Wrap route components or complex sections |
 | `FormField` | Label + input + error message wrapper | Every form field — keeps forms visually consistent |
+
+### Page anatomy
+
+Every gated page follows the same shape — compose the shipped primitives, don't re-inline headers or invent a new visual dialect:
+
+```tsx
+<PageShell>
+  <PageHeader title="Members" description="…" actions={<Button>Invite</Button>} />
+  {isLoading ? <ListSkeleton /> : items.length === 0 ? <EmptyState … /> : <Table>…</Table>}
+</PageShell>
+```
+
+- **Lists → shadcn `Table`** (`@/components/ui/table`). `routes/_auth/settings/members.tsx` is the canonical reference (Table + Select + Badge + PageHeader).
+- **Pickers → shadcn `Select`** (`@/components/ui/select`) via `Controller`. **Never a native `<select>`.**
+- **Loading → `ListSkeleton`**; **empty → `EmptyState`**; **headers → `PageHeader`**.
+
+### Need a primitive that isn't shipped?
+
+The scaffold ships a curated shadcn set (`button`, `card`, `input`, `label`, `dialog`, `alert-dialog`, `dropdown-menu`, `tooltip`, `switch`, `badge`, `table`, `skeleton`, `select`, `separator`, `tabs`, `popover`, `sheet`, `command`, `checkbox`, `radio-group`, `textarea`, `accordion`, `avatar`, `scroll-area`). For anything else, **add it on demand — `components.json` is pre-wired:**
+
+```bash
+npx shadcn@latest add <name> --yes   # writes the component + installs its deps
+```
+
+**Never hand-roll a primitive or fall back to a native element** when shadcn ships one — run the command above first.
 
 ---
 

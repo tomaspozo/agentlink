@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **`frontend` + `cli` skills: documented the scaffold's page-anatomy primitives and the neutral-shadcn list/picker rules.** The scaffold now ships `PageHeader` (page hero) + a real `PageShell` (page wrapper) and a curated shadcn `ui/` set, so the skills teach the agent to compose them instead of re-inventing. `frontend/SKILL.md` corrects the Shared Components table (`PageShell` = wrapper, `PageHeader` = hero), adds a **page anatomy** section (`PageShell → PageHeader → content`; lists use shadcn `Table`, pickers use shadcn `Select`, never a native `<select>`; loading uses `ListSkeleton`, empty uses `EmptyState`), lists the curated `ui/` components, and adds the on-demand escape hatch (`npx shadcn@latest add <name> --yes`) as the first move for any missing primitive — *never hand-roll or fall back to a native element*. `references/data_fetching.md`'s three-state example now uses the shared primitives, and `cli/references/scaffold-map.md`'s frontend inventory is updated (adds `PageHeader` + the new `ui/*`, corrects `PageShell`, names Members the canonical Table+Select reference page).
+
 ## [1.1.0] - 2026-06-15
 
 ### Added
