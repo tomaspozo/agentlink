@@ -36,7 +36,7 @@ This is **not** just an env var rename. The migration touches client code, edge 
 | Edge function secrets | `SUPABASE_ANON_KEY` env | `SUPABASE_PUBLISHABLE_KEY` + `SUPABASE_SECRET_KEY` env |
 | Edge function shared code | Custom `supabase.ts`, `supabase-admin.ts` | `@supabase/server` (npm) + `responses.ts` — CORS from SDK |
 | Vault secrets | None or old names | `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `SUPABASE_URL` |
-| Seed file | No vault secrets | Vault secrets for persistence across `db reset` |
+| Seed file | No vault secrets | Vault secrets for persistence across a local reset (`db rebuild`) |
 
 ---
 
@@ -184,7 +184,7 @@ Store vault secrets via `psql` using `vault.create_secret()`.
 Vault secrets are wiped on every `npx supabase db reset`. Add the secrets to `supabase/seed.sql` so they persist:
 
 ```sql
--- Vault secrets for local development (re-created on every db reset)
+-- Vault secrets for local development (re-created on every reset / db rebuild)
 SELECT vault.create_secret('http://127.0.0.1:54321', 'SUPABASE_URL');
 SELECT vault.create_secret('sb_publishable_...', 'SUPABASE_PUBLISHABLE_KEY');
 SELECT vault.create_secret('sb_secret_...', 'SUPABASE_SECRET_KEY');

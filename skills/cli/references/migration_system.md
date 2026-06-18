@@ -79,14 +79,14 @@ A migration is the delta between a **migrations-only baseline** (what replaying 
 
 `db migrate` resolves the baseline by trying, in order:
 
-1. **Empty baseline** — when there are no migration files yet (the `db rebuild` case). Baseline = empty; desired = the live (just-`db apply`'d) DB. Read-only, no Docker.
+1. **Empty baseline** — when there are no migration files yet (a brand-new project before its first migration). Baseline = empty; desired = the live (just-`db apply`'d) DB. Read-only, no Docker.
 2. **Ephemeral throwaway stack** (preferred) — copies `supabase/{config.toml,migrations}` to a temp dir on shifted ports + a unique `project_id`, runs a minimal `supabase start` (Postgres only) to replay the migrations onto a fresh base, then runs `catalog-export → declarative apply schemas → catalog-export → plan` against it, and tears the stack down. Needs Docker. This is env-independent — the baseline comes from the repo's migration files, not from whichever env is active.
 3. **Cloud read-only diff** — no Docker: `catalog-export(prod)` (prod is deployed only via `supabase db push`, so it's migrations-only) as baseline, `catalog-export(dev)` (db-apply'd → schema-files) as desired. Mutates nothing. Warns that it assumes prod is current with migrations and dev reflects your latest schema edits.
 4. **None available** → prints a warning and points at manual authoring. It never writes an empty or live-DB-diffed migration.
 
 `supabase db diff --use-pg-delta` is deliberately **not** used (see the section above): it lacks `--integration`/`--sql-format` parity and re-introduces the alphabetical shadow-build ordering problem.
 
-Non-destructive — no `db reset` of the dev DB, no data backup/restore. The ephemeral stack is a separate throwaway and never touches the user's running stack.
+Non-destructive — no reset of the dev DB, no data backup/restore. The ephemeral stack is a separate throwaway and never touches the user's running stack.
 
 **Limitation:** `pgdelta` filters out `cron` and `storage` schemas. Append `cron.schedule()` or storage policies manually to the generated migration.
 

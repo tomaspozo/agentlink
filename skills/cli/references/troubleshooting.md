@@ -115,9 +115,9 @@ npx supabase migration repair <new_version> --status applied --local
 
 ---
 
-### `db reset` fails
+### `db rebuild` fails (migration replay)
 
-**Cause:** Usually a migration ordering problem or a migration referencing a non-existent object.
+**Cause:** `db rebuild` runs `supabase db reset` first; usually a migration ordering problem or a migration referencing a non-existent object.
 
 **Diagnosis:**
 1. Read the error — it tells you which migration failed and why
@@ -138,11 +138,11 @@ npx agentlink-sh@latest --force-update
 
 **Cause:** `supabase db reset` replays **migrations only**. The imperative resources in `supabase/database/{rbac,cron,storage}/` are deliberately **excluded from migrations** (RBAC is reference data; pg-delta filters the cron + storage schemas out of plans). The migration replay restores the *baseline* defaults but not anything you added after scaffold.
 
-**Fix:** Use the AgentLink wrapper instead of a raw reset — it replays migrations **and** re-applies the imperative resources in one step:
+**Fix:** Use `db rebuild` instead of a raw reset — it replays migrations **and** re-applies the schema files + imperative resources in one step:
 ```bash
-npx agentlink-sh@latest db reset
+npx agentlink-sh@latest db rebuild
 ```
-If you already ran a raw `supabase db reset`, just run `npx agentlink-sh@latest db apply` to restore them (it runs the same imperative step). Local-only; the agent is blocked from running either reset directly — resets are user-initiated.
+If you already ran a raw `supabase db reset`, just run `npx agentlink-sh@latest db apply` to restore them (it runs the same imperative step). Local-only; the agent is blocked from running `db rebuild` or a raw reset directly — resets are user-initiated.
 
 ---
 

@@ -208,21 +208,15 @@ Read-only against the target DB. Works on cloud envs, local Docker, and bare pro
 
 ## Database Recovery
 
-### Database rebuild
+### Database rebuild (local reset + re-apply)
 
 ```bash
 npx agentlink-sh@latest db rebuild
 ```
 
-Nukes all migration files, re-applies schemas via pgdelta, and regenerates a single clean migration file. For recovering from broken migration state on new projects (duplicate migrations, failed pushes, timestamp conflicts). Does not recreate the Supabase project — only resets the migration layer.
+Resets the database the right way and brings it back: runs `supabase db reset` (replays the committed migrations — migration files are **never touched**) **then** re-applies the schema files and the **imperative resources** (`rbac/`, `cron/`, `storage/`). A raw `supabase db reset` replays migrations only, so it silently DROPS custom roles/permissions, cron jobs, and storage buckets/policies (those are excluded from migrations) — `db rebuild` restores them. It's the recovery hatch for when incremental `db apply` can't converge a DB (drift, refused destructive ops, a weird state). **Same command across envs:** local resets the Docker stack; a cloud **dev** env runs `supabase db reset --db-url <dev>` (resets the remote dev DB) behind an explicit typed confirmation (`--yes` to skip). **Production is a hard block** — `db rebuild` against prod is rejected outright, no override. **The agent is blocked from running `db rebuild` (and any raw `supabase db reset`) — resets are user-initiated**; if a reset is needed, point the user at this command. If the user already ran a raw `supabase db reset`, `db apply` alone restores the imperative resources.
 
-### Database reset (local)
-
-```bash
-npx agentlink-sh@latest db reset
-```
-
-Resets the **local** database the right way: runs `supabase db reset` (replays migrations) **then** `db apply`, which re-applies schema files and the **imperative resources** (`rbac/`, `cron/`, `storage/`). A raw `supabase db reset` replays migrations only, so it silently DROPS custom roles/permissions, cron jobs, and storage buckets/policies (those are excluded from migrations) — this wrapper restores them. Local-only (errors on a cloud env). **The agent is blocked from running any `db reset` (supabase or agentlink) — resets are user-initiated**; if a reset is needed, point the user at this command. If the user already ran a raw `supabase db reset`, `db apply` alone restores the imperative resources.
+> `db rebuild` no longer regenerates migration files (the old behavior, which entangled a destructive migration regeneration with the reset, and there is no longer a separate `db reset` command — `db rebuild` is the reset). Regenerating/squashing migrations is a separate `db migrate` concern.
 
 ### Database URL check
 
