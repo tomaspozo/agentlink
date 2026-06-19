@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-06-19
+
 ### Added
 
 - **Cursor-compatible plugin (same repo, dual-format).** The plugin now installs in [Cursor](https://cursor.com/docs/reference/plugins) as well as Claude Code, sharing the skills, `builder` agent, references, and assets verbatim. Added the Cursor-native files alongside the Claude Code ones: `.cursor-plugin/plugin.json` (manifest with explicit `agents`/`skills`/`rules`/`hooks` paths so Cursor doesn't auto-discover the Claude-format `hooks/hooks.json`), `.cursor-plugin/marketplace.json`, and `rules/agentlink.mdc` — an always-on rule carrying the core guardrails (schema isolation, RPC-first, function-naming security model, RLS-on-every-table, write-apply-migrate / never-reset, `withSupabase` `allow` values). The destructive-DB guard is ported to Cursor's contract in `hooks/cursor.hooks.json` + `hooks/block-destructive-db.cursor.sh`: same `db reset` / `db rebuild` / `db push --force` matching as the Claude hook, but reading the `beforeShellExecution` top-level `command` and blocking via a `{"permission":"deny"}` JSON verdict (exit 0) instead of stderr + exit 2. Nothing existing changed behavior — `claude --plugin-dir ./agent` is unaffected. In Cursor the `builder` is a user-selectable agent rather than a forced default. `scripts/release.sh` now bumps both `plugin.json` manifests together so they never drift.
