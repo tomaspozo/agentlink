@@ -29,6 +29,20 @@ It ships with the [`agentlink-sh` CLI](https://www.npmjs.com/package/agentlink-s
 
 ## Get started
 
+### Prerequisites
+
+AgentLink does **not** install tooling for you — have these in place first (the agent can't browse OAuth or `curl | bash` an installer):
+
+| Tool / account | When you need it | Notes |
+|---|---|---|
+| **Node.js 18+** (`node` / `npx`) | **Always** — the CLI runs via `npx agentlink-sh@latest` | Without it the `npx` call fails or times out. Install from [nodejs.org](https://nodejs.org) or a version manager. |
+| **Supabase CLI** | Always | The CLI validates it and points to [agentlink.sh/start](https://agentlink.sh/start) if missing. |
+| **Docker** + **`psql`** | **Local development** (`--local`) | The Docker stack runs Supabase locally; `psql` applies SQL against it. Not needed for cloud-only. |
+| **Supabase account** | **Cloud development & production** | For `env add dev` / `env add prod` — browser OAuth, project creation, deploys. |
+| **Resend account** | **Transactional email** | For auth emails (invites, password resets) and any product email via the edge functions. Add the API key when you wire email. |
+
+Full setup script: **[agentlink.sh/start](https://agentlink.sh/start)**.
+
 ### Scaffold a new project (recommended)
 
 One command runs an interactive wizard — no install step. It creates the project, wires up the database, installs the companion skills, and configures your agent editor (Claude Code and/or Cursor — the wizard asks which), then hands off to the agent with your prompt:
