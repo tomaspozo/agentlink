@@ -685,7 +685,7 @@ Because it's TanStack Start (not plain Vite + Router), **moving to server-side r
 
 ## Companion Skills
 
-These community-maintained skills enhance frontend workflows when installed alongside Agent Link. They are optional — the frontend skill works without them.
+These community-maintained skills enhance frontend workflows when installed alongside AgentLink. They are optional — the frontend skill works without them.
 
 - **`frontend-design`** — Invoke during project planning when UI components or pages are being designed. Provides design patterns and component architecture guidance.
 - **`vercel-react-best-practices`** — Invoke during React component work. Only applicable if the project uses React.

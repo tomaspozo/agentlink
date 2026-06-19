@@ -67,7 +67,7 @@ If the user explicitly asked to reset, have them run it manually:
   npx agentlink-sh@latest db rebuild
 (replays migrations, re-applies schema files, and restores the imperative
  resources — rbac, cron, storage — that a raw 'supabase db reset' drops.)" \
-"Agent Link blocked a destructive database reset. Run it yourself in a terminal if you really need it: npx agentlink-sh@latest db rebuild"
+"AgentLink blocked a destructive database reset. Run it yourself in a terminal if you really need it: npx agentlink-sh@latest db rebuild"
 fi
 
 # Block: supabase db push --force or -f
@@ -80,7 +80,7 @@ Rule: \"The database is never reset unless the user explicitly requests it.\"
 Source: skills/database/references/workflow.md
 
 Alternative: Use 'npx supabase db push' (without --force) to diff and apply safely." \
-"Agent Link blocked 'supabase db push --force'. Use 'npx supabase db push' (without --force) to diff and apply safely."
+"AgentLink blocked 'supabase db push --force'. Use 'npx supabase db push' (without --force) to diff and apply safely."
 fi
 
 exit 0

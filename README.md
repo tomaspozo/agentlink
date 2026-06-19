@@ -1,6 +1,6 @@
 <div align="center">
 
-# Agent Link
+# AgentLink
 
 **An opinionated skill set that tells your AI agents exactly how to build on Supabase.**
 
@@ -13,11 +13,11 @@ Fewer errors. Fewer wasted tokens. One backend that serves every client.
 
 ---
 
-Agent Link is a [Claude Code plugin](https://docs.anthropic.com/en/docs/claude-code/plugins) (and a [Cursor plugin](https://cursor.com/docs/reference/plugins)) — a builder agent plus six composable skills — that teaches AI agents a single, opinionated architecture for full-stack apps on Supabase. Instead of letting the model improvise a different backend every time, it gives it one well-worn path: schema isolation, RPC-first data access, RLS on every table, edge functions for the outside world, and Postgres-native background jobs.
+AgentLink is a [Claude Code plugin](https://docs.anthropic.com/en/docs/claude-code/plugins) (and a [Cursor plugin](https://cursor.com/docs/reference/plugins)) — a builder agent plus six composable skills — that teaches AI agents a single, opinionated architecture for full-stack apps on Supabase. Instead of letting the model improvise a different backend every time, it gives it one well-worn path: schema isolation, RPC-first data access, RLS on every table, edge functions for the outside world, and Postgres-native background jobs.
 
 It ships with the [`agentlink-sh` CLI](https://www.npmjs.com/package/agentlink-sh) — the plugin's hands. The agent reasons about _what_ to build; the CLI does the work the agent shouldn't do itself: OAuth, project creation, applying schemas, generating migrations, switching environments, and deploying. Designed for internal tools, business software, and operational apps.
 
-## Why Agent Link
+## Why AgentLink
 
 - **DB Functions, not raw queries.** All data access goes through Postgres functions exposed as RPCs in an `api` schema. Tables stay invisible to clients — one backend serves every frontend.
 - **Secure by default.** Schema isolation, row-level security on every table, no exceptions. The patterns are default-deny, so a forgotten grant fails fast instead of leaking.
@@ -31,7 +31,7 @@ It ships with the [`agentlink-sh` CLI](https://www.npmjs.com/package/agentlink-s
 
 ### Scaffold a new project (recommended)
 
-One command runs an interactive wizard — no install step. It creates the project, wires up the database, installs the plugin and companion skills, configures Claude Code, and hands off to the agent with your prompt:
+One command runs an interactive wizard — no install step. It creates the project, wires up the database, installs the companion skills, and configures your agent editor (Claude Code and/or Cursor — the wizard asks which), then hands off to the agent with your prompt:
 
 ```bash
 npx agentlink-sh@latest my-app
@@ -47,18 +47,22 @@ Then just describe what you want to build and let the agent take it from there.
 
 ### Add the plugin to an existing setup
 
-Already have a project? Install the plugin from the Claude Code marketplace:
+Already have a project? In **Claude Code**, install the plugin from the marketplace:
 
 ```bash
 /plugin marketplace add tomaspozo/agentlink
 /plugin install agentlink@tomaspozo
 ```
 
+In **Cursor**, install it from the marketplace instead — run `/add-plugin tomaspozo/agentlink` (or find AgentLink in the Cursor marketplace). See [Use it in Cursor](#use-it-in-cursor) below.
+
 For local development of the plugin itself, point Claude Code at this directory:
 
 ```bash
 claude --plugin-dir ./agent
 ```
+
+(For Cursor, copy the directory into `~/.cursor/plugins/local/` — see `CONTRIBUTING.md`.)
 
 ### Use it in Cursor
 
@@ -69,11 +73,13 @@ manifest at `agent/.cursor-plugin/plugin.json`). In Cursor the `agentlink` build
 selectable as a custom agent (rather than a forced default), and the skills
 trigger on their descriptions just like in Claude Code.
 
+Don't have Cursor yet? Grab it at [cursor.com](https://cursor.com/referral?code=IMIH9YQ5EFRF).
+
 Every CLI command runs through `npx agentlink-sh@latest <subcommand>` — e.g. `npx agentlink-sh@latest check`, `db apply`, `env deploy prod`.
 
 ## Usage
 
-Open Claude Code and start prompting the agent — describe what you want and it takes it from there, loading the right skills, writing the SQL and TypeScript, applying the changes, and iterating until it works.
+Open Cursor or Claude Code and start prompting the agent — describe what you want and it takes it from there, loading the right skills, writing the SQL and TypeScript, applying the changes, and iterating until it works.
 
 **Build something new** — e.g. an internal tool with public form submissions:
 

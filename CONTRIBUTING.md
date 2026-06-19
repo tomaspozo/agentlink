@@ -19,7 +19,7 @@ rsync -a --delete --exclude '.git' --exclude '.env*' --exclude 'agentlink-debug.
 
 Then restart Cursor (or run **Developer: Reload Window**). Verify the `agentlink` agent and the six skills are selectable, the always-on `agentlink` rule is active, and a `npx supabase db reset` is blocked by the hook. Re-run the `rsync` after each change to pick it up.
 
-> **Heads up:** Cursor also imports Claude Code plugins from `~/.claude/plugins`. If you've installed Agent Link in Claude Code (`agentlink@tomaspozo`, formerly `link@agentlink`), it appears in Cursor too — distinct from this local copy. Test from a workspace where the Claude Code install isn't active, or uninstall it there, to avoid two entries.
+> **Heads up:** Cursor also imports Claude Code plugins from `~/.claude/plugins`. If you've installed AgentLink in Claude Code (`agentlink@tomaspozo`, formerly `link@agentlink`), it appears in Cursor too — distinct from this local copy. Test from a workspace where the Claude Code install isn't active, or uninstall it there, to avoid two entries.
 
 ### Project structure
 
