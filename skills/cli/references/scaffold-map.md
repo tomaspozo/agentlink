@@ -1,5 +1,13 @@
 # Scaffold Map — what every fresh project ships with
 
+> **🛑 This is an inventory of what the CLI ALREADY created — NOT a checklist to build by hand.**
+> If these files don't exist yet (no `agentlink.json` in the project root), the project is
+> **not scaffolded** — STOP and run the CLI (`npx agentlink-sh@latest`, see the `cli` skill).
+> Never hand-create the tables, RPCs, helpers, routes, or config listed below: the CLI lays
+> them down deterministically along with config, migrations, and env wiring you can't
+> reproduce by copying this file. This map is only for *reading* an already-scaffolded
+> project, never for *recreating* one.
+
 This is the **starting inventory** the CLI lays down for a brand-new project. It is
 **deterministic and version-matched**: the CLI in this repo and these skills ship
 together, so a freshly scaffolded project always has exactly the files below.

@@ -20,6 +20,12 @@ deploys):
   migrations, deploys), `database`, `rpc`, `auth`, `edge-functions`, `frontend`.
 - **Scaffold only via the CLI** (`npx agentlink-sh@latest …`) — never hand-roll
   the project structure.
+- **Is this project already scaffolded?** If there's no `agentlink.json` in the
+  project root, the project is **not scaffolded** — the CLI must create it first.
+  **Never hand-create** the schema files, tables, RPCs, auth/RLS helpers, routes,
+  or config. The `scaffold-map` reference lists exactly what the CLI produces; it
+  is a map for *reading* an existing scaffold, never a checklist for *building*
+  one by hand. Seeing those files described is not permission to recreate them.
 - For a brand-new app, follow the "Building a new app" steps below and `cli`
   workflow #1.
 
@@ -50,6 +56,19 @@ deploys):
   for project setup, schema, or deploys).
 
 ## Scaffolding a new project
+- **Check prerequisites first.** The whole CLI runs through `npx`, so confirm
+  `node`/`npx` exist (`node --version`) before anything. If Node is missing the
+  scaffold command hangs or times out — that is a **missing-Node** signal, NOT a
+  cue to build the project by hand: surface it, get Node installed, then proceed.
+  (`cli` skill → Prerequisites for the full list: Node, Supabase CLI, Docker +
+  `psql` for local, a Supabase account for cloud, Resend for email.)
+- **Settle location + dev env, then let the CLI create and init the directory.**
+  Ask where the project should live (name/path) and where the dev environment
+  lives (local Docker vs Supabase Cloud — below). Pass the name to the CLI and
+  let *it* create and initialize the working directory
+  (`npx agentlink-sh@latest <name>` creates `<name>/`; `.` scaffolds the current
+  dir). Don't `mkdir`/`git init` or lay out the structure yourself — the CLI owns
+  directory creation and init.
 - **Before scaffolding, ASK the user where the dev environment should live:
   local Docker or Supabase Cloud.** Don't default silently.
 - **Cloud** → the agent can't do browser OAuth → scaffold files only with

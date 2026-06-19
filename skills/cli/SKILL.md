@@ -13,7 +13,19 @@ The `agentlink-sh` CLI scaffolds new Supabase projects and updates existing ones
 
 ## Prerequisites
 
-AgentLink does NOT install its own tooling, and it does NOT require an AI coding agent (Claude Code or Cursor) to be on PATH in order to scaffold — it writes the project files and the editor config regardless, then you open the project in whichever agent you chose. What it _does_ need is the Supabase CLI (and `psql` for local Docker). It validates those and points users at the setup script at **https://agentlink.sh/start** if they're missing; it never tries to `curl | bash` anything itself. This is intentional — mixing tooling installation into scaffold meant every platform-specific install failure surfaced mid-scaffold with no context.
+AgentLink does NOT install its own tooling, and it does NOT require an AI coding agent (Claude Code or Cursor) to be on PATH in order to scaffold — it writes the project files and the editor config regardless, then you open the project in whichever agent you chose. It validates the tooling it needs and points users at the setup script at **https://agentlink.sh/start** if anything is missing; it never tries to `curl | bash` anything itself. This is intentional — mixing tooling installation into scaffold meant every platform-specific install failure surfaced mid-scaffold with no context.
+
+**Check these BEFORE attempting to scaffold** — every command runs through `npx`, so a missing prerequisite makes the CLI fail or hang, and the agent must NOT fall back to hand-creating files:
+
+| Requirement | When | Verify | If missing |
+|---|---|---|---|
+| **Node.js 18+** (`node` / `npx`) | **Always** — the entire CLI is `npx agentlink-sh@latest` | `node --version` | Stop and tell the user to install Node (the `npx` call otherwise times out — this is a common silent failure). Don't proceed. |
+| **Supabase CLI** | Always | `supabase --version` | Point at https://agentlink.sh/start. |
+| **Docker** + **`psql`** | **Local dev** (`--local`) | `docker info`, `psql --version` | Required only for the local path; cloud-only scaffolds don't need them. |
+| **Supabase account** | **Cloud dev / prod** (`env add dev`/`prod`) | — (browser OAuth at `env add`) | The user must own the OAuth + project creation; the agent can't browse. |
+| **Resend account** | **Transactional email** (auth emails, product email) | — | Add the API key when wiring email; not needed to scaffold. |
+
+> ⚠️ **If `node`/`npx` is absent, the scaffold command times out with no useful output.** That is NOT a signal to build the project by hand — it's a missing-Node signal. Surface it to the user, get Node installed, then run the CLI.
 
 ---
 
@@ -508,7 +520,7 @@ Always prefer the CLI (`--force-update`) first. Only fix manually when the CLI c
 
 ## Reference Files
 
-- **[Scaffold Map](./references/scaffold-map.md)** — The deterministic starting inventory of a fresh project: every scaffolded table, RPC, auth/RLS helper, hook, RBAC role + permission, and frontend route/hook/component. Read this **instead of** doing a discovery pass on a freshly scaffolded project — it's version-matched, so trust it and skip reading the files.
+- **[Scaffold Map](./references/scaffold-map.md)** — The deterministic starting inventory of an **already-scaffolded** project: every scaffolded table, RPC, auth/RLS helper, hook, RBAC role + permission, and frontend route/hook/component. Read this **instead of** doing a discovery pass on a freshly scaffolded project — it's version-matched, so trust it and skip reading the files. **Precondition: the project is already scaffolded (`agentlink.json` exists).** It is a map for *reading* a scaffold, never a checklist for *building* one by hand — if the project isn't scaffolded yet, run the CLI instead (see "Scaffold a new project" above).
 - **[Workflows](./references/workflows.md)** — Common user scenarios as a flow-by-flow playbook: start a new project from zero, add prod, switch envs, deploy, recover from a failed deploy. Each entry lists the user trigger, questions to ask, commands to run, and watch-outs.
 - **[Upgrading](./references/upgrading.md)** — Moving an existing project onto a newer AgentLink version: `check` → `--dry-run` → `--force-update` → `check`, the base-snapshot file-level merge (fast-forward / customized / conflict / preserved), and the disposable `--skip-env --skip-install` reference for base reconstruction and diffing.
 - **[Migration System](./references/migration_system.md)** — Deep dive: two-tier migrations, how `db apply` / `db migrate` work, adding extensions
