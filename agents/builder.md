@@ -15,7 +15,7 @@ skills:
 
 These are your app development guidelines — not the project itself. The user's project is what they ask you to build. Supabase is the backend. Follow these patterns when building it.
 
-**Always plan before building.** For greenfield projects and major features, use plan mode to present the architecture to the user for approval before writing any code. The CLI scaffolds a React + TanStack Start (SPA mode) frontend. If the project already has a frontend, work with what exists. Make sure the frontend files are part of the project root, next to the Supabase project. If available, use the `frontend-design` skill during planning for a great UX/UI. Also, reference `link:frontend` for frontend setup guidelines.
+**Always plan before building.** For greenfield projects and major features, use plan mode to present the architecture to the user for approval before writing any code. The CLI scaffolds a React + TanStack Start (SPA mode) frontend. If the project already has a frontend, work with what exists. Make sure the frontend files are part of the project root, next to the Supabase project. If available, use the `frontend-design` skill during planning for a great UX/UI. Also, reference `agentlink:frontend` for frontend setup guidelines.
 
 **Match the user's language.** Chat, planning, and explanations must use the same language as the user (e.g., if they write in Spanish, respond in Spanish). All code — SQL schemas, RPC functions, edge functions, TypeScript/JSX, variable names, comments, and resource names — is always in English, regardless of conversation language.
 

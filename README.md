@@ -13,7 +13,7 @@ Fewer errors. Fewer wasted tokens. One backend that serves every client.
 
 ---
 
-Agent Link is a [Claude Code plugin](https://docs.anthropic.com/en/docs/claude-code/plugins) — a builder agent plus six composable skills — that teaches AI agents a single, opinionated architecture for full-stack apps on Supabase. Instead of letting the model improvise a different backend every time, it gives it one well-worn path: schema isolation, RPC-first data access, RLS on every table, edge functions for the outside world, and Postgres-native background jobs.
+Agent Link is a [Claude Code plugin](https://docs.anthropic.com/en/docs/claude-code/plugins) (and a [Cursor plugin](https://cursor.com/docs/reference/plugins)) — a builder agent plus six composable skills — that teaches AI agents a single, opinionated architecture for full-stack apps on Supabase. Instead of letting the model improvise a different backend every time, it gives it one well-worn path: schema isolation, RPC-first data access, RLS on every table, edge functions for the outside world, and Postgres-native background jobs.
 
 It ships with the [`agentlink-sh` CLI](https://www.npmjs.com/package/agentlink-sh) — the plugin's hands. The agent reasons about _what_ to build; the CLI does the work the agent shouldn't do itself: OAuth, project creation, applying schemas, generating migrations, switching environments, and deploying. Designed for internal tools, business software, and operational apps.
 
@@ -51,7 +51,7 @@ Already have a project? Install the plugin from the Claude Code marketplace:
 
 ```bash
 /plugin marketplace add tomaspozo/agentlink
-/plugin install link@agentlink
+/plugin install agentlink@tomaspozo
 ```
 
 For local development of the plugin itself, point Claude Code at this directory:
@@ -59,6 +59,15 @@ For local development of the plugin itself, point Claude Code at this directory:
 ```bash
 claude --plugin-dir ./agent
 ```
+
+### Use it in Cursor
+
+The same plugin is Cursor-compatible — the builder agent, all six skills, the
+always-on architecture rule, and the destructive-DB guard load in Cursor too.
+Install it from this repository via Cursor's plugin manager (it reads the
+manifest at `agent/.cursor-plugin/plugin.json`). In Cursor the `agentlink` builder is
+selectable as a custom agent (rather than a forced default), and the skills
+trigger on their descriptions just like in Claude Code.
 
 Every CLI command runs through `npx agentlink-sh@latest <subcommand>` — e.g. `npx agentlink-sh@latest check`, `db apply`, `env deploy prod`.
 

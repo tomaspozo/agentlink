@@ -10,6 +10,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 PLUGIN_JSON="$REPO_ROOT/.claude-plugin/plugin.json"
+CURSOR_PLUGIN_JSON="$REPO_ROOT/.cursor-plugin/plugin.json"
 CHANGELOG="$REPO_ROOT/CHANGELOG.md"
 
 # --- Parse arguments ---
@@ -80,7 +81,7 @@ if [[ "$DRY_RUN" == true ]]; then
   echo "[dry-run] Would:"
   echo "  1. Stamp [Unreleased] → [$VERSION] - $TODAY in CHANGELOG.md"
   echo "  2. Add fresh [Unreleased] section"
-  echo "  3. Bump plugin.json to $VERSION"
+  echo "  3. Bump both plugin.json manifests (.claude-plugin + .cursor-plugin) to $VERSION"
   echo "  4. Commit, tag $TAG, push, create GitHub release"
   exit 0
 fi
@@ -98,11 +99,12 @@ cd "$REPO_ROOT"
 # Replace "## [Unreleased]" with the new version header, and add a fresh [Unreleased] above it
 sed -i '' "s/^## \[Unreleased\]/## [Unreleased]\n\n## [$VERSION] - $TODAY/" "$CHANGELOG"
 
-# --- 2. Bump plugin.json ---
+# --- 2. Bump plugin.json (both the Claude Code and Cursor manifests) ---
 jq --arg v "$VERSION" '.version = $v' "$PLUGIN_JSON" > "$PLUGIN_JSON.tmp" && mv "$PLUGIN_JSON.tmp" "$PLUGIN_JSON"
+jq --arg v "$VERSION" '.version = $v' "$CURSOR_PLUGIN_JSON" > "$CURSOR_PLUGIN_JSON.tmp" && mv "$CURSOR_PLUGIN_JSON.tmp" "$CURSOR_PLUGIN_JSON"
 
 # --- 3. Commit ---
-git add "$CHANGELOG" "$PLUGIN_JSON"
+git add "$CHANGELOG" "$PLUGIN_JSON" "$CURSOR_PLUGIN_JSON"
 git commit -m "$(cat <<EOF
 Release $TAG
 

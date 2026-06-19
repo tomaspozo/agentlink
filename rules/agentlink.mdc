@@ -1,0 +1,42 @@
+---
+description: Agent Link — core architecture for full-stack Supabase apps
+alwaysApply: true
+---
+
+# Agent Link — Supabase architecture guardrails
+
+These are the non-negotiable rules for building on Supabase with Agent Link. They
+always apply. For the full workflows, defer to the `link` skills (cli, database,
+rpc, auth, edge-functions, frontend) and the `builder` agent.
+
+## Schema isolation
+- The `api` schema is the **only** schema exposed via the Supabase Data API.
+- `public` holds tables and internal functions and is **never** exposed to clients.
+
+## RPC-first data access
+- All client operations are functions in the `api` schema — no direct table
+  queries from clients, and no views.
+- Client RPCs are `api.{entity}_{action}` (e.g. `api.invoice_create`).
+
+## Function naming = security model
+The prefix encodes the security context:
+- `api.{entity}_{action}` — client RPCs, SECURITY INVOKER.
+- `api._admin_{name}` — privileged RPCs, SECURITY DEFINER, service_role only.
+- `_internal_admin_{name}` — privileged internal ops, SECURITY DEFINER, service_role only.
+- `_auth_{name}` — RLS/permission helpers, SECURITY INVOKER (DEFINER only when it must bypass RLS).
+- `_hook_{name}` — auth hooks, SECURITY DEFINER, granted to `supabase_auth_admin`.
+
+## Row-level security
+- RLS is enabled on **every** table, no exceptions. Patterns are default-deny.
+
+## Write-Apply-Migrate workflow
+- Write SQL as one object per file under `supabase/database/schemas/`.
+- Apply during development with `npx agentlink-sh db apply` (pgdelta).
+- Fix errors with more SQL — **never reset the database** unless the user
+  explicitly asks. Generate a migration with `npx agentlink-sh db migrate <name>`
+  only when deploying.
+
+## Edge functions
+- Every edge function uses the `withSupabase` wrapper (from `@supabase/server`).
+- `allow` is one of `"public"`, `"user"`, `"secret"`, or an array such as
+  `["user", "secret"]` for dual-auth.

@@ -2,21 +2,37 @@
 
 ## Development
 
-The plugin has no build step. Files are consumed directly by Claude Code's plugin system. To test locally:
+The plugin has no build step — files are consumed directly. It's dual-format: the same directory installs in both Claude Code and Cursor.
+
+**Test in Claude Code:**
 
 ```bash
 claude --plugin-dir ./
 ```
 
+**Test in Cursor:** copy this directory into Cursor's local-plugins folder, then reload. Cursor only loads a plugin whose files live **inside** `~/.cursor/plugins/local/` — it rejects a symlink that points outside that folder (`loadUserLocalPlugin … rejected: symlink target … is outside …/.cursor/plugins/local`), so use a real copy and re-sync after edits:
+
+```bash
+rsync -a --delete --exclude '.git' --exclude '.env*' --exclude 'agentlink-debug.log' \
+  ./ ~/.cursor/plugins/local/agentlink/
+```
+
+Then restart Cursor (or run **Developer: Reload Window**). Verify the `agentlink` agent and the six skills are selectable, the always-on `agentlink` rule is active, and a `npx supabase db reset` is blocked by the hook. Re-run the `rsync` after each change to pick it up.
+
+> **Heads up:** Cursor also imports Claude Code plugins from `~/.claude/plugins`. If you've installed Agent Link in Claude Code (`agentlink@tomaspozo`, formerly `link@agentlink`), it appears in Cursor too — distinct from this local copy. Test from a workspace where the Claude Code install isn't active, or uninstall it there, to avoid two entries.
+
 ### Project structure
 
 ```
-.claude-plugin/plugin.json   # Plugin manifest (name, version, metadata)
+.claude-plugin/plugin.json    # Claude Code manifest (name, version, metadata)
+.cursor-plugin/plugin.json    # Cursor manifest (mirrors the Claude one + explicit component paths)
 agents/builder.md             # Main agent definition
 skills/                       # Domain skills (cli, database, rpc, auth, edge-functions, frontend)
-hooks/                        # PreToolUse hooks (block destructive DB commands)
+rules/agentlink.mdc           # Cursor always-on rule (core architecture guardrails)
+hooks/hooks.json              # Claude Code hook registry (PreToolUse → block destructive DB commands)
+hooks/cursor.hooks.json       # Cursor hook registry (beforeShellExecution → same guard)
 scripts/release.sh            # Release automation
-settings.json                 # Default agent config
+settings.json                 # Default agent config (Claude Code)
 ```
 
 ## Changelog
@@ -50,7 +66,7 @@ Releases are cut with `scripts/release.sh`. The script handles the full flow:
 
 1. Stamps `[Unreleased]` → `[X.Y.Z] - YYYY-MM-DD` in CHANGELOG.md
 2. Adds a fresh `[Unreleased]` section at the top
-3. Bumps the version in `.claude-plugin/plugin.json`
+3. Bumps the version in both `.claude-plugin/plugin.json` and `.cursor-plugin/plugin.json`
 4. Commits, tags, and pushes
 5. Creates a GitHub release with the changelog entry as release notes
 
@@ -82,4 +98,4 @@ This project uses [Semantic Versioning](https://semver.org/):
 - **Minor** (`0.9.0`) — new features, new skills, significant workflow changes
 - **Major** (`1.0.0`) — breaking changes to the plugin interface or agent behavior
 
-The version in `.claude-plugin/plugin.json` is the source of truth. The release script keeps the git tag and GitHub release in sync with it.
+The version in `.claude-plugin/plugin.json` is the source of truth. The release script keeps `.cursor-plugin/plugin.json`, the git tag, and the GitHub release in sync with it.

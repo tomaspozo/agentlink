@@ -9,5 +9,9 @@
   "homepage": "https://agentlink.sh",
   "repository": "https://github.com/tomaspozo/agentlink",
   "keywords": ["supabase", "development"],
-  "license": "MIT"
+  "license": "MIT",
+  "agents": "agents/builder.md",
+  "skills": "skills",
+  "rules": "rules",
+  "hooks": "hooks/cursor.hooks.json"
 }
