@@ -9,6 +9,57 @@ These are the non-negotiable rules for building on Supabase with AgentLink. They
 always apply. For the full workflows, defer to the `link` skills (cli, database,
 rpc, auth, edge-functions, frontend) and the `builder` agent.
 
+## Engaging AgentLink (entry point)
+This is an AgentLink project. Whenever the user wants to **build or scaffold an
+app**, or do **any Supabase backend work** (database, auth, RPC, edge functions,
+deploys):
+- Treat it as an AgentLink task — **do NOT improvise a generic frontend/backend
+  setup or ask raw "what stack?" questions.** The stack is settled: Supabase +
+  the architecture below + a React/TanStack Start frontend.
+- **Load the matching skill** for the work at hand: `cli` (scaffolding, env,
+  migrations, deploys), `database`, `rpc`, `auth`, `edge-functions`, `frontend`.
+- **Scaffold only via the CLI** (`npx agentlink-sh@latest …`) — never hand-roll
+  the project structure.
+- For a brand-new app, follow the "Building a new app" steps below and `cli`
+  workflow #1.
+
+> If you're a generic editor agent (e.g. the user didn't select the `agentlink`
+> builder agent), these rules still bind you — engage AgentLink as described
+> rather than falling back to default behavior.
+
+## Building a new app
+- **Plan first.** Don't write SQL or UI until the scope is confirmed; for
+  greenfield work, present the architecture for approval before coding.
+- **Blank-project kickoff (do once, on a freshly scaffolded project).** Run a
+  short discovery pass, then write a product brief into `AGENTS.md` (below the
+  `agentlink:config` block, never inside it). Discover three things:
+  - **Multi-tenancy model** — what a tenant represents here (SaaS account, an
+    internal team, a location, or genuinely single-tenant). The scaffold ships
+    multi-tenancy by default; keep the tables regardless.
+  - **Entry point & look-and-feel** — what lives at `/` (a real landing page for
+    public-facing products; a redirect to `/dashboard` for internal tools), plus
+    colors/typography/mood. Load the `frontend-design` skill for this.
+  - **The product itself** — one-line value prop, v1 features, and the main
+    entities (which become your first tables and RPCs).
+- **Ask about the product, not the architecture.** Product forks (what a tenant
+  is, what lives at `/`, what the app does) are the user's. Runtime mechanics
+  (RPC vs. direct query, edge function vs. in-db `pg_net`, RLS) are settled by
+  the stack — decide them yourself, never ask.
+- **DB / schema / deploy work goes through the AgentLink CLI**, never the
+  Supabase connector MCP (no `apply_migration` / `execute_sql` / `create_project`
+  for project setup, schema, or deploys).
+
+## Scaffolding a new project
+- **Before scaffolding, ASK the user where the dev environment should live:
+  local Docker or Supabase Cloud.** Don't default silently.
+- **Cloud** → the agent can't do browser OAuth → scaffold files only with
+  `npx agentlink-sh@latest <name> --skip-env`, then hand off
+  `npx agentlink-sh@latest env add dev` for the user to run in a terminal.
+- **Local** → no browser needed → the agent runs it end-to-end with `--local`
+  (requires Docker + `psql`).
+- `--skip-env` is **not** a blanket agent default — it forces the cloud path.
+  Load the `cli` skill (workflow #1) for the full setup flow.
+
 ## Schema isolation
 - The `api` schema is the **only** schema exposed via the Supabase Data API.
 - `public` holds tables and internal functions and is **never** exposed to clients.

@@ -21,6 +21,12 @@ AgentLink does NOT install its own tooling, and it does NOT require an AI coding
 
 ### Scaffold a new project
 
+> **🛑 Before you scaffold, ASK the user where the dev environment should live: local Docker or Supabase Cloud.** This decision picks the command — don't default silently to `--skip-env`.
+> - **Cloud** → needs browser OAuth (which the agent doesn't have) → scaffold files only with `--skip-env`, then hand off `env add dev`.
+> - **Local** → no browser needed → the agent runs it end-to-end with `--local` (requires Docker + `psql`).
+>
+> `--skip-env` is the canonical path **only after the user has chosen cloud**. It is not a blanket agent default — running it without asking silently forces the cloud path on a user who may have wanted local. See workflow #1 in `references/workflows.md`.
+
 ```bash
 npx agentlink-sh@latest <name>       # interactive — handles login + project creation
 npx agentlink-sh@latest .            # scaffold in current directory
@@ -34,7 +40,7 @@ Creates template files, config, schema files, frontend (React + TanStack Start, 
 npx agentlink-sh@latest <name> --skip-env
 ```
 
-**This is the canonical path when an AGENT is doing the scaffolding.** Writes all files, installs frontend + backend deps, configures the chosen agent editor (Claude Code and/or Cursor), installs the companion skills (plus the plugin in Claude Code) — but **skips every Supabase-touching step**: no OAuth (needs a browser), no project creation, no local Docker, no `.env.local` credentials, no edge-function deploy.
+**This is the canonical path for agent-driven scaffolding when the user chose CLOUD dev** (ask first — see the scaffold-decision callout above; for local dev use `--local` and run it end-to-end). Writes all files, installs frontend + backend deps, configures the chosen agent editor (Claude Code and/or Cursor), installs the companion skills (plus the plugin in Claude Code) — but **skips every Supabase-touching step**: no OAuth (needs a browser), no project creation, no local Docker, no `.env.local` credentials, no edge-function deploy.
 
 After scaffold completes, the user finishes setup by running this in a terminal:
 

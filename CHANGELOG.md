@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **Cursor: the always-on rule now engages AgentLink on the default agent, not just the selected `builder`.** In Cursor the `builder` agent is user-selectable rather than a forced default (unlike Claude Code's `settings.json` wiring), so a user who opens a normal chat and asks to "build an app" gets Cursor's generic agent — which asked raw frontend/backend questions instead of using AgentLink. Since `rules/agentlink.mdc` (`alwaysApply: true`) is the only surface guaranteed to load regardless of agent selection, it's been promoted from pure architecture guardrails to also be the **entry point/router**: a new "Engaging AgentLink" section tells any agent to treat build/scaffold/Supabase-backend requests as AgentLink tasks (load the matching skill, scaffold only via the CLI, don't improvise a stack), and a "Building a new app" section ports the essential `builder` behaviors the generic agent was missing (plan-first; the blank-project kickoff — multi-tenancy / entry point + look-and-feel / product + entities → brief in `AGENTS.md`; ask-about-product-not-architecture; DB/deploy work via the CLI, never the Supabase connector MCP).
+- **Scaffold guidance: the local-vs-cloud dev-env question is now on the surfaces that actually load at scaffold time.** The "ask the user local Docker vs Supabase Cloud first" instruction previously lived only in `agents/builder.md` and `references/workflows.md` — neither reliably reaches the model in Cursor (no forced agent) or when only `cli/SKILL.md` is loaded. `cli/SKILL.md` framed `--skip-env` as the unconditional "canonical path when an AGENT is doing the scaffolding", so the agent ran `--skip-env -y` and handed off `env add dev` without ever asking. Added a 🛑 scaffold-decision callout to the top of `cli/SKILL.md`'s "Scaffold a new project" section and reframed `--skip-env` as the cloud path *after the user chose cloud* (not a blanket default); added a matching "Scaffolding a new project" section to `rules/agentlink.mdc`.
+
 ## [1.2.0] - 2026-06-19
 
 ### Added
