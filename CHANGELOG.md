@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.2.3] - 2026-06-19
+
 ### Changed
 
 - **`withSupabase`: migrate the edge-functions docs to the new `@supabase/server` auth API.** The wrapper's `allow` option is deprecated in favor of `auth` (`allow` still works but warns and will be removed in a future major), and the auth values were renamed — `'public'` → `'publishable'` and `'always'` → `'none'` (including colon variants like `'public:<name>'`), with the `ctx.authType` field now `ctx.authMode`. Updated all references across `skills/edge-functions/` (SKILL.md, references/with_supabase.md, edge_functions.md, api_key_migration.md) and `rules/agentlink.mdc` to use `auth:` and the new value names, taking care not to touch the unrelated `public` schema. The scaffold's bundled functions only ever used `auth: "secret"` / `auth: "user"`, so generated code needed no value renames.
