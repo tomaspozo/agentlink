@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.2.2] - 2026-06-19
+
 ### Changed
 
 - **Document prerequisites and stop the agent from hand-creating a scaffold.** Two failure modes where the agent built project files by hand instead of running the CLI. (1) **No Node/npx on the machine** — the `npx agentlink-sh@latest` call timed out and the agent treated the failure as a cue to create files manually. Added a Prerequisites section to `README.md` and `skills/cli/SKILL.md` (Node 18+ *always*; Supabase CLI; Docker + `psql` for local; a Supabase account for cloud; Resend for transactional email), with an explicit ⚠️ that a missing `node`/`npx` makes the command time out and is a stop-and-install signal, never a reason to scaffold by hand. (2) **The Scaffold Map read as a build checklist** on an unscaffolded project — added a 🛑 banner to `references/scaffold-map.md` stating it's an inventory of what the CLI *already* created (no `agentlink.json` = unscaffolded = run the CLI, never hand-create the listed tables/RPCs/routes), and stated the precondition in `cli/SKILL.md`'s reference list. Also hardened `rules/agentlink.mdc`: an unscaffolded-detection rule at the entry point (no `agentlink.json` → CLI first, never hand-create) and a directory/init-ordering rule (settle location + dev env, then let the CLI create and init the directory — don't `mkdir`/`git init`/lay out structure by hand; check `node --version` first).
