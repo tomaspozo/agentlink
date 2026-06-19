@@ -79,7 +79,22 @@ When creating or editing schema objects, put each in its own file under `supabas
 **Imperative folders — `cron/`, `storage/`, `rbac/`.** These three top-level folders under `supabase/database/` are **excluded** from `db apply`'s schema diff *and* from the migration diff, and applied imperatively by the deploy step on **every** path — `db apply` (local/dev), `db rebuild`, and **every `env deploy`** (all envs incl. prod, which is migrations-only). Reason: the `cron` and `storage` schemas are excluded from `db apply`'s schema diff and from migrations, so `cron.schedule()`, buckets, and storage policies never survive a migration; and RBAC is reference DATA, not DDL. This deploy step is the only path that reliably reaches prod — **do not** hand-append these to migration files. To apply just these folders without a full `db apply` (e.g. after editing a cron job or bucket), run `npx agentlink-sh@latest db resources`.
 
 - **`cron/` and `storage/` must be IDEMPOTENT** (they re-run on every deploy): `cron.schedule(name, …)` upserts by job name (`cron.unschedule(name)` to remove); storage buckets use `INSERT … ON CONFLICT (id) DO UPDATE`; storage policies use `DROP POLICY IF EXISTS` + `CREATE POLICY`. Each folder's files run in sorted order, one transaction per folder.
-- **`rbac/` is reference DATA, not schema.** The roles/permissions/role_permissions *tables* live in `schemas/public/tables/` (structure only). Their *rows* live in `rbac/<entity>.sql`, each filling an `rbac_desired` staging table, converged to **exactly** the declared set: **full reconcile** for permissions + bindings (a removed row is REVOKED everywhere — the only way revokes reach prod); roles are **upsert-only** (a referenced role can't be deleted: `memberships.role` FKs into `roles(name)`). Run `agentlink db rbac-sync` to apply an RBAC change immediately without a full deploy.
+- **`rbac/` is reference DATA, not schema.** The roles/permissions/role_permissions *tables* live in `schemas/public/tables/` (structure only). Their *rows* live in `rbac/<entity>.sql`, each filling an `rbac_desired` staging table, converged to **exactly** the declared set: **full reconcile** for permissions + bindings (a removed row is REVOKED everywhere — the only way revokes reach prod); roles are **upsert-only** (a referenced role can't be deleted: `memberships.role` FKs into `roles(name)`).
+
+**🛑 Editing `cron/`, `storage/`, or `rbac/`? The workflow is: edit the file → APPLY it.** A change to these folders does nothing until applied, and they are **excluded from the schema diff** — so `db apply`'s schema step won't carry them, and a `cron.schedule()`/bucket/policy/RBAC row dropped into a `schemas/` file silently never runs. After editing:
+- `npx agentlink-sh@latest db apply` applies them **alongside** your schema (the normal dev loop already covers them — `db apply` runs the imperative step too), **or**
+- `npx agentlink-sh@latest db resources` applies **only** `storage/` + `cron/` + `rbac/` (no schema diff, no type-gen) — reach for this when that's *all* you changed (`db rbac-sync` is the rbac-only subset).
+On deploy they go out with every `env deploy`. Concretely:
+
+| You're changing… | Edit | Then |
+|---|---|---|
+| A cron job | `cron/<name>.sql` (`cron.schedule(...)`) | `db apply` or `db resources` |
+| A storage **bucket** or its `storage.objects` **policies** | `storage/<name>.sql` | `db apply` or `db resources` |
+| An **RBAC permission** key, or a role→permission **binding** | `rbac/permissions.sql`, `rbac/role_permissions.sql` | `db apply` or `db resources` |
+
+**Two different "permissions" — don't confuse them:**
+- A **GRANT** on a table/function (who may `SELECT` / `EXECUTE` it) is **DDL** → it lives in that object's own `schemas/<schema>/{tables,functions}/<obj>.sql` file and applies with **`db apply`**. Changing who can run an RPC at the SQL level = edit its function file + `db apply`.
+- The **RBAC permission model** (the `auth_verify_access('entity.action')` keys your RPCs check, and their role bindings) is **reference data** → it lives in `rbac/permissions.sql` + `rbac/role_permissions.sql` and applies with **`db resources`** (or `db apply` / `env deploy`). Adding a new gated capability = add the permission key + binding here, *and* call `auth_verify_access(...)` in the RPC (which is a schema-file change).
 
 - One object per file. A table file is **self-contained**: table definition + constraints + indexes + `ENABLE ROW LEVEL SECURITY` + policies + triggers + grants all live together.
 - To edit an existing object, edit its file in place (don't create a parallel file) — then run `npx agentlink-sh@latest db apply`.
