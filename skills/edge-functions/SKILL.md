@@ -62,7 +62,7 @@ The `withSupabase` wrapper comes from the `@supabase/server` npm package, resolv
    }
    ```
    Always pin versions — exact for pre-release (`@0.1.0-alpha.1`), major for stable (`@2`). Never use unversioned specifiers.
-3. **Choose the `allow` type** — who can call this function? (see Selection Guide below)
+3. **Choose the `auth` type** — who can call this function? (see Selection Guide below)
 4. **Write `index.ts`** using `withSupabase`:
 
 ```typescript
@@ -70,7 +70,7 @@ import { withSupabase } from "@supabase/server";
 import { jsonResponse, errorResponse } from "../_shared/responses.ts";
 
 export default {
-  fetch: withSupabase({ allow: "user", supabaseOptions: { db: { schema: "api" } } }, async (_req, ctx) => {
+  fetch: withSupabase({ auth: "user", supabaseOptions: { db: { schema: "api" } } }, async (_req, ctx) => {
     try {
       const { data, error } = await ctx.supabase.rpc("my_rpc_function");
 
@@ -115,7 +115,7 @@ Functions that are **never** called from client code — they're only enqueued v
 | Pattern | Examples | When to use |
 |---|---|---|
 | Bare name | `stripe-webhook`, `share-image`, `chart-render` | Anything a client (or external service) might hit. |
-| `internal-` prefix | `internal-send-auth-email`, `internal-invite-member`, `internal-queue-worker` | Queue workers, auth-hook handlers, cron-only functions, anything wrapped with `allow: "secret"` and never exposed to users. |
+| `internal-` prefix | `internal-send-auth-email`, `internal-invite-member`, `internal-queue-worker` | Queue workers, auth-hook handlers, cron-only functions, anything wrapped with `auth: "secret"` and never exposed to users. |
 
 Three reasons:
 1. **Discoverability.** A reader scanning `supabase/functions/` sees the privilege boundary at a glance — no need to open `index.ts` to learn whether a function is user-facing.
@@ -124,7 +124,7 @@ Three reasons:
 
 **Don't** use a leading underscore (`_internal-foo`) — Supabase treats top-level `_*` directories as non-deployable (which is why `_shared/` works as a non-deployed module). The hyphenated `internal-` prefix is the safe form.
 
-Edge function names beginning with `internal-` should always be paired with `allow: "secret"`. If you find yourself writing `allow: "user"` on an `internal-*` function, the prefix is wrong.
+Edge function names beginning with `internal-` should always be paired with `auth: "secret"`. If you find yourself writing `auth: "user"` on an `internal-*` function, the prefix is wrong.
 
 > **For the full wrapper API, dual-auth patterns, anti-patterns, and context reference, load [withSupabase Reference](./references/with_supabase.md).**
 
@@ -168,7 +168,7 @@ supabase/functions/
 └── deno.json                      # Global — local dev fallback only
 ```
 
-Folders prefixed with `_` are shared modules — they are not deployed as edge functions. Folders prefixed with `internal-` ARE deployed but signal "system-only, never call from a client" by convention (paired with `allow: "secret"`). Every deployed function needs its own `deno.json` with its dependencies mapped — the global `deno.json` is excluded during deployment.
+Folders prefixed with `_` are shared modules — they are not deployed as edge functions. Folders prefixed with `internal-` ARE deployed but signal "system-only, never call from a client" by convention (paired with `auth: "secret"`). Every deployed function needs its own `deno.json` with its dependencies mapped — the global `deno.json` is excluded during deployment.
 
 ---
 
@@ -176,7 +176,7 @@ Folders prefixed with `_` are shared modules — they are not deployed as edge f
 
 Load these as needed:
 
-- **[🔧 withSupabase Wrapper](./references/with_supabase.md)** — Full wrapper API: allow types, dual-auth, clients, anti-patterns, context reference
+- **[🔧 withSupabase Wrapper](./references/with_supabase.md)** — Full wrapper API: auth types, dual-auth, clients, anti-patterns, context reference
 - **[📦 Dependencies & Deployment](./references/dependencies.md)** — Per-function `deno.json`, import maps, bare specifiers, sub-path mapping, version pinning, `--use-api` deployment
 - **[📁 Edge Function Patterns](./references/edge_functions.md)** — Folder structure details, response helpers, feature-specific modules
 - **[🔑 API Key Migration](./references/api_key_migration.md)** — Migrate from legacy anon/service_role keys to new publishable/secret keys

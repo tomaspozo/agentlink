@@ -73,7 +73,7 @@ npx supabase secrets set SUPABASE_SECRET_KEY=sb_secret_...
 
 ## Function Configuration (`config.toml`)
 
-**Every edge function must have `verify_jwt = false` in `supabase/config.toml`.** The `withSupabase` wrapper handles auth itself — it validates JWTs for `allow: "user"` and secret keys for `allow: "secret"`. If `verify_jwt` is left as `true` (the default), Supabase's gateway will reject requests before they reach the wrapper, breaking `public` and `secret` functions entirely and conflicting with the wrapper's own validation for `user` functions.
+**Every edge function must have `verify_jwt = false` in `supabase/config.toml`.** The `withSupabase` wrapper handles auth itself — it validates JWTs for `auth: "user"` and secret keys for `auth: "secret"`. If `verify_jwt` is left as `true` (the default), Supabase's gateway will reject requests before they reach the wrapper, breaking `publishable` and `secret` functions entirely and conflicting with the wrapper's own validation for `user` functions.
 
 When creating a new function, add its entry to `config.toml`:
 
@@ -113,7 +113,7 @@ import { withSupabase } from "@supabase/server";
 import { jsonResponse, errorResponse } from "../_shared/responses.ts";
 
 export default {
-  fetch: withSupabase({ allow: "user", supabaseOptions: { db: { schema: "api" } } }, async (req, ctx) => {
+  fetch: withSupabase({ auth: "user", supabaseOptions: { db: { schema: "api" } } }, async (req, ctx) => {
     try {
       const body = await req.json();
       const { data, error } = await ctx.supabase.rpc("some_function", body);
@@ -203,7 +203,7 @@ import { buildPrompt } from "../_ai/prompts.ts";
 import { callOpenAI } from "../_ai/openai.ts";
 
 export default {
-  fetch: withSupabase({ allow: "user", supabaseOptions: { db: { schema: "api" } } }, async (req, ctx) => {
+  fetch: withSupabase({ auth: "user", supabaseOptions: { db: { schema: "api" } } }, async (req, ctx) => {
     try {
       const { document_id } = await req.json();
 

@@ -108,5 +108,7 @@ The prefix encodes the security context:
 
 ## Edge functions
 - Every edge function uses the `withSupabase` wrapper (from `@supabase/server`).
-- `allow` is one of `"public"`, `"user"`, `"secret"`, or an array such as
-  `["user", "secret"]` for dual-auth.
+- `auth` is one of `"publishable"`, `"user"`, `"secret"`, or an array such as
+  `["user", "secret"]` for dual-auth. (The legacy `allow` option still works
+  but is deprecated; `"public"` was renamed to `"publishable"` and `"always"`
+  to `"none"`.)

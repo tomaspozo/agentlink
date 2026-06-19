@@ -1,11 +1,11 @@
 # withSupabase Wrapper
 
-The `withSupabase` wrapper is the **only** way to initialize Supabase clients in Edge Functions. It provides two clients, handles CORS preflight, and enforces authorization based on the function's `allow` config.
+The `withSupabase` wrapper is the **only** way to initialize Supabase clients in Edge Functions. It provides two clients, handles CORS preflight, and enforces authorization based on the function's `auth` config.
 
 ## Contents
 - Rules
 - Clients
-- Allow Types (user, public, secret, array)
+- Auth Types (user, publishable, secret, array)
 - Selection Guide
 - Function Configuration
 - Anti-Patterns
@@ -23,26 +23,26 @@ The `withSupabase` wrapper is the **only** way to initialize Supabase clients in
 
 ## Clients
 
-Both clients are **always available** regardless of `allow` type:
+Both clients are **always available** regardless of `auth` type:
 
 | Client | Behavior | Use for |
 |--------|----------|---------|
 | `ctx.supabase` | Respects RLS | Default choice. User data operations, queries that should be scoped by policies. |
 | `ctx.supabaseAdmin` | Bypasses RLS | Service-level operations that need full access. Use deliberately. |
 
-How `ctx.supabase` is initialized depends on `allow`:
+How `ctx.supabase` is initialized depends on `auth`:
 
-| Allow | `ctx.supabase` is... |
+| Auth | `ctx.supabase` is... |
 |-------|---------------------|
 | `user` | User-scoped — carries the caller's JWT, so RLS filters by user identity |
-| `public` | Public — publishable key, no JWT. RLS `anon` role policies apply |
-| `secret` | Public — publishable key, no JWT. RLS `anon` role policies apply |
+| `publishable` | Publishable key, no JWT. RLS `anon` role policies apply |
+| `secret` | Publishable key, no JWT. RLS `anon` role policies apply |
 
 **Default to `ctx.supabase`.** Reserve `ctx.supabaseAdmin` for operations where the function acts as the system, not on behalf of a user -- e.g., processing webhook payloads, cron jobs, writing to service-only tables. If RLS is blocking a user-facing operation, fix the RLS policy; do not switch to `supabaseAdmin` to work around it.
 
 ---
 
-## Allow Types
+## Auth Types
 
 ### `user` — User-Facing Functions
 
@@ -52,7 +52,7 @@ For functions called from the app by a logged-in user. The wrapper validates the
 
 ```typescript
 export default {
-  fetch: withSupabase({ allow: "user", supabaseOptions: { db: { schema: "api" } } }, async (_req, ctx) => {
+  fetch: withSupabase({ auth: "user", supabaseOptions: { db: { schema: "api" } } }, async (_req, ctx) => {
     try {
       // ctx.user.id, ctx.user.email — user identity
       // ctx.supabase — queries scoped to this user via RLS
@@ -68,7 +68,7 @@ export default {
 };
 ```
 
-### `public` — Webhooks, Public Endpoints, External Services
+### `publishable` — Webhooks, Public Endpoints, External Services
 
 For functions that receive no Supabase JWT. Use this for:
 
@@ -79,12 +79,12 @@ For functions that receive no Supabase JWT. Use this for:
 
 No auth enforcement — the request passes through to the handler.
 
-**Provides:** `ctx.supabase` (public), `ctx.supabaseAdmin`
+**Provides:** `ctx.supabase` (publishable key), `ctx.supabaseAdmin`
 
 ```typescript
 // Stripe webhook — validates its own signature, uses supabaseAdmin for DB writes
 export default {
-  fetch: withSupabase({ allow: "public", supabaseOptions: { db: { schema: "api" } } }, async (req, ctx) => {
+  fetch: withSupabase({ auth: "publishable", supabaseOptions: { db: { schema: "api" } } }, async (req, ctx) => {
     try {
       const signature = req.headers.get("stripe-signature");
       if (!signature) return errorResponse("Missing signature", 401);
@@ -115,12 +115,12 @@ Use this for:
 - Database-triggered calls via `_internal_admin_call_edge_function`
 - Internal service-to-service calls
 
-**Provides:** `ctx.supabase` (public), `ctx.supabaseAdmin`
+**Provides:** `ctx.supabase` (publishable key), `ctx.supabaseAdmin`
 
 ```typescript
 // Cron job — only callable with the secret key
 export default {
-  fetch: withSupabase({ allow: "secret", supabaseOptions: { db: { schema: "api" } } }, async (_req, ctx) => {
+  fetch: withSupabase({ auth: "secret", supabaseOptions: { db: { schema: "api" } } }, async (_req, ctx) => {
     try {
       const { data, error } = await ctx.supabaseAdmin.rpc(
         "cleanup_expired_sessions",
@@ -143,7 +143,7 @@ Some functions are called from multiple contexts — e.g., by a logged-in user f
 ```typescript
 // Called by users (JWT) and by admin-regenerate (secret key)
 export default {
-  fetch: withSupabase({ allow: ["user", "secret"], supabaseOptions: { db: { schema: "api" } } }, async (req, ctx) => {
+  fetch: withSupabase({ auth: ["user", "secret"], supabaseOptions: { db: { schema: "api" } } }, async (req, ctx) => {
     try {
       // ctx.user exists → called by a logged-in user (JWT auth succeeded)
       // ctx.user is undefined → called with secret key (internal/service)
@@ -166,9 +166,9 @@ export default {
 **How it works:**
 - The wrapper tries each type in order — first successful auth wins
 - If `user` succeeds: `ctx.user`, `ctx.claims`, and user-scoped `ctx.supabase` are set
-- If `secret` succeeds: `ctx.user` is `undefined`, `ctx.supabase` is the public client
+- If `secret` succeeds: `ctx.user` is `undefined`, `ctx.supabase` is the publishable-key client
 - If none succeed: returns 401
-- If the array includes `public`: no auth is required (short-circuits)
+- If the array includes `publishable`: no auth is required (short-circuits)
 
 **Use `ctx.user` to detect the auth method** in the handler — this is the idiomatic way to branch logic based on how the function was called.
 
@@ -176,18 +176,18 @@ export default {
 
 ## Selection Guide
 
-| Scenario | Allow | Why |
+| Scenario | Auth | Why |
 |----------|-------|-----|
 | User clicks a button in the app | `user` | Need user identity + RLS-scoped queries |
-| External webhook (Stripe, GitHub) | `public` | No Supabase JWT; validate webhook signature yourself |
-| Supabase Auth Hook | `public` | Called by Supabase Auth, not a user session |
-| Public API / health check | `public` | Open access, no auth needed |
+| External webhook (Stripe, GitHub) | `publishable` | No Supabase JWT; validate webhook signature yourself |
+| Supabase Auth Hook | `publishable` | Called by Supabase Auth, not a user session |
+| Public API / health check | `publishable` | Open access, no auth needed |
 | Cron job / scheduled function | `secret` | No user context; needs secret key validation |
 | Called from another edge function | `secret` | Internal service-to-service; uses secret key |
 | Called from DB via `_internal_admin_call_edge_function` | `secret` | DB calls with secret key |
 | Called by users AND by other edge functions | `["user", "secret"]` | Dual-auth — accepts either credential |
 
-**When in doubt:** if there's a logged-in user, use `user`. If it's an external service, use `public`. If it's internal infrastructure, use `secret`. If it's called from multiple contexts, use an array.
+**When in doubt:** if there's a logged-in user, use `user`. If it's an external service, use `publishable`. If it's internal infrastructure, use `secret`. If it's called from multiple contexts, use an array.
 
 ---
 
@@ -202,7 +202,7 @@ Every function using `withSupabase` must disable built-in JWT verification since
 verify_jwt = false
 ```
 
-This is **required** for `public` and `secret` (they don't send a Supabase JWT), and **required** for `user` because the wrapper validates tokens using the newer `getClaims` pattern.
+This is **required** for `publishable` and `secret` (they don't send a Supabase JWT), and **required** for `user` because the wrapper validates tokens using the newer `getClaims` pattern.
 
 ---
 
@@ -229,7 +229,7 @@ All data access goes through `.rpc()` — in edge functions, frontend, and every
 ```typescript
 // ❌ WRONG — manual client creation inside the handler
 export default {
-  fetch: withSupabase({ allow: "user", supabaseOptions: { db: { schema: "api" } } }, async (req, ctx) => {
+  fetch: withSupabase({ auth: "user", supabaseOptions: { db: { schema: "api" } } }, async (req, ctx) => {
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_PUBLISHABLE_KEY")!,
@@ -241,7 +241,7 @@ export default {
 
 // ✅ CORRECT — use ctx.supabase
 export default {
-  fetch: withSupabase({ allow: "user", supabaseOptions: { db: { schema: "api" } } }, async (_req, ctx) => {
+  fetch: withSupabase({ auth: "user", supabaseOptions: { db: { schema: "api" } } }, async (_req, ctx) => {
     const { data } = await ctx.supabase.rpc("some_function");
     // ...
   }),
@@ -253,7 +253,7 @@ export default {
 ```typescript
 // ❌ WRONG — bypasses RLS unnecessarily
 export default {
-  fetch: withSupabase({ allow: "user", supabaseOptions: { db: { schema: "api" } } }, async (_req, ctx) => {
+  fetch: withSupabase({ auth: "user", supabaseOptions: { db: { schema: "api" } } }, async (_req, ctx) => {
     const { data } = await ctx.supabaseAdmin.rpc("profile_get_by_user");
     // ...
   }),
@@ -261,7 +261,7 @@ export default {
 
 // ✅ CORRECT — let RLS scope the query to the user
 export default {
-  fetch: withSupabase({ allow: "user", supabaseOptions: { db: { schema: "api" } } }, async (_req, ctx) => {
+  fetch: withSupabase({ auth: "user", supabaseOptions: { db: { schema: "api" } } }, async (_req, ctx) => {
     const { data } = await ctx.supabase.rpc("profile_get_by_user");
     // ...
   }),
@@ -273,15 +273,15 @@ export default {
 ```typescript
 // ❌ WRONG — Stripe doesn't send a Supabase JWT, this will always 401
 export default {
-  fetch: withSupabase({ allow: "user", supabaseOptions: { db: { schema: "api" } } }, async (req, ctx) => {
+  fetch: withSupabase({ auth: "user", supabaseOptions: { db: { schema: "api" } } }, async (req, ctx) => {
     const signature = req.headers.get("stripe-signature");
     // ...
   }),
 };
 
-// ✅ CORRECT — use public, validate the webhook signature yourself
+// ✅ CORRECT — use publishable, validate the webhook signature yourself
 export default {
-  fetch: withSupabase({ allow: "public", supabaseOptions: { db: { schema: "api" } } }, async (req, ctx) => {
+  fetch: withSupabase({ auth: "publishable", supabaseOptions: { db: { schema: "api" } } }, async (req, ctx) => {
     const signature = req.headers.get("stripe-signature");
     if (!signature) return errorResponse("Missing signature", 401);
     // ...
@@ -301,7 +301,7 @@ interface SupabaseContext {
   supabase: SupabaseClient;       // Respects RLS
   supabaseAdmin: SupabaseClient;  // Bypasses RLS
 
-  // Available when allow includes 'user' and auth succeeds
+  // Available when auth includes 'user' and auth succeeds
   user?: Record<string, unknown>;   // { id, email, role, ...claims }
   claims?: Record<string, unknown>; // Raw JWT claims from getClaims()
 }
@@ -317,8 +317,9 @@ The wrapper handles:
 - CORS preflight (`OPTIONS` requests) automatically — uses `corsHeaders` from `@supabase/supabase-js/cors`
 - Resolution of `SUPABASE_PUBLISHABLE_KEY` and `SUPABASE_SECRET_KEY` from environment
 - Clear error messages if secrets are missing
-- JWT validation via `getClaims` for `allow: "user"`
-- Secret key validation via `apikey` header for `allow: "secret"`
-- User-scoped client creation with the caller's JWT for `allow: "user"` (created per-request)
-- Reusable public and admin clients for `allow: "public"` and `allow: "secret"` (created once, shared across requests)
-- Array allow for dual-auth — tries each type in order, first match wins
+- JWT validation via `getClaims` for `auth: "user"`
+- Secret key validation via `apikey` header for `auth: "secret"`
+- User-scoped client creation with the caller's JWT for `auth: "user"` (created per-request)
+- Reusable publishable-key and admin clients for `auth: "publishable"` and `auth: "secret"` (created once, shared across requests)
+- Array `auth` for dual-auth — tries each type in order, first match wins
+```

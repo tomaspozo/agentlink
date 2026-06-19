@@ -136,7 +136,7 @@ import { withSupabase } from "@supabase/server";
 import { jsonResponse, errorResponse } from "../_shared/responses.ts";
 
 export default {
-  fetch: withSupabase({ allow: "user", supabaseOptions: { db: { schema: "api" } } }, async (_req, ctx) => {
+  fetch: withSupabase({ auth: "user", supabaseOptions: { db: { schema: "api" } } }, async (_req, ctx) => {
     const { data, error } = await ctx.supabase.rpc("profile_get_by_user");
 
     if (error) return errorResponse(error.message);
@@ -145,7 +145,7 @@ export default {
 };
 ```
 
-For each function, choose the correct `allow` type. See [withSupabase Reference](./with_supabase.md) for the selection guide.
+For each function, choose the correct `auth` type. See [withSupabase Reference](./with_supabase.md) for the selection guide.
 
 ### 5. Remove old shared client files
 

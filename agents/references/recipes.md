@@ -27,7 +27,7 @@ the full inventory. Don't reinvent them.
 | `api._admin_enqueue_task` | `(function_name text, payload jsonb DEFAULT '{}', delay_seconds int DEFAULT 0) RETURNS bigint` | Enqueue a job into the `agentlink_tasks` PGMQ queue; auto-wakes the worker. |
 | `api._admin_queue_read` | `(qty int DEFAULT 5, vt int DEFAULT 30) RETURNS TABLE(msg_id bigint, read_ct int, enqueued_at timestamptz, vt timestamptz, message jsonb)` | Read a batch off the queue (used by the worker). |
 | `api._admin_queue_archive` / `api._admin_queue_delete` | `(id bigint) RETURNS boolean` | Retire a processed message (archive keeps history). |
-| `internal-queue-worker` | edge function, `allow: "secret"` | Drains the queue and `functions.invoke`s each task's target function. |
+| `internal-queue-worker` | edge function, `auth: "secret"` | Drains the queue and `functions.invoke`s each task's target function. |
 | `process-stale-tasks` | scaffolded `pg_cron` job (`* * * * *`) | Wakes the worker every minute so stuck tasks retry. |
 
 **Two ways to run background work:**
@@ -117,7 +117,7 @@ import { jsonResponse, errorResponse } from "../_shared/responses.ts";
 
 export default {
   fetch: withSupabase(
-    { allow: "secret", supabaseOptions: { db: { schema: "api" } } },
+    { auth: "secret", supabaseOptions: { db: { schema: "api" } } },
     async (_req, { supabaseAdmin }) => {
       const { data: monitors, error } = await supabaseAdmin.rpc("_admin_monitor_due");
       if (error) return errorResponse(error.message, 500);
@@ -175,7 +175,7 @@ WHERE next_check_at <= now();
 |---|---|---|
 | Schedule | `pg_cron` + `_internal_admin_call_edge_function` | Postgres-native scheduling; `pg_net` only wakes the worker |
 | Fetch due rows / write results | `api._admin_*` RPC (`SECURITY DEFINER`, service_role) | All data access is an RPC, even from a worker |
-| The outbound `fetch` | edge function (`allow: "secret"`) | Timeouts, redirects, error capture — never `pg_net` |
+| The outbound `fetch` | edge function (`auth: "secret"`) | Timeouts, redirects, error capture — never `pg_net` |
 
 ---
 
@@ -223,9 +223,9 @@ for (const msg of messages) {
 
 ### 3. The target function does the external work
 
-`internal-invite-member` (`allow: "secret"`, since only the worker/service_role invokes it) reads
+`internal-invite-member` (`auth: "secret"`, since only the worker/service_role invokes it) reads
 the payload and calls Resend. To add a *new* queued side-effect, write a new `internal-<thing>`
-edge function with `allow: "secret"`, register it in `config.toml`, and enqueue it by name — the
+edge function with `auth: "secret"`, register it in `config.toml`, and enqueue it by name — the
 worker dispatches it generically.
 
 ### What goes where
@@ -234,7 +234,7 @@ worker dispatches it generically.
 |---|---|---|
 | Validate + authorize + write the invite | `api.invitation_create` (INVOKER) + `_internal_admin_create_invitation` (DEFINER) | Business logic + authz live in RPCs |
 | Hand off the email | `api._admin_enqueue_task` → PGMQ | Side-effect is decoupled so the mutation never blocks on it |
-| Send the email | `internal-invite-member` edge function (`allow: "secret"`) | Third-party API (Resend) = edge function |
+| Send the email | `internal-invite-member` edge function (`auth: "secret"`) | Third-party API (Resend) = edge function |
 
 ---
 
@@ -280,7 +280,7 @@ import { jsonResponse, errorResponse } from "../_shared/responses.ts";
 
 export default {
   fetch: withSupabase(
-    { allow: "secret", supabaseOptions: { db: { schema: "api" } } },
+    { auth: "secret", supabaseOptions: { db: { schema: "api" } } },
     async (_req, { supabaseAdmin }) => {
       const res = await fetch("https://api.example.com/rates", {
         headers: { Authorization: `Bearer ${Deno.env.get("RATES_API_KEY")}` },
@@ -301,5 +301,5 @@ export default {
 | Step | Layer | Why |
 |---|---|---|
 | Schedule | `pg_cron` + `_internal_admin_call_edge_function` | Postgres-native scheduling |
-| Read the external API | `internal-rates-sync` edge function (`allow: "secret"`) | Outbound HTTP = edge function; secrets live in the function env |
+| Read the external API | `internal-rates-sync` edge function (`auth: "secret"`) | Outbound HTTP = edge function; secrets live in the function env |
 | Persist | `api._admin_rates_upsert` RPC | Persistence is always an RPC, never `.from()` |

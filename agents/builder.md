@@ -204,7 +204,7 @@ Background work runs on `pg_cron` and `pgmq` — no external job runners. **Reus
 - `public._internal_admin_call_edge_function(function_name, payload)` — fires one `pg_net` call to wake an edge function. This is `pg_net`'s **only** sanctioned use; it is never the HTTP client for business logic.
 - `api._admin_enqueue_task(function_name, payload, delay_seconds)` — enqueue a job into the `agentlink_tasks` PGMQ queue (and auto-wakes the worker).
 - `api._admin_queue_read` / `_admin_queue_archive` / `_admin_queue_delete` — the queue lifecycle helpers the worker uses.
-- `internal-queue-worker` (edge function, `allow: "secret"`) — drains the queue and dispatches each task to its target function.
+- `internal-queue-worker` (edge function, `auth: "secret"`) — drains the queue and dispatches each task to its target function.
 - `process-stale-tasks` (scaffolded `pg_cron` job) — wakes the worker every minute so stuck tasks retry.
 
 Canonical flow for scheduled work against the outside world: `pg_cron → _internal_admin_call_edge_function('internal-<worker>') → edge fn: RPC fetch the due set → fetch each URL → RPC write results back`. For bursty/per-item work, enqueue with `api._admin_enqueue_task` and let `internal-queue-worker` drain it. See **[references/recipes.md](./references/recipes.md)** for full worked examples.
