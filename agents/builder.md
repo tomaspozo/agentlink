@@ -73,11 +73,29 @@ Check `AGENTS.md` in the project root for the project mode (**cloud** or **local
 
 ### New project setup
 
-Scaffold via the AgentLink CLI — never the Supabase connector MCP. The agent has no browser for Supabase OAuth, so scaffold with `--skip-env` (`npx agentlink-sh@latest <name> --skip-env`, or `npx . --skip-env` for the current dir): it writes all files, installs deps, configures Claude Code, and registers the plugin + companion skills without touching Supabase. Then hand off:
+Scaffold via the AgentLink CLI — never the Supabase connector MCP. **First ask the user where the dev environment should live: local Docker or Supabase Cloud.** It changes which command you run — don't default silently.
 
-> "Scaffold done. Open Claude Code in `<path>` and run `npx agentlink-sh@latest env add dev` in a terminal — it needs a browser for OAuth, which I don't have."
+- **Cloud** — needs browser OAuth, which you don't have. Scaffold files only with `--skip-env`, then hand off the env step:
+  ```bash
+  npx agentlink-sh@latest <name> --skip-env
+  ```
+  > "Scaffold done. Open Claude Code in `<path>` and run `npx agentlink-sh@latest env add dev` in a terminal — it needs a browser for OAuth, which I don't have."
+- **Local** — no browser needed, so you can do it end-to-end if Docker is running:
+  ```bash
+  npx agentlink-sh@latest <name> --local
+  ```
+  If Docker/`psql` is missing, point the user at `https://agentlink.sh/start` and hand off.
 
-After the user completes `env add dev`, run `check` to confirm `ready: true`.
+Either way it writes all files, installs deps, configures Claude Code, and registers the plugin + companion skills.
+
+**Scaffold target — pick `.` vs `<name>` by where your shell already is:**
+- If you're **already inside** the intended project directory (e.g. the user `cd`'d into it), pass `.` — it scaffolds in place: `npx agentlink-sh@latest . --skip-env`.
+- Only pass a `<name>` from the **parent** directory — a name resolves to a *subfolder* (`cwd/<name>`). Passing a name equal to the current directory **from inside it** creates a nested `foo/foo/` — a common mistake.
+- `npx . --skip-env` is **wrong** — the package name is required: `npx agentlink-sh@latest . --skip-env`.
+
+**Use only real flags.** The scaffold flags are `--skip-env`, `--local`, `--link`, `--no-frontend`, `--no-skills`, `-y/--yes`, `--prompt`, `--debug` (see the `cli` skill for the full list). There is **no `--no-launch`** — it was removed; passing it errors out with "unknown option" before anything scaffolds. Don't invent flags.
+
+After the user completes `env add dev` (cloud) — or immediately (local) — run `check` to confirm `ready: true`.
 
 **The Supabase connector MCP is never used for project creation, schema application, SQL execution, or edge-function deploys** — all database and deploy work goes through the CLI (`db apply`, `db migrate`, `env deploy`); MCP tools (`apply_migration`, `execute_sql`, `create_project`) must not substitute. Load the `cli` skill for the full setup workflow (questions to ask, frontend flags, local-Docker opt-in) — Workflow #1 in `references/workflows.md`.
 

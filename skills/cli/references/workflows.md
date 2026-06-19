@@ -19,15 +19,21 @@ Use this as a lookup. When a user prompt matches a trigger below, follow that se
 
 - **What are you building?** (A one-liner is fine — becomes the prompt passed to Claude Code.)
 - **Frontend?** React + TanStack Start (SPA, default), or backend-only (`--no-frontend`).
-- **Where?** New subdirectory (default, pass the project name) or the current directory (`.` as the name).
+- **Dev environment — local Docker or Supabase Cloud?** Ask this explicitly; it decides the command (below). Don't pick for the user.
+- **Where?** Current directory or a new subdirectory — see the target rule below. This decides `.` vs `<name>`.
 
-If the user asks to run the scaffold for them through you (agent-driven): you do NOT have browser access, so you can't complete Supabase OAuth. Use `--skip-env`.
+> **Scaffold target — `.` vs `<name>`.** A `<name>` arg always resolves to a **subfolder** of the current directory (`cwd/<name>`). So:
+> - Already **inside** the intended dir (user `cd`'d into it)? → pass **`.`** (scaffolds in place).
+> - Want a new subfolder? → run from the **parent** and pass `<name>`.
+> - **Never** pass a name equal to the current directory from inside it — `cd foo && npx … foo` creates a nested `foo/foo/`. Use `.` instead.
 
-**Commands — agent-driven (`--skip-env`)**
+**Cloud** dev needs browser OAuth, which the agent doesn't have → scaffold files only (`--skip-env`) and hand off the env step. **Local** dev needs no browser → the agent can run it end-to-end (`--local`) if Docker + `psql` are available.
+
+**Commands — agent-driven, cloud dev (`--skip-env`)**
 
 ```bash
 npx agentlink-sh@latest <name> --skip-env
-# or for an existing directory:
+# or, when you're already inside the target directory:
 npx agentlink-sh@latest . --skip-env
 ```
 
@@ -69,7 +75,10 @@ Requires Docker running + `psql` installed. Prompts at `agentlink.sh/start` if m
 
 **Watch-outs**
 
+- **Use only real flags.** Valid scaffold flags: `--skip-env`, `--local`, `--link`, `--no-frontend`, `--no-skills`, `-y/--yes`, `--prompt <text>`, `--token/--org/--region`, `--resume`, `--debug`. There is **no `--no-launch`** (removed) — an unknown flag errors with "unknown option" *before* anything scaffolds. Don't invent flags.
+- **Don't nest the folder.** Inside the target dir → use `.`. A `<name>` arg is always a subfolder (`cwd/<name>`), so `cd foo && npx … foo` produces `foo/foo/`. (If a scaffold lands in a nested dir, it's this.)
 - `--skip-env`, `--link`, `--local` are mutually exclusive; pass only one.
+- The agent **can** run `--local` itself (no browser needed) when Docker + `psql` are up; only **cloud** dev forces the `--skip-env` → hand-off-`env add dev` split.
 - If `claude` or `supabase` isn't on PATH, point the user at `https://agentlink.sh/start` and tell them to open a new terminal after install.
 - Do NOT run any `db apply` / `db sql` / `db migrate` / `deploy` commands on a `--skip-env`-scaffolded project before the user completes `env add dev` — the env doesn't exist yet.
 - If the user has an existing codebase and explicitly doesn't want the AgentLink scaffold (schemas, RLS helpers, skills, etc.) — they just want env management — point them at workflow #7 (bare mode) instead of `--skip-env`. Bare mode doesn't touch the user's existing file structure beyond `agentlink.json` and `.env.local`.

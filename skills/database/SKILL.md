@@ -68,6 +68,13 @@ When creating or editing schema objects, put each in its own file under `supabas
 | A cron job (`cron.schedule(...)`) | `supabase/database/cron/<name>.sql` (imperative — see below). The job's body calls `public._internal_admin_call_edge_function('internal-<worker>')`; it never makes the outbound HTTP itself — `pg_net` only wakes the worker. See the [edge-functions](../edge-functions/SKILL.md) outbound-HTTP rule and [recipes.md](../../agents/references/recipes.md) for worked examples |
 | A storage bucket + its `storage.objects` policies | `supabase/database/storage/<name>.sql` (imperative — see below) |
 | RBAC reference data — roles / permissions / role→permission bindings (rows) | `supabase/database/rbac/<entity>.sql` (imperative — see below) |
+| Seed / default rows (any other `INSERT`/`UPDATE`/`DELETE`) | **NOT** a schema file — see the DDL-only rule below |
+
+**🛑 Declarative schema files are DDL ONLY — never put seed/data DML in them.** Files under `supabase/database/schemas/` define structure (`CREATE`/`ALTER` of tables, functions, policies, …). A standalone `INSERT`/`UPDATE`/`DELETE`/`MERGE`/`TRUNCATE` in a schema file is a **mistake**: `db apply` diffs *catalog objects, not rows*, so the statement is **silently dropped** and the data never reaches the database (the CLI now hard-errors on it, naming the file + line). This is exactly why `rbac/` exists — reference data is rows, not schema. Seed/default data belongs in one of:
+- **`supabase/seed.sql`** — local dev seed, replayed by `db rebuild` / `supabase db reset`. Local only.
+- **A migration** — reference data that must reach prod (author the `INSERT` directly in the migration; idempotent `ON CONFLICT DO NOTHING`).
+- **`supabase/database/rbac/`** — roles / permissions / role→permission bindings (the dedicated reference-data reconcile).
+- (Inside a function body, `INSERT`/`UPDATE` is fine — that's part of the function's DDL, not a standalone seed.)
 
 **Imperative folders — `cron/`, `storage/`, `rbac/`.** These three top-level folders under `supabase/database/` are **excluded** from pg-delta `declarative apply` (`db apply`) *and* from the migration diff, and applied imperatively by the deploy step on **every** path — `db apply` (local/dev), `db rebuild`, and **every `env deploy`** (all envs incl. prod, which is migrations-only). Reason: pg-delta's `--integration supabase` filter drops the `cron` and `storage` schemas from plans, so `cron.schedule()`, buckets, and storage policies never survive a migration; and RBAC is reference DATA, not DDL. This deploy step is the only path that reliably reaches prod — **do not** hand-append these to migration files.
 
