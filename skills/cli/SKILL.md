@@ -145,7 +145,16 @@ npx agentlink-sh@latest db apply --env dev          # Target specific environmen
 npx agentlink-sh@latest db apply --db-url "postgresql://..."  # Explicit DB URL
 ```
 
-Pushes your schema-file changes to the live DB — **no Docker needed**. It handles changes to existing objects, so editing a table/column (an `ALTER`) lands without a rebuild. `--legacy` falls back to a create-only mode; `--allow-destructive` is required only for row-data-loss ops (`DROP TABLE`/`COLUMN`/`SCHEMA`, `TRUNCATE`).
+Pushes your schema-file changes to the live DB — **no Docker needed**. It handles changes to existing objects, so editing a table/column (an `ALTER`) lands without a rebuild. `--legacy` falls back to a create-only mode; `--allow-destructive` is required only for row-data-loss ops (`DROP TABLE`/`COLUMN`/`SCHEMA`, `TRUNCATE`). `db apply` also applies the imperative resources (`storage/`, `cron/`, `rbac/`).
+
+### Apply imperative resources only
+
+```bash
+npx agentlink-sh@latest db resources                 # storage/ + cron/ + rbac/, nothing else
+npx agentlink-sh@latest db resources --env dev
+```
+
+Applies **only** the imperative folders (`supabase/database/` `storage/`, `cron/`, `rbac/`) — no schema diff, no type-gen. Use it after editing a cron job, storage bucket, or RBAC file when you don't want a full `db apply`. Idempotent. (`db rbac-sync` is the rbac-only subset.)
 
 ### Run SQL
 
