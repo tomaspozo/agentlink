@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-06-19
+
 ### Changed
 
 - **Cursor: the always-on rule now engages AgentLink on the default agent, not just the selected `builder`.** In Cursor the `builder` agent is user-selectable rather than a forced default (unlike Claude Code's `settings.json` wiring), so a user who opens a normal chat and asks to "build an app" gets Cursor's generic agent — which asked raw frontend/backend questions instead of using AgentLink. Since `rules/agentlink.mdc` (`alwaysApply: true`) is the only surface guaranteed to load regardless of agent selection, it's been promoted from pure architecture guardrails to also be the **entry point/router**: a new "Engaging AgentLink" section tells any agent to treat build/scaffold/Supabase-backend requests as AgentLink tasks (load the matching skill, scaffold only via the CLI, don't improvise a stack), and a "Building a new app" section ports the essential `builder` behaviors the generic agent was missing (plan-first; the blank-project kickoff — multi-tenancy / entry point + look-and-feel / product + entities → brief in `AGENTS.md`; ask-about-product-not-architecture; DB/deploy work via the CLI, never the Supabase connector MCP).
