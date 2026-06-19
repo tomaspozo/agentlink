@@ -1,11 +1,11 @@
 ---
-description: Agent Link — core architecture for full-stack Supabase apps
+description: AgentLink — core architecture for full-stack Supabase apps
 alwaysApply: true
 ---
 
-# Agent Link — Supabase architecture guardrails
+# AgentLink — Supabase architecture guardrails
 
-These are the non-negotiable rules for building on Supabase with Agent Link. They
+These are the non-negotiable rules for building on Supabase with AgentLink. They
 always apply. For the full workflows, defer to the `link` skills (cli, database,
 rpc, auth, edge-functions, frontend) and the `builder` agent.
 
@@ -31,7 +31,7 @@ The prefix encodes the security context:
 
 ## Write-Apply-Migrate workflow
 - Write SQL as one object per file under `supabase/database/schemas/`.
-- Apply during development with `npx agentlink-sh db apply` (pgdelta).
+- Apply during development with `npx agentlink-sh db apply` — ALTER-aware and Docker-free; editing an existing object and re-applying just works.
 - Fix errors with more SQL — **never reset the database** unless the user
   explicitly asks. Generate a migration with `npx agentlink-sh db migrate <name>`
   only when deploying.

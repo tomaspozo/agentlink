@@ -79,14 +79,14 @@ Scaffold via the AgentLink CLI — never the Supabase connector MCP. **First ask
   ```bash
   npx agentlink-sh@latest <name> --skip-env
   ```
-  > "Scaffold done. Open Claude Code in `<path>` and run `npx agentlink-sh@latest env add dev` in a terminal — it needs a browser for OAuth, which I don't have."
+  > "Scaffold done. Open the project at `<path>` in your agent (Claude Code or Cursor) and run `npx agentlink-sh@latest env add dev` in a terminal — it needs a browser for OAuth, which I don't have."
 - **Local** — no browser needed, so you can do it end-to-end if Docker is running:
   ```bash
   npx agentlink-sh@latest <name> --local
   ```
   If Docker/`psql` is missing, point the user at `https://agentlink.sh/start` and hand off.
 
-Either way it writes all files, installs deps, configures Claude Code, and registers the plugin + companion skills.
+Either way it writes all files, installs deps, configures your agent editor (Claude Code and/or Cursor), and installs the companion skills (registering the plugin in Claude Code; Cursor installs it via `/add-plugin`).
 
 **Scaffold target — pick `.` vs `<name>` by where your shell already is:**
 - If you're **already inside** the intended project directory (e.g. the user `cd`'d into it), pass `.` — it scaffolds in place: `npx agentlink-sh@latest . --skip-env`.
@@ -131,7 +131,7 @@ The boundary is **production**, not deployment in general. The agent's everyday 
 - `supabase functions deploy [name]` — deploy edge functions to the active cloud-dev project (or all functions if `name` omitted). The agent should run this whenever it adds or modifies a function on a cloud-dev project — otherwise the new code never reaches the server and the user can't test it.
 - `supabase secrets set KEY=value` — set edge-function secrets on the active cloud-dev project.
 - `npx agentlink-sh@latest env deploy dev --yes` — full dev-env apply (schemas + functions + secrets). Equivalent to running the three above in sequence.
-- `npx agentlink-sh@latest db migrate <name>` — generate a migration file for review (doesn't touch the dev DB; it builds the baseline on a short-lived throwaway Supabase stack, so Docker must be running, or it falls back to a read-only prod→dev catalog diff).
+- `npx agentlink-sh@latest db migrate <name>` — generate a migration file for review (doesn't touch the dev DB; diffs your schema files against the existing migrations — **no Docker required**). `--legacy` uses an alternate baseline built from your cloud prod/dev env.
 
 **The agent must NOT — without explicit, in-message user approval:**
 
@@ -240,7 +240,7 @@ The agent focuses on development: write SQL, apply it, keep building. Migrations
 3. **Fix errors with more SQL — never reset the database.**
 4. **Iterate** until the feature is complete.
 
-Schema files are the source of truth; the live database is the working copy — keep them in sync. **Shipping schema to prod is migrations-only:** `db apply` (declarative) is the dev/local loop and is deliberately skipped on prod, so a schema change reaches prod ONLY through a committed migration — build + `db apply` on dev → `db migrate <name>` (review, commit) → `env deploy prod` (with explicit user approval) replays it via `db push`. **Never hand-author migration files**; if `db migrate` reports "No changes detected," that's a baseline-availability issue (Docker not running, or no `prod`+`dev` env) — not a cue to write the SQL yourself. Load the `database` skill for schema-file conventions, the full directory layout, and worked examples.
+Schema files are the source of truth; the live database is the working copy — keep them in sync. **Shipping schema to prod is migrations-only:** `db apply` (declarative) is the dev/local loop and is deliberately skipped on prod, so a schema change reaches prod ONLY through a committed migration — build + `db apply` on dev → `db migrate <name>` (review, commit) → `env deploy prod` (with explicit user approval) replays it via `db push`. **Never hand-author migration files**; if `db migrate` reports "No changes detected," the committed migrations already capture your schema files (no Docker needed to check) — confirm the change is written to a schema file, but don't write the SQL yourself. Load the `database` skill for schema-file conventions, the full directory layout, and worked examples.
 
 ### Always schema-qualify
 

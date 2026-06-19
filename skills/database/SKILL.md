@@ -20,7 +20,7 @@ supabase/database/
 │       ├── pg_cron.sql
 │       └── pgmq.sql
 ├── rbac/                               # RBAC reference DATA (rows, not schema)
-│   ├── roles.sql                       # synced by the reconcile, NOT pg-delta
+│   ├── roles.sql                       # synced by the RBAC reconcile, NOT by db apply
 │   ├── permissions.sql
 │   └── role_permissions.sql
 └── schemas/
@@ -46,18 +46,18 @@ supabase/database/
             └── _hook_custom_access_token.sql
 ```
 
-Files are **one object per file** — each table (with its grants, RLS, indexes, triggers) and each function lives in its own file, grouped by Postgres schema (`schemas/public/`, `schemas/api/`) and kind (`tables/`, `functions/`). Statement ordering is handled automatically: pg-delta topologically sorts statements by dependency at apply time, so file count and order are irrelevant. The top-level `cron/`, `storage/`, and `rbac/` folders are **imperative** — applied at deploy, not by declarative apply (see below).
+Files are **one object per file** — each table (with its grants, RLS, indexes, triggers) and each function lives in its own file, grouped by Postgres schema (`schemas/public/`, `schemas/api/`) and kind (`tables/`, `functions/`). Statement ordering is handled automatically: `db apply` resolves dependency order at apply time, so file count and order are irrelevant. The top-level `cron/`, `storage/`, and `rbac/` folders are **imperative** — applied at deploy, not by `db apply`'s schema diff (see below).
 
 **Conventions:**
 - `schemas/<schema>/tables/<table>.sql` — one table, named for the table (plural): `charts.sql`, contains the table + its indexes, triggers, grants, RLS policies
 - `schemas/<schema>/functions/<fn>.sql` — one function, named for the function: `_auth_chart_owner.sql`, `_internal_admin_handle_new_user.sql`, `chart_create.sql`
 - `schemas/<schema>/schema.sql` — the `CREATE SCHEMA` (for `api`) plus that schema's grants / default privileges; `public/schema.sql` holds only public's schema-level grants (public already exists, so it's not `CREATE`d)
 - `cluster/extensions/<ext>.sql` — one file per extension (cluster-level, not schema-scoped)
-- Even tables with FK dependencies get their own files — pg-delta orders the `CREATE` statements by dependency, so `tenants.sql`, `memberships.sql`, and `invitations.sql` can each be separate
+- Even tables with FK dependencies get their own files — `db apply` orders the `CREATE` statements by dependency, so `tenants.sql`, `memberships.sql`, and `invitations.sql` can each be separate
 
 ### Where to put new objects (create / edit guidelines)
 
-When creating or editing schema objects, put each in its own file under `supabase/database/`. pg-delta resolves dependency order at apply time, so don't worry about file naming for ordering.
+When creating or editing schema objects, put each in its own file under `supabase/database/`. `db apply` resolves dependency order at apply time, so don't worry about file naming for ordering.
 
 | Creating / editing | File |
 |---|---|
@@ -70,13 +70,13 @@ When creating or editing schema objects, put each in its own file under `supabas
 | RBAC reference data — roles / permissions / role→permission bindings (rows) | `supabase/database/rbac/<entity>.sql` (imperative — see below) |
 | Seed / default rows (any other `INSERT`/`UPDATE`/`DELETE`) | **NOT** a schema file — see the DDL-only rule below |
 
-**🛑 Declarative schema files are DDL ONLY — never put seed/data DML in them.** Files under `supabase/database/schemas/` define structure (`CREATE`/`ALTER` of tables, functions, policies, …). A standalone `INSERT`/`UPDATE`/`DELETE`/`MERGE`/`TRUNCATE` in a schema file is a **mistake**: `db apply` diffs *catalog objects, not rows*, so the statement is **silently dropped** and the data never reaches the database (the CLI now hard-errors on it, naming the file + line). This is exactly why `rbac/` exists — reference data is rows, not schema. Seed/default data belongs in one of:
+**🛑 Declarative schema files are DDL ONLY — never put seed/data DML in them.** Files under `supabase/database/schemas/` define structure (`CREATE`/`ALTER` of tables, functions, policies, …). A standalone `INSERT`/`UPDATE`/`DELETE`/`MERGE`/`TRUNCATE` in a schema file is a **mistake**: `db apply` only applies structure (table/function/policy definitions), not row data, so the statement is **silently dropped** and the data never reaches the database (the CLI now hard-errors on it, naming the file + line). This is exactly why `rbac/` exists — reference data is rows, not schema. Seed/default data belongs in one of:
 - **`supabase/seed.sql`** — local dev seed, replayed by `db rebuild` / `supabase db reset`. Local only.
 - **A migration** — reference data that must reach prod (author the `INSERT` directly in the migration; idempotent `ON CONFLICT DO NOTHING`).
 - **`supabase/database/rbac/`** — roles / permissions / role→permission bindings (the dedicated reference-data reconcile).
 - (Inside a function body, `INSERT`/`UPDATE` is fine — that's part of the function's DDL, not a standalone seed.)
 
-**Imperative folders — `cron/`, `storage/`, `rbac/`.** These three top-level folders under `supabase/database/` are **excluded** from pg-delta `declarative apply` (`db apply`) *and* from the migration diff, and applied imperatively by the deploy step on **every** path — `db apply` (local/dev), `db rebuild`, and **every `env deploy`** (all envs incl. prod, which is migrations-only). Reason: pg-delta's `--integration supabase` filter drops the `cron` and `storage` schemas from plans, so `cron.schedule()`, buckets, and storage policies never survive a migration; and RBAC is reference DATA, not DDL. This deploy step is the only path that reliably reaches prod — **do not** hand-append these to migration files.
+**Imperative folders — `cron/`, `storage/`, `rbac/`.** These three top-level folders under `supabase/database/` are **excluded** from `db apply`'s schema diff *and* from the migration diff, and applied imperatively by the deploy step on **every** path — `db apply` (local/dev), `db rebuild`, and **every `env deploy`** (all envs incl. prod, which is migrations-only). Reason: the `cron` and `storage` schemas are excluded from `db apply`'s schema diff and from migrations, so `cron.schedule()`, buckets, and storage policies never survive a migration; and RBAC is reference DATA, not DDL. This deploy step is the only path that reliably reaches prod — **do not** hand-append these to migration files.
 
 - **`cron/` and `storage/` must be IDEMPOTENT** (they re-run on every deploy): `cron.schedule(name, …)` upserts by job name (`cron.unschedule(name)` to remove); storage buckets use `INSERT … ON CONFLICT (id) DO UPDATE`; storage policies use `DROP POLICY IF EXISTS` + `CREATE POLICY`. Each folder's files run in sorted order, one transaction per folder.
 - **`rbac/` is reference DATA, not schema.** The roles/permissions/role_permissions *tables* live in `schemas/public/tables/` (structure only). Their *rows* live in `rbac/<entity>.sql`, each filling an `rbac_desired` staging table, converged to **exactly** the declared set: **full reconcile** for permissions + bindings (a removed row is REVOKED everywhere — the only way revokes reach prod); roles are **upsert-only** (a referenced role can't be deleted: `memberships.role` FKs into `roles(name)`). Run `agentlink db rbac-sync` to apply an RBAC change immediately without a full deploy.
@@ -86,7 +86,7 @@ When creating or editing schema objects, put each in its own file under `supabas
 
 ### Migrating an existing `supabase/schemas/` project to `supabase/database/`
 
-Older projects keep declarative SQL under `supabase/schemas/`. The home moved to `supabase/database/` (matching Supabase's `db … generate` default). On `--force-update`, the CLI recreates the **scaffolded** objects under `supabase/database/` and **leaves your old `supabase/schemas/` exactly where it is — untouched, but no longer applied** (pg-delta reads `supabase/database/` only). It then asks the user to have you finish the move. When asked, do this:
+Older projects keep declarative SQL under `supabase/schemas/`. The home moved to `supabase/database/` (matching Supabase's `db … generate` default). On `--force-update`, the CLI recreates the **scaffolded** objects under `supabase/database/` and **leaves your old `supabase/schemas/` exactly where it is — untouched, but no longer applied** (`db apply` reads `supabase/database/` only). It then asks the user to have you finish the move. When asked, do this:
 
 1. **Move each CUSTOM object** — anything the app added, i.e. NOT the scaffolded set (`tenants`/`memberships`/`invitations`/`profiles`/`roles`/`permissions`/`role_permissions`/`session_tenants`, the `api.*` RPCs, `_auth_*` / `_internal_*` / `_hook_*` functions, `agentlink_tasks`, `process-stale-tasks`), which already exists under `database/`. Place each in one object per file:
    - table → `supabase/database/schemas/<schema>/tables/<table>.sql` (table + its grants, `ENABLE ROW LEVEL SECURITY`, policies, indexes, triggers — all together)
@@ -95,7 +95,7 @@ Older projects keep declarative SQL under `supabase/schemas/`. The home moved to
    - `CREATE SCHEMA` / schema-level grants → `supabase/database/schemas/<schema>/schema.sql`
    - cron job → `supabase/database/cron/<name>.sql` (imperative)
    - storage bucket + policies → `supabase/database/storage/<name>.sql` (imperative)
-   Split any consolidated/multi-object files into one-object-per-file as you go. pg-delta resolves dependency order, so file naming/order doesn't matter.
+   Split any consolidated/multi-object files into one-object-per-file as you go. `db apply` resolves dependency order, so file naming/order doesn't matter.
 2. **Apply:** `npx agentlink-sh@latest db apply` — confirm the `database/` tree applies cleanly.
 3. **Delete `supabase/schemas/`** once everything is migrated and applying — nothing else references it.
 
@@ -106,20 +106,20 @@ Never relocate `supabase/schemas/` into `.agentlink/.incoming/` — that directo
 - No `DROP` statements in schema files — clean declarations only
 - Use: `CREATE TABLE IF NOT EXISTS`, `CREATE OR REPLACE FUNCTION`, `CREATE INDEX IF NOT EXISTS`, plain `CREATE POLICY`, plain `CREATE TRIGGER`
 - Exception: use `DROP POLICY IF EXISTS` + `CREATE POLICY` for idempotent policies (policies don't support `CREATE OR REPLACE`)
-- Use `record` type in `DECLARE` blocks (not `public.tablename%rowtype`) — avoids ordering issues with `pgdelta`
+- Use `record` type in `DECLARE` blocks (not `public.tablename%rowtype`) — avoids `db apply` dependency-ordering issues
 - `DROP` statements belong in migrations only (for renaming/cleanup)
-- Reason: schema files represent desired state for `pgdelta`; unnecessary drops create phantom diffs
+- Reason: schema files represent the desired state `db apply` converges the database to; unnecessary drops create phantom diffs
 
-### How the CLI tracks files (base snapshot)
+### Customizing CLI-shipped files
 
-The CLI keeps a committed snapshot of the exact templates it last shipped at `.agentlink/template-base/` (one entry per template file) and merges your project against it on update. There are **no inline annotations** — never add `-- @agentlink` comments. Plain SQL comments are always fine:
+There are **no inline annotations** — never add `-- @agentlink` comments. Plain SQL comments are always fine:
 
 ```sql
 -- Creates a new chart for the authenticated user
 CREATE OR REPLACE FUNCTION api.chart_create(...)
 ```
 
-**To customize a CLI-shipped file**, just edit its per-object file in place (e.g., `supabase/database/schemas/public/functions/_internal_admin_handle_new_user.sql`) and run `npx agentlink-sh@latest db apply`. On the next update the base-snapshot merge detects your edit and preserves it — silently when only you changed it, or as a surfaced conflict when the template also changed. Keep the same function name and schema. See the builder agent's "Customizing a managed function" section for the full model.
+**To customize a CLI-shipped file**, just edit its per-object file in place (e.g., `supabase/database/schemas/public/functions/_internal_admin_handle_new_user.sql`), keep the same function name and schema, and run `npx agentlink-sh@latest db apply`. The next CLI update preserves your edit — silently when only you changed it, or as a surfaced conflict when the template also changed. (Leave the `.agentlink/` directory alone — it's CLI-managed state, not something to hand-edit.) See the builder agent's "Customizing a managed function" section for the full model.
 
 **Which schema for what:**
 - `api.*` — Client-facing RPCs (the only things exposed via the Data API)
@@ -149,11 +149,11 @@ ALTER TABLE public._audit_log ENABLE ROW LEVEL SECURITY;   -- no GRANT = private
 
 These grants are real declarative schema: `db apply` applies them on dev, and `db migrate` carries them into the migration so they reach prod (`db push`). **Never grant `anon` on tables** — anon-facing RPCs are `SECURITY DEFINER` and run as the owner, so anon never needs a table grant. (Grants and RLS are separate layers: grant = "can the role touch the table"; RLS = "which rows.")
 
-**Functions are default-deny too — grant each one explicitly.** Postgres grants `EXECUTE` on every new function to `PUBLIC` (incl. `anon`); each function `REVOKE`s that and `GRANT`s only its intended roles. There is **no** schema-wide `GRANT ON ALL FUNCTIONS` — a blanket grant let pg-delta's apply ordering override per-function revokes (exposing `api._admin_*` on dev), so grants are per-object, like tables.
+**Functions are default-deny too — grant each one explicitly.** Postgres grants `EXECUTE` on every new function to `PUBLIC` (incl. `anon`); each function `REVOKE`s that and `GRANT`s only its intended roles. There is **no** schema-wide `GRANT ON ALL FUNCTIONS` — a blanket grant gets applied after the per-function REVOKEs on `db apply`, overriding them (exposing `api._admin_*` on dev), so grants are per-object, like tables.
 - **`api.*` RPCs** — after the definition: `REVOKE ALL ON FUNCTION api.<fn>(<arg-types>) FROM PUBLIC;` + `GRANT EXECUTE ON FUNCTION api.<fn>(<arg-types>) TO authenticated, service_role;`. Anon-callable → add `anon` to the GRANT and make it `SECURITY DEFINER`; `_admin_*` → `REVOKE … FROM PUBLIC, anon, authenticated;` + `GRANT … TO service_role`. A missing grant = uncallable (42501). Always keep the `auth_verify_access(...)` guard — it's the real allow/deny, regardless of who can execute.
 - **`public.*` helpers** are private by default. An RLS helper a policy calls needs `GRANT EXECUTE ON FUNCTION public.<fn>(<args>) TO authenticated;` (RLS evaluates it as the querying role). A `SECURITY DEFINER` helper you call from an RPC needs `GRANT EXECUTE … TO authenticated` (or `service_role`) for that caller. Trigger functions need no grant.
 
-The CLI keeps this enforced on prod: `db migrate` appends a blanket `REVOKE EXECUTE ON ALL FUNCTIONS … FROM PUBLIC` to any migration that creates a function (Postgres's `PUBLIC` default can't be suppressed any other way, and pg-delta won't carry per-function revokes). So a new function is locked from `anon` automatically; your job is just the explicit `GRANT` for whoever *should* call it.
+The CLI keeps this enforced on prod: `db migrate` appends a blanket `REVOKE EXECUTE ON ALL FUNCTIONS … FROM PUBLIC` to any migration that creates a function (Postgres's `PUBLIC` default can't be suppressed any other way, and migrations don't carry per-function revokes). So a new function is locked from `anon` automatically; your job is just the explicit `GRANT` for whoever *should* call it.
 
 ---
 

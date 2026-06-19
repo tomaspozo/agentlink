@@ -17,7 +17,7 @@ Use this as a lookup. When a user prompt matches a trigger below, follow that se
 
 **Questions to ask**
 
-- **What are you building?** (A one-liner is fine — becomes the prompt passed to Claude Code.)
+- **What are you building?** (A one-liner is fine — becomes the prompt passed to your agent on launch.)
 - **Frontend?** React + TanStack Start (SPA, default), or backend-only (`--no-frontend`).
 - **Dev environment — local Docker or Supabase Cloud?** Ask this explicitly; it decides the command (below). Don't pick for the user.
 - **Where?** Current directory or a new subdirectory — see the target rule below. This decides `.` vs `<name>`.
@@ -174,7 +174,7 @@ npx agentlink-sh@latest env deploy prod --dry-run
 npx agentlink-sh@latest env deploy prod --yes --non-interactive
 ```
 
-> **Prod is migrations-only — capture schema changes as a migration FIRST.** On `prod`, `env deploy` does **not** run declarative `db apply` (step 2 below is skipped). So a schema change you made and `db apply`'d on **dev** does **not** reach prod just by running `env deploy prod` — it reaches prod only through a committed **migration**. The repeatable loop is:
+> **Prod is migrations-only — capture schema changes as a migration FIRST.** On `prod`, `env deploy` does **not** run `db apply` (step 2 below is skipped). So a schema change you made and `db apply`'d on **dev** does **not** reach prod just by running `env deploy prod` — it reaches prod only through a committed **migration**. The repeatable loop is:
 >
 > 1. Edit schema files under `supabase/database/`, `db apply` to **dev**, verify.
 > 2. `npx agentlink-sh@latest db migrate <name>` — generate the migration, **review the SQL**, commit it (with the schema files).
@@ -186,7 +186,7 @@ npx agentlink-sh@latest env deploy prod --yes --non-interactive
 What `env deploy` does (each step is gated on the corresponding `supabase/` directory existing):
 
 1. **Migrations** — `supabase db push --db-url <pooler>` if `supabase/migrations/` and `supabase/config.toml` both exist. Idempotent; Supabase tracks applied entries server-side. **This is the only way schema reaches prod.** Skipped with a loud amber warning if migrations exist but `config.toml` doesn't (bare-with-hand-created-migrations edge case — we never silently fabricate `config.toml` into a user's tree).
-2. **Schemas (declarative `db apply`)** — runs **only on dev/local**, against the target env's DB (explicit pooler URL — works even when `.env.local` points elsewhere). **SKIPPED on `prod`** (`prod is migrations-only`): a live declarative apply would bypass the migration review gate, so prod takes schema only via step 1's migrations.
+2. **Schemas (`db apply`)** — runs **only on dev/local**, against the target env's DB (explicit pooler URL — works even when `.env.local` points elsewhere). **SKIPPED on `prod`** (`prod is migrations-only`): a live schema apply would bypass the migration review gate, so prod takes schema only via step 1's migrations.
 3. **Functions** — `supabase functions deploy --project-ref <ref>` if `supabase/functions/` exists with non-underscore subdirectories.
 
 If ALL three directories are missing (bare project with an empty `supabase/` tree), `env deploy` short-circuits with `Nothing to deploy — no supabase/database, supabase/migrations, or supabase/functions found.` and exits 0.
@@ -249,8 +249,10 @@ npx agentlink-sh@latest env config all prod       # All three on prod (prompts f
 npx agentlink-sh@latest env config prod           # Env=prod, subcommand picker runs
 npx agentlink-sh@latest env config                # Both pickers (subcommand + env)
 
-# Recovery F: broken migration state (duplicates, timestamp conflicts)
-npx agentlink-sh@latest db rebuild
+# Recovery F: broken migration FILES (duplicates, timestamp conflicts)
+#   db rebuild does NOT fix migration files — delete the bad ones, then:
+npx agentlink-sh@latest db migrate <name>          # regenerate a clean migration
+#   (for a remote/local version mismatch use `supabase migration repair` instead)
 ```
 
 **Watch-outs**
@@ -258,7 +260,7 @@ npx agentlink-sh@latest db rebuild
 - `--retry` (or picking "Re-apply full setup" interactively) requires the env to already exist in the manifest — it re-runs the full bootstrap against the stored `projectRef` without touching the manifest or `.env.local`.
 - The "Re-apply full setup" path IS heavier than `env deploy`. For routine schema/function pushes, `env deploy` is the right call — the interactive menu hints at this above the options.
 - Full relink overwrites `.env.local`'s managed block — preserved user vars outside the block survive.
-- `db rebuild` deletes and regenerates migration files; safe on new projects, destructive if you've already pushed hand-edited migrations.
+- `db rebuild` resets the DB (replays migrations) and re-applies schema files + imperative resources (rbac/cron/storage); it does **not** touch migration files. Local/dev only — agent-blocked and prod hard-blocked. (Regenerating/squashing migration files is a separate `db migrate` / `supabase migration repair` concern.)
 
 ---
 
@@ -312,7 +314,7 @@ Interactive flow when no `agentlink.json` is present:
 ```
 ▲ No agentlink.json found in this directory.
 
-  Agent Link's full scaffold gives you:
+  AgentLink's full scaffold gives you:
     • RLS + multi-tenant auth helpers, wired in from day one
     • RPC-first data layer (api schema + typed client)
     • Edge-function wrappers for webhooks and external APIs
@@ -322,7 +324,7 @@ Interactive flow when no `agentlink.json` is present:
   More at https://agentlink.sh
 
 ? How would you like to continue with env add dev?
-  ❯ Run the full Agent Link scaffold (recommended)
+  ❯ Run the full AgentLink scaffold (recommended)
     Continue without full features
     Cancel
 ```
@@ -350,8 +352,8 @@ Converts a bare project to the full scaffold: re-applies template files, generat
 
 **Watch-outs**
 
-- Bare mode does NOT run `bootstrapCloudEnv` at `env add` time — the Supabase project is created but vault secrets / PostgREST / auth config are NOT applied. If the user later wants any of those, `npx agentlink-sh@latest env config all [env]` applies them without touching schemas.
-- The `bare: true` flag in `agentlink.json` is orthogonal to `mode`. `setDefaultEnvironment` flips `mode` to `"cloud"` on first `env add dev`, but `bare` persists — that's how `env use` etc. continue to respect the bare boundary across every subsequent command.
+- Bare mode does NOT run the cloud bootstrap at `env add` time — the Supabase project is created but vault secrets / PostgREST / auth config are NOT applied. If the user later wants any of those, `npx agentlink-sh@latest env config all [env]` applies them without touching schemas.
+- The `bare: true` flag in `agentlink.json` is orthogonal to `mode`. The first `env add dev` flips `mode` to `"cloud"`, but `bare` persists — that's how `env use` etc. continue to respect the bare boundary across every subsequent command.
 - On bare projects, `env config auth` will apply `AUTH_CONFIG` with hook references to pg-functions that don't exist (`_hook_before_user_created`, `_hook_send_email`). Supabase's API returns a clear error — at that point the user either upgrades via `--force-update` or drops in their own hook functions first.
 
 ---
@@ -443,7 +445,7 @@ What it does:
 
 1. Resolves the DB URL via the standard ladder (`--db-url` flag → `cloud.environments[env]` pooler URL → `.env.local` → `supabase status`).
 2. Creates `supabase/backups/<env>/<YYYY-MM-DDTHH-MM-SS>/` (UTC, dashes instead of colons for Windows compatibility).
-3. On first run only, appends `supabase/backups/` to the project's root `.gitignore` under an "Agent Link — database backups" comment. Idempotent on re-runs.
+3. On first run only, appends `supabase/backups/` to the project's root `.gitignore` under an "AgentLink — database backups" comment. Idempotent on re-runs.
 4. Runs three `supabase db dump` invocations: roles, schema, data (excluding `storage.buckets_vectors` / `storage.vector_indexes`). Each in its own spinner step.
 5. Prints file sizes at the end so the user can spot silent-empty failures.
 

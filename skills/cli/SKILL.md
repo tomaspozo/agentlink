@@ -1,6 +1,6 @@
 ---
 name: cli
-description: AgentLink CLI usage, project scaffolding, updates, and migration management. Use when the task involves running `npx agentlink-sh@latest` commands, managing migrations, troubleshooting db diff issues, fixing migration files, or understanding the relationship between schema files and migrations.
+description: AgentLink CLI usage, project scaffolding, updates, and migration management. Use when the task involves running `npx agentlink-sh@latest` commands, managing migrations, troubleshooting db apply / db migrate issues, fixing migration files, or understanding the relationship between schema files and migrations.
 ---
 
 # CLI
@@ -13,19 +13,7 @@ The `agentlink-sh` CLI scaffolds new Supabase projects and updates existing ones
 
 ## Prerequisites
 
-AgentLink does NOT install its own tooling. Users install Claude Code + Supabase CLI separately via the setup script at **https://agentlink.sh/start**. The CLI validates these are present and points users at the setup script if they're missing; it never tries to `curl | bash` anything itself. Same pattern as `psql`: validate, point at the install, don't auto-install. This is intentional — mixing tooling installation into scaffold meant every platform-specific install failure surfaced mid-scaffold with no context.
-
-If a user hits `Claude Code not found on PATH` or `Supabase CLI not found`, the remediation is always:
-
-```bash
-# macOS / Linux
-curl -sSf https://agentlink.sh/start | sh
-
-# Windows (PowerShell)
-iwr https://agentlink.sh/start | iex
-```
-
-Then open a new terminal (so PATH is reloaded) and retry.
+AgentLink does NOT install its own tooling, and it does NOT require an AI coding agent (Claude Code or Cursor) to be on PATH in order to scaffold — it writes the project files and the editor config regardless, then you open the project in whichever agent you chose. What it _does_ need is the Supabase CLI (and `psql` for local Docker). It validates those and points users at the setup script at **https://agentlink.sh/start** if they're missing; it never tries to `curl | bash` anything itself. This is intentional — mixing tooling installation into scaffold meant every platform-specific install failure surfaced mid-scaffold with no context.
 
 ---
 
@@ -38,7 +26,7 @@ npx agentlink-sh@latest <name>       # interactive — handles login + project c
 npx agentlink-sh@latest .            # scaffold in current directory
 ```
 
-Creates template files, config, schema files, frontend (React + TanStack Start, SPA mode), configures Claude Code, and installs the plugin + companion skills. Cloud is the default — the wizard prompts for Supabase OAuth (browser), org selection, and region.
+Creates template files, config, schema files, frontend (React + TanStack Start, SPA mode), configures your chosen agent editor (Claude Code and/or Cursor), and installs the companion skills (plus the plugin in Claude Code). Cloud is the default — the wizard prompts for Supabase OAuth (browser), org selection, and region. The wizard also asks which agent editor(s) to set up.
 
 ### Scaffold without env creation (`--skip-env`)
 
@@ -46,7 +34,7 @@ Creates template files, config, schema files, frontend (React + TanStack Start, 
 npx agentlink-sh@latest <name> --skip-env
 ```
 
-**This is the canonical path when an AGENT is doing the scaffolding.** Writes all files, installs frontend + backend deps, configures Claude Code, installs the plugin + companion skills — but **skips every Supabase-touching step**: no OAuth (needs a browser), no project creation, no local Docker, no `.env.local` credentials, no edge-function deploy.
+**This is the canonical path when an AGENT is doing the scaffolding.** Writes all files, installs frontend + backend deps, configures the chosen agent editor (Claude Code and/or Cursor), installs the companion skills (plus the plugin in Claude Code) — but **skips every Supabase-touching step**: no OAuth (needs a browser), no project creation, no local Docker, no `.env.local` credentials, no edge-function deploy.
 
 After scaffold completes, the user finishes setup by running this in a terminal:
 
@@ -87,7 +75,7 @@ For users who want Supabase env plumbing (OAuth, project create/select, `.env.lo
 cd my-existing-app
 npx agentlink-sh@latest env add dev
 # → "No agentlink.json found" menu with three choices:
-#     - Run the full Agent Link scaffold (recommended) → exits, tells user to run `npx agentlink-sh@latest`
+#     - Run the full AgentLink scaffold (recommended) → exits, tells user to run `npx agentlink-sh@latest`
 #     - Continue without full features → writes a minimal agentlink.json, runs the Supabase flow
 #     - Cancel
 ```
@@ -126,24 +114,24 @@ Shows type, summary, description, signature, and related components. Use to unde
 
 ### Flags
 
-| Flag                      | Effect                                                                                                                                                                                                        |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--no-skills`             | Skip companion skill installation                                                                                                                                                                             |
-| `--no-frontend`           | Skip frontend scaffolding (backend only)                                                                                                                                                                      |
-| `-y, --yes`               | Auto-confirm all prompts                                                                                                                                                                                      |
-| `--local`                 | Use local Docker instead of Supabase Cloud (cloud is default)                                                                                                                                                 |
+| Flag                      | Effect                                                                                                                                                                                                                      |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--no-skills`             | Skip companion skill installation                                                                                                                                                                                           |
+| `--no-frontend`           | Skip frontend scaffolding (backend only)                                                                                                                                                                                    |
+| `-y, --yes`               | Auto-confirm all prompts                                                                                                                                                                                                    |
+| `--local`                 | Use local Docker instead of Supabase Cloud (cloud is default)                                                                                                                                                               |
 | `--skip-env`              | Scaffold files only — skip all Supabase setup (OAuth, project creation, Docker). User runs `npx agentlink-sh@latest env add dev` after. **Use for agent-driven scaffolding.** Mutually exclusive with `--local` / `--link`. |
-| `--force-update`          | Force update even if project is up to date                                                                                                                                                                    |
-| `--link`                  | Non-interactive scaffold + link (requires `--project-ref`, `--db-url`, `--api-url`, `--publishable-key`, `--secret-key`). Mutually exclusive with `--skip-env`.                                               |
-| `--project-ref <ref>`     | Supabase project reference ID (used with `--link`)                                                                                                                                                            |
-| `--db-url <url>`          | Database connection URL (used with `--link`)                                                                                                                                                                  |
-| `--api-url <url>`         | Supabase API URL (used with `--link`)                                                                                                                                                                         |
-| `--publishable-key <key>` | Supabase publishable/anon key (used with `--link`)                                                                                                                                                            |
-| `--secret-key <key>`      | Supabase secret/service role key (used with `--link`)                                                                                                                                                         |
-| `--prompt <prompt>`       | What to build (passed to Claude Code on launch)                                                                                                                                                               |
-| `--resume`                | Resume a previously failed scaffold                                                                                                                                                                           |
-| `--non-interactive`       | Error instead of prompting when info is missing                                                                                                                                                               |
-| `--debug`                 | Write detailed log to `agentlink-debug.log`                                                                                                                                                                   |
+| `--force-update`          | Force update even if project is up to date                                                                                                                                                                                  |
+| `--link`                  | Non-interactive scaffold + link (requires `--project-ref`, `--db-url`, `--api-url`, `--publishable-key`, `--secret-key`). Mutually exclusive with `--skip-env`.                                                             |
+| `--project-ref <ref>`     | Supabase project reference ID (used with `--link`)                                                                                                                                                                          |
+| `--db-url <url>`          | Database connection URL (used with `--link`)                                                                                                                                                                                |
+| `--api-url <url>`         | Supabase API URL (used with `--link`)                                                                                                                                                                                       |
+| `--publishable-key <key>` | Supabase publishable/anon key (used with `--link`)                                                                                                                                                                          |
+| `--secret-key <key>`      | Supabase secret/service role key (used with `--link`)                                                                                                                                                                       |
+| `--prompt <prompt>`       | What to build (passed to Claude Code on launch)                                                                                                                                                                             |
+| `--resume`                | Resume a previously failed scaffold                                                                                                                                                                                         |
+| `--non-interactive`       | Error instead of prompting when info is missing                                                                                                                                                                             |
+| `--debug`                 | Write detailed log to `agentlink-debug.log`                                                                                                                                                                                 |
 
 ---
 
@@ -156,6 +144,8 @@ npx agentlink-sh@latest db apply                    # Auto-detects DB from .env.
 npx agentlink-sh@latest db apply --env dev          # Target specific environment
 npx agentlink-sh@latest db apply --db-url "postgresql://..."  # Explicit DB URL
 ```
+
+Pushes your schema-file changes to the live DB — **no Docker needed**. It handles changes to existing objects, so editing a table/column (an `ALTER`) lands without a rebuild. `--legacy` falls back to a create-only mode; `--allow-destructive` is required only for row-data-loss ops (`DROP TABLE`/`COLUMN`/`SCHEMA`, `TRUNCATE`).
 
 ### Run SQL
 
@@ -199,7 +189,7 @@ npx agentlink-sh@latest db backup --env prod         # Target prod (shows ▲ Ac
 npx agentlink-sh@latest db backup --db-url "..."     # Override URL entirely
 ```
 
-On first run, appends `supabase/backups/` to the project's root `.gitignore` under an "Agent Link — database backups" comment (idempotent on re-runs). Snapshots may contain real production data, so default-gitignored is non-negotiable.
+On first run, appends `supabase/backups/` to the project's root `.gitignore` under an "AgentLink — database backups" comment (idempotent on re-runs). Snapshots may contain real production data, so default-gitignored is non-negotiable.
 
 Read-only against the target DB. Works on cloud envs, local Docker, and bare projects — no `supabase/database/` or scaffolded files required. Use before risky migrations / data deletes / config changes; restore is a separate concern (no `db restore` command exists; the user does it manually with `psql -f` or `supabase db reset --db-url <other-env>` to replay onto a different env).
 
@@ -213,7 +203,7 @@ Read-only against the target DB. Works on cloud envs, local Docker, and bare pro
 npx agentlink-sh@latest db rebuild
 ```
 
-Resets the database the right way and brings it back: runs `supabase db reset` (replays the committed migrations — migration files are **never touched**) **then** re-applies the schema files and the **imperative resources** (`rbac/`, `cron/`, `storage/`). A raw `supabase db reset` replays migrations only, so it silently DROPS custom roles/permissions, cron jobs, and storage buckets/policies (those are excluded from migrations) — `db rebuild` restores them. It's the recovery hatch for when incremental `db apply` can't converge a DB (drift, refused destructive ops, a weird state). **Same command across envs:** local resets the Docker stack; a cloud **dev** env runs `supabase db reset --db-url <dev>` (resets the remote dev DB) behind an explicit typed confirmation (`--yes` to skip). **Production is a hard block** — `db rebuild` against prod is rejected outright, no override. **The agent is blocked from running `db rebuild` (and any raw `supabase db reset`) — resets are user-initiated**; if a reset is needed, point the user at this command. If the user already ran a raw `supabase db reset`, `db apply` alone restores the imperative resources.
+Resets the database the right way and brings it back: runs `supabase db reset` (replays the committed migrations — migration files are **never touched**) **then** re-applies the schema files and the **imperative resources** (`rbac/`, `cron/`, `storage/`). A raw `supabase db reset` replays migrations only, so it silently DROPS custom roles/permissions, cron jobs, and storage buckets/policies (those are excluded from migrations) — `db rebuild` restores them. Now that `db apply` handles changes to existing objects, **it usually handles drift on its own** (a changed column just converges, and after a raw `supabase db reset` it detects the reset and reapplies the full schema) — so `db rebuild` is for genuine recovery: a DB in a weird state, or a change `db apply` refused as data-destructive. **Same command across envs:** local resets the Docker stack; a cloud **dev** env runs `supabase db reset --db-url <dev>` (resets the remote dev DB) behind an explicit typed confirmation (`--yes` to skip). **Production is a hard block** — `db rebuild` against prod is rejected outright, no override. **The agent is blocked from running `db rebuild` (and any raw `supabase db reset`) — resets are user-initiated**; if a reset is needed, point the user at this command. If the user already ran a raw `supabase db reset`, `db apply` alone reapplies the full schema + imperative resources (it detects the reset).
 
 > `db rebuild` no longer regenerates migration files (the old behavior, which entangled a destructive migration regeneration with the reset, and there is no longer a separate `db reset` command — `db rebuild` is the reset). Regenerating/squashing migrations is a separate `db migrate` concern.
 
@@ -251,14 +241,14 @@ npx supabase db push                              # Push the generated migration
 
 ### How migrations work
 
-The CLI uses a **two-tier migration system** because `npx supabase db diff` cannot capture everything.
+The CLI uses a **two-tier migration system** because some infrastructure (extensions, DO blocks, auth-schema triggers) can't be captured by a schema diff.
 
 **Tier 1: Template migrations (hand-crafted)** — Pre-written SQL files embedded in the CLI. Two categories:
 
 - **Pre-start migrations** — Extensions, schema creation (`api` schema + grants). Applied automatically by `npx supabase start`.
 - **Post-setup migrations** — Queues (`pgmq.create()` uses DO blocks), auth triggers (on `auth.users`). Marked as applied via `npx supabase migration repair`.
 
-**Tier 2: Application migrations (generated by `pgdelta`)** — Captures everything in `public` and `api` schemas: tables, functions, indexes, policies, triggers. Uses `pgdelta` instead of `npx supabase db diff` to avoid alphabetical ordering issues with cross-file FK references.
+**Tier 2: Application migrations** — Captures everything in `public` and `api` schemas: tables, functions, indexes, policies, triggers. `db migrate` diffs your committed migrations against the schema files (**no Docker**) — instead of `npx supabase db diff`, which sorts schema files alphabetically and breaks on cross-file FK references. `--legacy` is a Docker-based fallback.
 
 ### Scaffold flow (interactive)
 
@@ -305,7 +295,7 @@ Output is a complete scaffolded repo with no env yet — the user's browser OAut
 ```
 1. Write new template migrations (if any)
 2. migration repair            ← mark new templates as applied
-3. db apply                    ← apply schema files via pgdelta
+3. db apply                    ← converge schema files onto the DB (ALTER-aware, no Docker)
 4. db migrate update_name      ← generate migration from schema diff
 ```
 
@@ -347,14 +337,14 @@ Things `env deploy` deliberately does NOT do (belong elsewhere):
 
 ### Server-side config (`env config`)
 
-Three independent subsystems, each reusing the same primitives `bootstrapCloudEnv` runs during `env add`. Use for targeted re-applies without the heavier schemas/functions path of `env add --retry`. Cloud-only; idempotent; works on bare projects.
+Three independent subsystems, each re-applying the same setup `env add` runs. Use for targeted re-applies without the heavier schemas/functions path of `env add --retry`. Cloud-only; idempotent; works on bare projects.
 
-| Subcommand | What it does                                                                                                                                                                                                                                                                                                                                                                          |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `secrets`  | Seeds `SUPABASE_URL` / `SUPABASE_PUBLISHABLE_KEY` / `SUPABASE_SECRET_KEY` into Postgres Vault. Edge functions read these from the platform-injected `SUPABASE_*` env vars directly — no `SB_*` mirror is set or maintained (removed in v0.26).                                                                                                                                                                                                                                                |
-| `db`       | PATCHes PostgREST to expose the `api` schema.                                                                                                                                                                                                                                                                                                                                         |
-| `auth`     | PATCHes auth config (hooks + signup settings). On bare projects the hook refs point at scaffolded `_hook_*` pg-functions that don't exist yet; Supabase returns a clear API error rather than silently misconfiguring.                                                                                                                                                                |
-| `all`      | Runs all three in order.                                                                                                                                                                                                                                                                                                                                                              |
+| Subcommand | What it does                                                                                                                                                                                                                                   |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `secrets`  | Seeds `SUPABASE_URL` / `SUPABASE_PUBLISHABLE_KEY` / `SUPABASE_SECRET_KEY` into Postgres Vault. Edge functions read these from the platform-injected `SUPABASE_*` env vars directly — no `SB_*` mirror is set or maintained (removed in v0.26). |
+| `db`       | PATCHes PostgREST to expose the `api` schema.                                                                                                                                                                                                  |
+| `auth`     | PATCHes auth config (hooks + signup settings). On bare projects the hook refs point at scaffolded `_hook_*` pg-functions that don't exist yet; Supabase returns a clear API error rather than silently misconfiguring.                         |
+| `all`      | Runs all three in order.                                                                                                                                                                                                                       |
 
 Both positionals are optional; omit either for an interactive picker:
 
@@ -379,8 +369,8 @@ npx agentlink-sh@latest env config secrets --env prod   # --env flag still accep
 
 AgentLink enforces a **fixed three-environment model**: `local`, `dev`, `prod`. Nothing else is accepted.
 
-| Env     | Meaning                   | Created by                                                                              |
-| ------- | ------------------------- | --------------------------------------------------------------------------------------- |
+| Env     | Meaning                   | Created by                                                                                            |
+| ------- | ------------------------- | ----------------------------------------------------------------------------------------------------- |
 | `local` | Local Docker Supabase     | `npx agentlink-sh@latest env use local` (switches to it; the Docker stack itself is `supabase start`) |
 | `dev`   | The cloud development env | `npx agentlink-sh@latest env add dev`                                                                 |
 | `prod`  | The cloud production env  | `npx agentlink-sh@latest env add prod`                                                                |
@@ -414,7 +404,7 @@ npx agentlink-sh@latest env add dev --retry             # Re-apply full setup (s
 
 `env use <name>` rewrites the managed block of `.env.local` so downstream `db apply` / `functions serve` / `db sql` hit the right env, and persists `manifest.cloud.default` so every subsequent command resolves the same target. User-added variables outside the block are preserved.
 
-`env use <same-env>` (running it on the env you're already on) is **not a no-op** — it re-fetches API keys via `getApiKeys`, re-resolves the pooler URL, and rewrites the managed block. This is the path users take after rotating the publishable / secret key in the Supabase dashboard, or whenever they suspect `.env.local` has drifted. Output reads `Refreshed <name>` instead of `Switched to <name>`. Prod confirmation is skipped on this path — the user is already on prod, and the persistent `▲ Active env: prod` banner on every data-touching command keeps the live-data risk visible.
+`env use <same-env>` (running it on the env you're already on) is **not a no-op** — it re-fetches the API keys, re-resolves the pooler URL, and rewrites the managed block. This is the path users take after rotating the publishable / secret key in the Supabase dashboard, or whenever they suspect `.env.local` has drifted. Output reads `Refreshed <name>` instead of `Switched to <name>`. Prod confirmation is skipped on this path — the user is already on prod, and the persistent `▲ Active env: prod` banner on every data-touching command keeps the live-data risk visible.
 
 `env use prod` is **allowed** but gated behind an amber warning + y/N confirmation (defaults to No):
 
@@ -455,14 +445,14 @@ Supabase OAuth tokens are **scoped to a single organization** — the consent sc
 
 **Where credentials live**: `~/.config/agentlink/credentials.json`, with the active tokens keyed by org ID under `oauth_by_org`. Each entry carries its own access token, refresh token, expiry, and cached org name/slug. A legacy single-org `oauth` slot is still read for back-compat; a PAT (`supabase_access_token`) set via `npx agentlink-sh@latest sb token set` is the final fallback for CI.
 
-**Where org IDs live on disk**: each `CloudEnvironment` in `agentlink.json` carries an optional `orgId`. Populated on `env add`, lazily backfilled on older manifests when `env add`/`env relink`/`env use` runs (and when `env add <name>` triggers the internal retry flow for recovery) — the CLI walks stored org tokens, probes `GET /v1/projects` for each, matches returned project IDs against envs missing `orgId`, and persists the match. Silent when nothing to do (no API calls if all envs already have `orgId`).
+**Where org IDs live on disk**: each `CloudEnvironment` in `agentlink.json` carries an optional `orgId`. Populated on `env add`, and lazily backfilled on older manifests when `env add`/`env relink`/`env use` runs. Silent when there's nothing to do (no API calls if all envs already have `orgId`).
 
 **Per-project credentials** live under `project_credentials[projectRef]` in the same file:
 
 - `db_password` — entered by the user at `env add` time. Not re-fetchable from the Management API, so we persist it. File mode 0600.
-- `secret_key` — the service-role-equivalent API key. Cached here so commands that need it don't have to re-hit `getApiKeys` on every invocation. Populated eagerly at every callsite that fetches API keys (env add / use / relink / retry / config + scaffold). If the user rotates the key in the Supabase dashboard, the next CLI command picks up the fresh value and overwrites the cache.
+- `secret_key` — the service-role-equivalent API key. Cached here so commands that need it don't re-fetch it on every invocation, and refreshed whenever the CLI fetches API keys (env add / use / relink / retry / config + scaffold). If the user rotates the key in the Supabase dashboard, the next CLI command picks up the fresh value and overwrites the cache.
 
-**What ends up in `.env.local`'s managed block** for cloud envs: `VITE_/NEXT_PUBLIC_SUPABASE_URL`, `VITE_/NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_DB_URL`, and `SUPABASE_SECRET_KEY` (server-only, no prefix — same rule as `SUPABASE_DB_URL`). All five are listed in `MANAGED_KEYS` so stale copies outside the block get stripped on every rewrite, preventing dev/prod env shadowing when the user runs `env use`.
+**What ends up in `.env.local`'s managed block** for cloud envs: `VITE_/NEXT_PUBLIC_SUPABASE_URL`, `VITE_/NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_DB_URL`, and `SUPABASE_SECRET_KEY` (server-only, no prefix — same rule as `SUPABASE_DB_URL`). All five are managed keys, so stale copies outside the block get stripped on every rewrite, preventing dev/prod env shadowing when the user runs `env use`.
 
 **CI**: set `SUPABASE_ACCESS_TOKEN` as a repo secret — a static PAT with admin access to the relevant org. OAuth is never triggered in CI.
 
@@ -470,20 +460,13 @@ Supabase OAuth tokens are **scoped to a single organization** — the consent sc
 
 ## Schema Files vs Migrations
 
-**Schema files** (`supabase/database/`) are the source of truth for application SQL. They use idempotent patterns (`CREATE OR REPLACE`, `IF NOT EXISTS`) and are applied via `psql`. The agent writes and modifies these during development.
+**Schema files** (`supabase/database/`) are the source of truth for application SQL. They use idempotent patterns (`CREATE OR REPLACE`, `IF NOT EXISTS`) and are applied with `npx agentlink-sh@latest db apply` — **no Docker needed**. It pushes the delta to the live DB and handles changes to existing objects (an `ALTER`), so editing an object just works. The agent writes and modifies these during development. (One-off `psql -c "…"` is fine for a quick manual statement, but `db apply` is the loop.)
 
-**Migrations** (`supabase/migrations/`) are the deployment record for production. They are generated by `db diff`, which compares the live database against a shadow database built from existing migrations + `schema_paths`.
+**Migrations** (`supabase/migrations/`) are the deployment record for production. They're generated by `db migrate`: it diffs your committed migrations against the schema files (**no Docker**). `npx supabase db diff` is deliberately not used (it sorts schema files alphabetically and breaks on cross-file FK references). See [migration_system.md](./references/migration_system.md) for the baseline details and `--legacy`.
 
-The `schema_paths` setting in `config.toml` tells `db diff` where to find schema files. It's a single recursive glob:
+Schema files are **one object per file** under `supabase/database/` (`schemas/<schema>/tables/<table>.sql`, `schemas/<schema>/functions/<fn>.sql`, plus `schemas/<schema>/schema.sql` and `cluster/extensions/<ext>.sql`). Order doesn't matter: `db apply` resolves dependency order automatically, so file count and naming are irrelevant. The top-level `cron/`, `storage/`, and `rbac/` folders are **imperative** — excluded from `db apply`'s schema diff and from migrations, applied by the deploy step instead.
 
-```toml
-[db.migrations]
-schema_paths = ["./database/**/*.sql"]
-```
-
-Schema files are **one object per file** under `supabase/database/` (`schemas/<schema>/tables/<table>.sql`, `schemas/<schema>/functions/<fn>.sql`, plus `schemas/<schema>/schema.sql` and `cluster/extensions/<ext>.sql`). Order doesn't matter: pg-delta topologically sorts statements by dependency at apply time, so a single recursive glob safely picks up every file regardless of count or naming. The top-level `cron/`, `storage/`, and `rbac/` folders are **imperative** — excluded from declarative apply and from migrations, applied by the deploy step instead.
-
-`db diff` bridges the two: it reads schema files to know the desired state, replays migrations on a shadow DB for the current state, and outputs the delta.
+`db apply` keeps gitignored CLI state under `.agentlink/` (don't hand-edit it); it self-heals if that state goes stale — e.g. after a raw `supabase db reset`.
 
 ---
 
@@ -513,6 +496,6 @@ Always prefer the CLI (`--force-update`) first. Only fix manually when the CLI c
 - **[Scaffold Map](./references/scaffold-map.md)** — The deterministic starting inventory of a fresh project: every scaffolded table, RPC, auth/RLS helper, hook, RBAC role + permission, and frontend route/hook/component. Read this **instead of** doing a discovery pass on a freshly scaffolded project — it's version-matched, so trust it and skip reading the files.
 - **[Workflows](./references/workflows.md)** — Common user scenarios as a flow-by-flow playbook: start a new project from zero, add prod, switch envs, deploy, recover from a failed deploy. Each entry lists the user trigger, questions to ask, commands to run, and watch-outs.
 - **[Upgrading](./references/upgrading.md)** — Moving an existing project onto a newer AgentLink version: `check` → `--dry-run` → `--force-update` → `check`, the base-snapshot file-level merge (fast-forward / customized / conflict / preserved), and the disposable `--skip-env --skip-install` reference for base reconstruction and diffing.
-- **[Migration System](./references/migration_system.md)** — Deep dive: two-tier migrations, how db diff works, adding extensions
+- **[Migration System](./references/migration_system.md)** — Deep dive: two-tier migrations, how `db apply` / `db migrate` work, adding extensions
 - **[Troubleshooting](./references/troubleshooting.md)** — Common errors and manual fixes
 - **[Known Issues](./references/known_issues.md)** — Transient/upstream toolchain quirks (e.g. `supabase start` storage health-check flake on first start) and their workarounds — not AgentLink bugs

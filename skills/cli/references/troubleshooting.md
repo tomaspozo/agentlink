@@ -27,28 +27,21 @@ See the `database` skill's table-privileges rule and the `auth` skill's Security
 
 ### `db migrate` says "No changes detected" (or wrote a migration containing that text)
 
-**Cause:** `db migrate` diffs a **migrations-only baseline** against the schema files. The baseline must come from replaying `supabase/migrations/` — **not** the live dev DB, which `db apply` has already converged to the schema files. If a clean baseline can't be built, no diff is found. (An older CLI diffed the live DB against itself and emitted an empty migration whose body was the literal text "No changes detected." — that bug is fixed.)
+**Cause:** `db migrate` diffs your **committed migrations** against the schema files. By default this runs **without Docker and without the live DB** — so "No changes" means the committed migrations already capture everything in your schema files. (An older CLI diffed the live DB against itself and emitted an empty migration whose body was the literal text "No changes detected." — that bug is fixed.)
 
-**This is NOT a signal to hand-author the migration.** First make sure a baseline source is available:
+**This is NOT automatically a signal to hand-author the migration.** Check, in order:
 
-- **Local / cloud-dev with Docker:** ensure Docker is running. `db migrate` spins a short-lived throwaway Supabase stack from your migration files to build the baseline. Confirm the change is actually in a schema file and was applied (`db apply`) so the desired state reflects it.
-- **No Docker, cloud:** `db migrate` falls back to a read-only `prod` (baseline) → `dev` (desired) catalog diff. This needs **both** a `prod` and a `dev` env registered. Verify prod is current with all committed migrations (`supabase migration list --linked`), or its catalog will be stale and the diff may re-include already-migrated objects.
-
-**Genuinely empty?** If the baseline built cleanly and the diff is still empty, the migrations already capture your schema — nothing to do. Only when `db migrate` prints `▲ Could not build a clean migration baseline` (no Docker AND no prod+dev) should you author the migration by hand — see "Manual Migration Operations" below.
+- **Is the change actually in a schema file?** A change applied only via `psql` (not written to `supabase/database/`) won't appear. Write it to the file.
+- **Genuinely already migrated?** If you previously generated a migration for this change, the baseline already has it — nothing to do.
+- **Diff couldn't build the schema?** If `db migrate` *errors* (rather than "No changes") pointing at `--legacy`, it couldn't faithfully build the schema in-process (an exotic extension/type). Re-run with `--legacy`, which builds the baseline on a short-lived throwaway Supabase stack (needs Docker) or via a read-only `prod`→`dev` cloud diff (needs both envs registered). Only when `--legacy` prints `▲ Could not build a clean migration baseline` (no Docker AND no prod+dev) should you author the migration by hand — see "Manual Migration Operations" below.
 
 ---
 
-### `schema "api" does not exist` during `db diff`
+### `schema "api" does not exist` during `db apply` / `db migrate`
 
-**Cause:** `schema_paths` in `config.toml` doesn't cover the schema files, or `database/schemas/api/schema.sql` doesn't exist on disk. The shadow database can't build because schema files reference `api.*` objects but the schema was never created.
+**Cause:** `database/schemas/api/schema.sql` doesn't exist on disk, so when `db apply` builds the schema files the `api` schema is never created and objects referencing `api.*` fail.
 
-**Fix:**
-```toml
-# config.toml should use the recursive glob over supabase/database/:
-[db.migrations]
-schema_paths = ["./database/**/*.sql"]
-```
-Also verify `supabase/database/schemas/api/schema.sql` exists on disk (pg-delta topo-sorts statements, so the `api` schema gets created before objects that reference it). Run `npx agentlink-sh@latest --force-update` to regenerate it.
+**Fix:** Verify `supabase/database/schemas/api/schema.sql` exists on disk (`db apply` resolves dependency order, so the `api` schema is created before objects that reference it). Run `npx agentlink-sh@latest --force-update` to regenerate it.
 
 ---
 
@@ -56,17 +49,13 @@ Also verify `supabase/database/schemas/api/schema.sql` exists on disk (pg-delta 
 
 **Cause:** Running `npx supabase migration up` or `npx supabase db reset` on a database where objects already exist. Schema files use `CREATE OR REPLACE` (idempotent), but generated migrations may use plain `CREATE`.
 
-**Fix:** Don't use `migration up` to apply SQL on a running local DB where objects exist. Use `psql` to apply schema files directly:
-```bash
-psql <db_url> -f supabase/database/schemas/public/tables/my_entity.sql
-```
-Or use `runSQL` via the CLI. Migrations are for production deployments on clean databases.
+**Fix:** Don't use `migration up` / a raw reset to re-apply on a running local DB. Apply your schema changes with `npx agentlink-sh@latest db apply` — it reconciles existing objects (handling changes to existing tables). Migrations are for production deployments on clean databases; replaying them onto a populated DB is what triggers this. (Avoid hand-running `psql -f <schema-file>` — it bypasses `db apply` and leaves the CLI's tracking state stale.)
 
 ---
 
 ### `duplicate key value violates unique constraint "schema_migrations_pkey"`
 
-**Cause:** Two migration files have the same timestamp. This can happen when template migrations and `db diff` generate files within the same second.
+**Cause:** Two migration files have the same timestamp. This can happen when template migrations and a `db migrate` run generate files within the same second.
 
 **Fix:** Rename one of the conflicting files to use a different timestamp:
 ```bash
@@ -103,7 +92,7 @@ npx supabase migration repair 20240101120001 --status applied --local
 
 **Fix:** Check migration file timestamps with `ls supabase/migrations/ | sort`. Ensure:
 1. `agentlink_infrastructure` is first (extensions, schemas)
-2. `agentlink_setup` is next (tables, functions, policies — generated by `db diff`)
+2. `agentlink_setup` is next (tables, functions, policies — generated by `db migrate`)
 3. `agentlink_queues` and `agentlink_auth_triggers` come after setup
 
 If ordering is wrong, rename files to fix timestamps and repair:
@@ -136,13 +125,13 @@ npx agentlink-sh@latest --force-update
 
 **Symptom:** A raw `supabase db reset` leaves the database missing your custom roles or permissions (membership role dropdowns empty, `auth_verify_access` failing), the queue cron job, or storage buckets/policies.
 
-**Cause:** `supabase db reset` replays **migrations only**. The imperative resources in `supabase/database/{rbac,cron,storage}/` are deliberately **excluded from migrations** (RBAC is reference data; pg-delta filters the cron + storage schemas out of plans). The migration replay restores the *baseline* defaults but not anything you added after scaffold.
+**Cause:** `supabase db reset` replays **migrations only**. The imperative resources in `supabase/database/{rbac,cron,storage}/` are deliberately **excluded from migrations** (RBAC is reference data; the cron and storage schemas are filtered out of migration plans by design). The migration replay restores the *baseline* defaults but not anything you added after scaffold.
 
 **Fix:** Use `db rebuild` instead of a raw reset — it replays migrations **and** re-applies the schema files + imperative resources in one step:
 ```bash
 npx agentlink-sh@latest db rebuild
 ```
-If you already ran a raw `supabase db reset`, just run `npx agentlink-sh@latest db apply` to restore them (it runs the same imperative step). Local-only; the agent is blocked from running `db rebuild` or a raw reset directly — resets are user-initiated.
+If you already ran a raw `supabase db reset`, just run `npx agentlink-sh@latest db apply` — it detects the reset and reapplies the **full** schema plus the imperative resources. Local-only; the agent is blocked from running `db rebuild` or a raw reset directly — resets are user-initiated.
 
 ---
 
@@ -176,11 +165,12 @@ Fetches the correct pooler URL from the Supabase Management API and updates `.en
 
 **Cause:** Each scaffold run created a new setup migration instead of detecting the existing one. Fixed in v0.11.1+, but if you already have duplicates:
 
-**Fix:**
+**Fix:** Delete the duplicate migration files, then regenerate a clean one:
 ```bash
-npx agentlink-sh@latest db rebuild
+# remove the redundant *_agentlink_setup.sql copies, keep one (or none), then:
+npx agentlink-sh@latest db migrate setup
 ```
-Deletes all migration files, re-applies schemas, and regenerates a single clean migration.
+(`db rebuild` only resets + re-applies — it does **not** touch migration files anymore; regenerating migrations is a separate `db migrate` step.)
 
 ---
 
@@ -190,13 +180,11 @@ Deletes all migration files, re-applies schemas, and regenerates a single clean 
 
 **Cause:** Migration files were recreated with new timestamps (from repeated scaffold runs), so the remote versions no longer match local files.
 
-**Fix:**
+**Fix:** Reconcile the remote migration history with `supabase migration repair` (mark the orphaned remote versions reverted, then re-push). `db rebuild` does **not** help here — it's local/dev only (hard-blocks prod) and no longer touches migration files.
 ```bash
-# Option 1: Full rebuild (easiest for new projects)
-npx agentlink-sh@latest db rebuild
-
-# Option 2: Manual repair (if you need to keep specific migrations)
 npx supabase migration repair --status reverted <version1> <version2> ...
+# then re-push the correct local migrations:
+npx supabase db push
 ```
 
 ---
@@ -225,7 +213,7 @@ Both preserve existing migrations.
 
 ### `env add` asked me about "bare mode" — what is that?
 
-**Symptom:** Running `npx agentlink-sh@latest env add dev` in a directory that has no `agentlink.json` surfaces a "No agentlink.json found" menu with three options: *Run the full Agent Link scaffold*, *Continue without full features*, *Cancel*.
+**Symptom:** Running `npx agentlink-sh@latest env add dev` in a directory that has no `agentlink.json` surfaces a "No agentlink.json found" menu with three options: *Run the full AgentLink scaffold*, *Continue without full features*, *Cancel*.
 
 **Cause:** The CLI detected the directory isn't scaffolded and offered bare mode — Supabase env plumbing without the full AgentLink scaffold. This is intentional: users who just want env management on an existing codebase shouldn't be forced to scaffold over their own file structure.
 
@@ -274,9 +262,9 @@ npx agentlink-sh@latest env config secrets prod
 
 **Symptom:** `env add` / `env relink` shows "How would you like to authenticate?" even though you successfully logged in recently.
 
-**Cause:** Pre-v0.21 CLIs had a resolution-ladder gap — after the legacy-oauth → per-org credential migration wiped the single `oauth` slot, calling `ensureAccessToken` without an `orgId` (which happens at the top of `env add` before the user has picked) fell through all the per-org entries and hit the interactive prompt.
+**Cause:** Pre-v0.21 CLIs had a credential-resolution gap that re-prompted for login even when valid per-org tokens were stored.
 
-**Fix:** Upgrade to v0.21+. Two changes resolve it: (1) `ensureAccessToken` now walks `oauth_by_org` when no `orgId` hint is given and picks any valid entry; (2) `env add` / `env relink` resolve the target org BEFORE the existing-vs-new choice so the correct per-org credential can be pinned early.
+**Fix:** Upgrade to v0.21+ — it reuses a valid stored credential without re-prompting, and resolves the target org early so the right one is used.
 
 ---
 
@@ -284,28 +272,22 @@ npx agentlink-sh@latest env config secrets prod
 
 **Symptom:** Org picker completes without prompting you to log in, but then `supabase projects create` (or another Management API call) fails with `{"message":"Forbidden"}` or HTTP 403.
 
-**Cause:** The refresh token still works on paper (refresh endpoint returns a new access token), but the server no longer accepts that token for the target org — usually because org membership was revoked, admin access was removed, or the integration org changed its authorized-apps policy. Pre-v0.21 CLIs' 401-only retry path doesn't match 403 so the error bubbles up with no context.
+**Cause:** The refresh token still works on paper, but the server no longer accepts that token for the target org — usually because org membership was revoked, admin access was removed, or the integration org changed its authorized-apps policy. Pre-v0.21 CLIs didn't handle the 403, so the error bubbled up with no context.
 
-**Fix:** Upgrade to v0.21+. `pickOrg` now probes `GET /v1/projects` with the resolved token right after the user picks an org; on 401/403 it surfaces `▲ Stored credentials for <org> are no longer accepted. Re-authenticating…`, clears the stale `oauth_by_org[orgId]` entry, and kicks off a fresh org-scoped OAuth login before the rest of `env add` / `env relink` runs.
+**Fix:** Upgrade to v0.21+. After you pick an org, the CLI validates the stored credential; if it's no longer accepted it surfaces `▲ Stored credentials for <org> are no longer accepted. Re-authenticating…` and kicks off a fresh org-scoped OAuth login before continuing.
 
 ---
 
-### Claude Code not found on PATH
+### Plugin / skills don't show up after scaffold
 
-**Symptom:** Scaffold aborts with `Claude Code not found on PATH. Install Claude Code with our setup script: https://agentlink.sh/start`.
+**Symptom:** The scaffold finished, but the `agentlink` builder agent or the companion skills aren't available when you open the project.
 
-**Cause:** The CLI no longer auto-installs Claude Code (removed in v0.20.1) — it validates and points users at the setup script instead.
+**Cause:** The scaffold never requires an agent editor to be installed — it writes the project and the editor config regardless, so the actual plugin install happens the first time you open the project. How that lands differs per editor:
 
-**Fix:**
-```bash
-# macOS / Linux
-curl -sSf https://agentlink.sh/start | sh
+- **Claude Code** — installs the plugin automatically on first launch. The scaffold writes `enabledPlugins` + `extraKnownMarketplaces` into `.claude/settings.local.json`, so opening the project in Claude Code picks it up with no command. If it doesn't, confirm that file exists and that you opened Claude Code *in the project directory*.
+- **Cursor** — Cursor has no committed-config auto-install, so the plugin is a one-time manual step: run `/add-plugin tomaspozo/agentlink` (or install AgentLink from the Cursor marketplace). The companion skills and the Supabase MCP (`.cursor/mcp.json`) are written by the scaffold; only the plugin install is manual.
 
-# Windows (PowerShell)
-iwr https://agentlink.sh/start | iex
-```
-
-Then open a **new terminal** (so PATH reloads) and retry the scaffold.
+In both cases the companion skills are installed during scaffold (Claude Code → `.claude/skills/`, Cursor → `.agents/skills/`). Re-run `npx agentlink-sh@latest install` if they're missing.
 
 ---
 
@@ -395,16 +377,16 @@ rm supabase/migrations/<version>_name.sql
 | Situation | Action |
 |-----------|--------|
 | Missing component reported by `check` | `npx agentlink-sh@latest --force-update` |
-| `db migrate` prints "No changes detected" | Ensure Docker is running (ephemeral baseline) or a `prod`+`dev` cloud env exists (read-only baseline); don't hand-author unless it prints `▲ Could not build a clean migration baseline` |
-| `db diff` produces wrong output | Edit the generated migration file manually |
+| `db migrate` prints "No changes detected" | The committed migrations already capture your schema files (no Docker needed to check). Confirm the change is written to a schema file; don't hand-author |
+| `db migrate` output looks wrong | Review/edit the generated migration SQL before committing |
 | Need a migration for auth schema changes | Write migration file + repair |
 | Timestamp collision | Rename file + repair |
 | CLI version is outdated | `npx agentlink-sh@latest --force-update` |
 | Migration references non-existent object | Fix ordering or merge migrations |
 | Need to undo a migration | `repair --status reverted` + delete file |
 | DB URL is wrong / connection fails | `npx agentlink-sh@latest db url --fix` |
-| Duplicate migration files | `npx agentlink-sh@latest db rebuild` |
-| `db push` says remote versions not found | `npx agentlink-sh@latest db rebuild` |
+| Duplicate migration files | Delete the redundant files, then `npx agentlink-sh@latest db migrate <name>` to regenerate one (`db rebuild` does not touch migration files) |
+| `db push` says remote versions not found | `npx supabase migration repair --status reverted <versions>` + re-push |
 | Cloud project deleted / need new project | `npx agentlink-sh@latest env add dev` (prompts to relink) |
 | `env add` died partway OR config drifted | `npx agentlink-sh@latest env add <name> --retry` (re-apply full setup) |
 | Need to push schema / function changes (no config drift) | `npx agentlink-sh@latest env deploy <name>` |
@@ -413,6 +395,7 @@ rm supabase/migrations/<version>_name.sql
 | `env deploy` prints "Nothing to deploy" | Add files to `supabase/database/` / `supabase/migrations/` / `supabase/functions/`, or run `--force-update` for the full scaffold |
 | Broken migration state on new project | `npx agentlink-sh@latest db rebuild` |
 | DB password was reset in dashboard | `npx agentlink-sh@latest db password "newpass"` |
-| Claude Code not found on PATH | Install via `https://agentlink.sh/start`, open a new terminal |
+| Plugin/skills missing after scaffold | Claude Code installs on first launch; in Cursor run `/add-plugin tomaspozo/agentlink`. Re-run `npx agentlink-sh@latest install` for skills |
+| Supabase CLI / `psql` not found | Install via `https://agentlink.sh/start`, open a new terminal |
 | `Forbidden` (403) on env add | Upgrade CLI; re-auth is automatic on v0.21+ |
 | `npx agentlink-sh@latest deploy` errors "no longer a top-level command" | Use `npx agentlink-sh@latest env deploy` (same functionality, under the env group) |

@@ -1,6 +1,6 @@
 # Known Issues
 
-Current quirks in the toolchain AgentLink sits on (Supabase CLI, pg-delta, Docker) that are **not** AgentLink bugs and usually aren't worth debugging — recognize them, apply the workaround, move on. Distinct from `troubleshooting.md` (which is for genuine errors + fixes); this file is for transient/upstream behaviors.
+Current quirks in the toolchain AgentLink sits on (Supabase CLI, Docker) that are **not** AgentLink bugs and usually aren't worth debugging — recognize them, apply the workaround, move on. Distinct from `troubleshooting.md` (which is for genuine errors + fixes); this file is for transient/upstream behaviors.
 
 ---
 

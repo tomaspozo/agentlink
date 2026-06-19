@@ -67,11 +67,11 @@ CREATE POLICY "Members can read own tenant" ON public.tenants ...
 CREATE POLICY members_read_own_tenant ON public.tenants ...
 ```
 
-**Why:** `npx agentlink-sh@latest db apply` uses `pg-delta` / `pg-topo`, which parses every SQL statement through libpg_query and re-emits it via `deparseSql`. The deparser canonicalizes identifiers and silently drops the surrounding quotes — so `DROP POLICY IF EXISTS "Members can read own tenant" ON …` reaches Postgres as `DROP POLICY IF EXISTS Members can read own tenant ON …` and fails with `42601: syntax error at or near "can"`. Quoted names with spaces are effectively unusable in schema files.
+**Why:** `npx agentlink-sh@latest db apply` re-serializes every SQL statement, and silently drops the surrounding quotes from identifiers when it does — so `DROP POLICY IF EXISTS "Members can read own tenant" ON …` reaches Postgres as `DROP POLICY IF EXISTS Members can read own tenant ON …` and fails with `42601: syntax error at or near "can"`. Quoted names with spaces are effectively unusable in schema files.
 
 ## Schema File Naming
 
-Schema files are **one object per file** — name each file for the object it contains. pg-delta topologically sorts statements by dependency at apply time, so file count and order are irrelevant.
+Schema files are **one object per file** — name each file for the object it contains. `db apply` resolves dependency order at apply time, so file count and order are irrelevant.
 
 All paths below are relative to `supabase/database/`.
 
@@ -88,7 +88,7 @@ All paths below are relative to `supabase/database/`.
 | `schemas/api/` | `schema.sql` | `CREATE SCHEMA api;` + grants / default privileges |
 | `schemas/public/` | `schema.sql` | public schema-level grants (e.g. `supabase_auth_admin` USAGE) |
 | `cluster/extensions/` | `{ext}.sql` | one extension install per file (`pg_net.sql`, `pgmq.sql`, …) |
-| `rbac/` | `{entity}.sql` | RBAC reference DATA (rows): `roles.sql`, `permissions.sql`, `role_permissions.sql` — each fills an `rbac_desired` staging table, synced by the reconcile (NOT pg-delta) |
+| `rbac/` | `{entity}.sql` | RBAC reference DATA (rows): `roles.sql`, `permissions.sql`, `role_permissions.sql` — each fills an `rbac_desired` staging table, synced by the RBAC reconcile (NOT by `db apply`) |
 
 - Table files are named for the table; function files are named for the function
 - One object per file — never bundle multiple tables or functions into one file

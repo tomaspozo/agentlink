@@ -545,7 +545,7 @@ EXECUTE is granted **per object** — **every** `api` function carries its own g
 GRANT USAGE ON SCHEMA api TO anon, authenticated, service_role;
 ```
 
-> **Why per-object, not a blanket grant.** A bulk `GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA api TO authenticated` put every function within reach of `authenticated`, and pg-delta's declarative apply ordered that grant **after** the per-function REVOKEs — so `SECURITY DEFINER` admin internals (`api._admin_*`) ended up callable by `authenticated` on `db apply` (dev) while the linear migration locked them on prod. A real dev/prod divergence. Per-object grants keep dev == prod and make a forgotten grant fail fast (42501) — callable by no one — exactly like the table model.
+> **Why per-object, not a blanket grant.** A bulk `GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA api TO authenticated` put every function within reach of `authenticated`, and `db apply` ordered that grant **after** the per-function REVOKEs — so `SECURITY DEFINER` admin internals (`api._admin_*`) ended up callable by `authenticated` on `db apply` (dev) while the migration locked them on prod. A real dev/prod divergence. Per-object grants keep dev == prod and make a forgotten grant fail fast (42501) — callable by no one — exactly like the table model.
 
 Add the right block after each function:
 

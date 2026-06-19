@@ -172,7 +172,7 @@ Renaming a role propagates everywhere via `ON UPDATE CASCADE`. Adding a permissi
 
 ### Adding a domain permission
 
-RBAC rows are **reference data**, not schema — they live in `supabase/database/rbac/`, NOT in the table files under `schemas/public/tables/` (which define structure only). Each rbac file fills the `rbac_desired` staging table; the reconcile step (`db apply`, and every `env deploy`) converges the DB to **exactly** the declared set. **Full reconcile**: a row you remove is REVOKED on every env, including prod — which is the only way revokes reach prod, since pg-delta migrations carry DDL only.
+RBAC rows are **reference data**, not schema — they live in `supabase/database/rbac/`, NOT in the table files under `schemas/public/tables/` (which define structure only). Each rbac file fills the `rbac_desired` staging table; the reconcile step (`db apply`, and every `env deploy`) converges the DB to **exactly** the declared set. **Full reconcile**: a row you remove is REVOKED on every env, including prod — which is the only way revokes reach prod, since migrations carry DDL only (never row data).
 
 ```sql
 -- supabase/database/rbac/permissions.sql — add your rows to the VALUES list:
@@ -294,7 +294,7 @@ The helper is `LANGUAGE sql STABLE` so the planner can also inline it — but th
 
 ```sql
 -- scaffolded one object per file under supabase/database/schemas/public/tables/
---   (tenants.sql, memberships.sql, invitations.sql, …); pg-delta resolves FK order
+--   (tenants.sql, memberships.sql, invitations.sql, …); db apply resolves FK order
 CREATE TABLE IF NOT EXISTS public.tenants (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,

@@ -62,8 +62,8 @@ marketing content) need `anon` to have USAGE or every RPC reply is
 
 `EXECUTE` on each function IS the security boundary, and it's granted
 **per object** — there is no schema-wide `GRANT ON ALL FUNCTIONS` (a blanket
-grant let pg-delta's apply ordering override per-function revokes, exposing
-`api._admin_*` on dev). Every `api` function carries its own grant:
+grant gets applied after the per-function REVOKEs on `db apply`, overriding them
+and exposing `api._admin_*` on dev). Every `api` function carries its own grant:
 
 ```sql
 -- client RPC (default for authenticated users; RLS filters rows)
@@ -182,7 +182,7 @@ CREATE TRIGGER trg_auth_users_new_user
 > row. In that case it calls `refreshSession()` once, which re-runs the hook
 > against the now-present membership.
 
-**Need to customize signup logic?** If the app requires additional work on signup (e.g., creating rows in app-specific tables, syncing with external services), edit `supabase/database/schemas/public/functions/_internal_admin_handle_new_user.sql` and modify the function body. Keep the same function name. The update flow preserves your edits via the base snapshot in `.agentlink/template-base/`; other managed functions live in their own files and keep receiving CLI updates. Apply with `npx agentlink-sh@latest db apply`.
+**Need to customize signup logic?** If the app requires additional work on signup (e.g., creating rows in app-specific tables, syncing with external services), edit `supabase/database/schemas/public/functions/_internal_admin_handle_new_user.sql` and modify the function body. Keep the same function name. The update flow preserves your edits to this file; other managed functions live in their own files and keep receiving CLI updates. Apply with `npx agentlink-sh@latest db apply`.
 
 ### Profile RPCs
 
@@ -252,7 +252,7 @@ CREATE POLICY "Members can read own tenant" ON public.tenants ...
 CREATE POLICY members_read_own_tenant ON public.tenants ...
 ```
 
-Reason: `db apply` routes every statement through `pg-delta` → `pg-topo` → libpg_query's deparser, which strips surrounding double quotes when re-serializing identifiers. The resulting SQL reaches Postgres unquoted and fails with a syntax error on the spaces. Snake_case bare identifiers round-trip cleanly.
+Reason: `db apply` re-serializes every statement and strips surrounding double quotes from identifiers when it does. The resulting SQL reaches Postgres unquoted and fails with a syntax error on the spaces. Snake_case bare identifiers round-trip cleanly.
 
 ### Choosing a policy pattern
 
@@ -420,7 +420,7 @@ table policies are isolation-only — they no longer check the permission.
 
 Do all of these (the guard alone, or the frontend alone, is never enough):
 
-1. **Declare the permission** in `supabase/database/rbac/permissions.sql` and bind it to roles in `supabase/database/rbac/role_permissions.sql` (each file fills the `rbac_desired` staging table — just add `VALUES` rows). The RBAC reconcile (`db apply`, and every `env deploy`) converges the DB to exactly the declared set. **Full reconcile**: removing a row REVOKES that permission on every env (incl. prod). NB: these rows live in `rbac/`, *not* in the table files under `schemas/public/tables/` — those define structure only and are applied by pg-delta, which never carries rows.
+1. **Declare the permission** in `supabase/database/rbac/permissions.sql` and bind it to roles in `supabase/database/rbac/role_permissions.sql` (each file fills the `rbac_desired` staging table — just add `VALUES` rows). The RBAC reconcile (`db apply`, and every `env deploy`) converges the DB to exactly the declared set. **Full reconcile**: removing a row REVOKES that permission on every env (incl. prod). NB: these rows live in `rbac/`, *not* in the table files under `schemas/public/tables/` — those define structure only and are applied by `db apply`, which never carries row data.
 2. **Guard the RPC**: `PERFORM public.auth_verify_access('<key>')` as the first statement of the mutating `api.*` function; scope queries with `WHERE tenant_id = (SELECT public._auth_tenant_id())`.
 3. **Isolate the table**: ensure an isolation-only RLS policy exists (tenant/ownership, no permission predicate).
 4. **Gate the frontend**: route guard `requirePermission('<key>')` + control gating `useHasPermission('<key>')` (UX only).

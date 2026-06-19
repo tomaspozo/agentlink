@@ -18,7 +18,7 @@ routes, and permissions are what you build.
 
 ## Database (`supabase/database/`)
 
-One object per file. pg-delta topologically sorts at apply time, so file order is
+One object per file. `db apply` resolves dependency order at apply time, so file order is
 irrelevant.
 
 ### Extensions (`cluster/extensions/`)
@@ -64,10 +64,10 @@ irrelevant.
 
 ### Imperative resources (`cron/`, `storage/`, `rbac/`) — applied at deploy, NOT in migrations
 These three top-level folders under `supabase/database/` are **excluded** from
-`declarative apply` and from the migration diff, and applied imperatively on
-every deploy (all envs incl. prod) by the deploy step. Reason: pg-delta's
-Supabase integration filters the `cron` and `storage` schemas out of plans, and
-RBAC is reference *data*. Put new objects here (not under `schemas/`):
+`db apply`'s schema diff and from the migration diff, and applied imperatively on
+every deploy (all envs incl. prod) by the deploy step. Reason: the `cron` and
+`storage` schemas are filtered out of migration plans, and RBAC is reference
+*data*. Put new objects here (not under `schemas/`):
 - `cron/` — `cron.schedule(...)` jobs. Scaffolded: `process-stale-tasks.sql`
   (fires the queue worker every minute). Must be **idempotent** (`cron.schedule`
   upserts by job name).
