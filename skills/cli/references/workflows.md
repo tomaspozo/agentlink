@@ -195,7 +195,7 @@ What it does NOT do — belongs elsewhere:
 
 - **Vault secrets / PostgREST config / auth config.** If `supabase/config.toml` or auth providers changed, use `npx agentlink-sh@latest env add <name>` → "Re-apply full setup" for the full reset, or `npx agentlink-sh@latest env config [secrets|db|auth|all] [env-name]` for a targeted push of just the drifted subsystem. `env config` is cloud-only, idempotent, and works on bare projects. Positional env name matches the rest of the env group (`env config secrets prod`).
 - **Generate a migration file.** Use `db migrate <name>` explicitly when you want an auditable artifact committed to `supabase/migrations/`.
-- **Clean-tree gate.** `env deploy` is safe on dirty trees — no migration diff is generated. (The clean-tree gate still applies to `env add` / `env relink` / `--force-update`.)
+- **Clean-tree gate.** `env deploy` is safe on dirty trees — no migration diff is generated. (The clean-tree gate still applies to `env add` / `--force-update`.)
 - **Data-risk analysis.** If the user wants that, point them at `db migrate` + manual review of the generated SQL.
 
 **Watch-outs**
@@ -231,8 +231,10 @@ npx agentlink-sh@latest env deploy dev
 npx agentlink-sh@latest env deploy prod
 
 # Recovery C: relink to a different project (or the project was deleted)
-npx agentlink-sh@latest env add dev          # interactive — pick "Relink"
+npx agentlink-sh@latest env add dev          # interactive — pick "Relink to a different Supabase project"
 npx agentlink-sh@latest env add dev --project-ref <new-ref> --non-interactive
+# Relinking to the SAME project (e.g. transferred to a new org) detects it and
+# offers to keep the password on file (or --keep-password in non-interactive/CI).
 
 # Recovery D: stale DB URL
 npx agentlink-sh@latest db url               # See current vs expected
@@ -260,6 +262,7 @@ npx agentlink-sh@latest db migrate <name>          # regenerate a clean migratio
 - `--retry` (or picking "Re-apply full setup" interactively) requires the env to already exist in the manifest — it re-runs the full bootstrap against the stored `projectRef` without touching the manifest or `.env.local`.
 - The "Re-apply full setup" path IS heavier than `env deploy`. For routine schema/function pushes, `env deploy` is the right call — the interactive menu hints at this above the options.
 - Full relink overwrites `.env.local`'s managed block — preserved user vars outside the block survive.
+- Relinking to the **same** project (e.g. it was transferred to a new org) is detected — the CLI offers to keep the existing DB password on file or update it, instead of forcing re-entry. In CI, pass `--keep-password` to reuse the stored password. A stale `orgId` from a transfer is also auto-corrected on `env deploy` / `env config` / `env add --retry`.
 - `db rebuild` resets the DB (replays migrations) and re-applies schema files + imperative resources (rbac/cron/storage); it does **not** touch migration files. Local/dev only — agent-blocked and prod hard-blocked. (Regenerating/squashing migration files is a separate `db migrate` / `supabase migration repair` concern.)
 
 ---

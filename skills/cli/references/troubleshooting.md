@@ -195,7 +195,7 @@ npx supabase db push
 
 **Fix:**
 ```bash
-# Full relink (pick "Relink" in the interactive prompt, or pass --project-ref)
+# Full relink (run env add, pick "Relink to a different Supabase project", or pass --project-ref)
 npx agentlink-sh@latest env add dev
 
 # If a PREVIOUS env add died mid-bootstrap against the SAME project, use --retry instead:
@@ -203,11 +203,27 @@ npx agentlink-sh@latest env add dev --retry
 ```
 
 - **Relink** rewrites the env to point at a different cloud project and re-runs the full bootstrap. Use when the project was deleted, the DB URL is wrong, or you need to switch to a different project.
-- **`--retry`** (or the interactive "Re-apply full setup" option) re-runs the bootstrap against the stored `projectRef` without touching the manifest or `.env.local`. Use when a previous `env add` / `env relink` failed partway through — link, db push, vault upserts, functions deploy, or auth config died — and you want to resume without rewiring anything. Also applicable when auth providers / PostgREST config / vault secrets changed and need to be pushed.
+- **`--retry`** (or the interactive "Re-apply full setup" option) re-runs the bootstrap against the stored `projectRef` without touching the manifest or `.env.local`. Use when a previous `env add` failed partway through — link, db push, vault upserts, functions deploy, or auth config died — and you want to resume without rewiring anything. Also applicable when auth providers / PostgREST config / vault secrets changed and need to be pushed.
 
 If you just need to re-apply schemas and functions (no config changes), `npx agentlink-sh@latest env deploy <name>` is the lighter, idempotent option — it skips vault / PostgREST / auth. If you just need to re-push server-side config (no schemas / functions), `npx agentlink-sh@latest env config [secrets|db|auth|all] [env]` is lighter still — skips schemas, migrations, functions, and verify.
 
 Both preserve existing migrations.
+
+---
+
+### Project transferred to a new organization
+
+**Symptom:** After moving a Supabase project to a different organization, `env deploy` (or `env config`) keeps asking you to re-authenticate, or fails with 403s, because the `orgId` stored in `agentlink.json` no longer matches the project's current org.
+
+**Fix:** Newer CLIs self-heal. `env deploy`, `env config`, and `env add --retry` detect that the project's current org differs from the stored `orgId`, auto-update `agentlink.json` with a notice (`▲ Project <ref> moved to organization <org> — updated agentlink.json`), and re-pin the correct token. If no locally-stored token can see the project under its new org, the CLI prompts you to authorize the new org (interactive) or errors with a "re-run `env add`" hint (non-interactive).
+
+For CI, re-link the same project without re-entering the DB password:
+
+```bash
+npx agentlink-sh@latest env add <name> --project-ref <ref> --keep-password --non-interactive
+```
+
+`--keep-password` reuses the stored DB password instead of prompting. Without it, a non-interactive same-project relink updates the password from `SUPABASE_DB_PASSWORD`, or errors telling you to pass `--keep-password` or set `SUPABASE_DB_PASSWORD`.
 
 ---
 
@@ -260,7 +276,7 @@ npx agentlink-sh@latest env config secrets prod
 
 ### Re-login prompt despite valid stored tokens
 
-**Symptom:** `env add` / `env relink` shows "How would you like to authenticate?" even though you successfully logged in recently.
+**Symptom:** `env add` shows "How would you like to authenticate?" even though you successfully logged in recently.
 
 **Cause:** Pre-v0.21 CLIs had a credential-resolution gap that re-prompted for login even when valid per-org tokens were stored.
 

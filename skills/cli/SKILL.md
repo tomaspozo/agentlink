@@ -98,7 +98,7 @@ npx agentlink-sh@latest env add dev
 #     - Cancel
 ```
 
-If the user picks "Continue without full features," the CLI writes a minimal `agentlink.json` with `bare: true` and runs the full Supabase flow (OAuth → org pick → project create/select → credentials → `.env.local`). **No schemas applied, no server-side config (vault / PostgREST / auth hooks), no `AGENTS.md` touched** — the user's file is theirs. `env use` / `env add` / `env relink` all skip `writeAgentsMd` in bare mode.
+If the user picks "Continue without full features," the CLI writes a minimal `agentlink.json` with `bare: true` and runs the full Supabase flow (OAuth → org pick → project create/select → credentials → `.env.local`). **No schemas applied, no server-side config (vault / PostgREST / auth hooks), no `AGENTS.md` touched** — the user's file is theirs. `env use` / `env add` all skip `writeAgentsMd` in bare mode.
 
 What works in bare mode: `env add`/`use`/`remove`/`list`, `env config [secrets|db|auth|all]`, `db password`, `db url`. What's a no-op until the user adds content: `db apply` (skips with "supabase/database/ not found"), `env deploy` (picks up migrations/schemas/functions incrementally as they appear).
 
@@ -411,7 +411,7 @@ npx agentlink-sh@latest env use                         # Picker: local (if rele
 npx agentlink-sh@latest env deploy                      # Picker: registered cloud envs, preselects cloud.default
 
 # Explicit
-npx agentlink-sh@latest env add dev                     # Add/relink the cloud dev env
+npx agentlink-sh@latest env add dev                     # Add or relink the cloud dev env
 npx agentlink-sh@latest env add prod                    # Add the prod env
 npx agentlink-sh@latest env use local                   # Switch active env to local Docker
 npx agentlink-sh@latest env use dev                     # Switch active env to cloud dev
@@ -444,13 +444,11 @@ npx agentlink-sh@latest env add dev --retry             # Re-apply full setup (s
 
 After confirming, every subsequent `env deploy` / `db apply` / `db sql` / `db rebuild` prints an `▲ Active env: prod` banner at the top as a persistent reminder across terminals and agent sessions.
 
-`env add <name>` handles both new environments and relinking existing ones. When the env already exists, a recovery prompt offers three actions: **Re-apply full setup** (re-runs bootstrap — schemas, functions, secrets, PostgREST + auth config — against the same project; for mid-deploy failures or config changes), **Relink to a different Supabase project** (for deleted/wrong projects), or **Cancel**. The picker shows a dim hint above: _"If you just changed schemas or functions, cancel and run `npx agentlink-sh@latest env deploy <name>` instead."_ — steering users away from the heavier full-setup when the lighter deploy would do. `--retry` triggers the full-setup path non-interactively; `--project-ref <ref>` triggers relink.
+`env add <name>` handles both new environments and relinking existing ones. When the env already exists, a recovery prompt offers three actions: **Re-apply full setup** (re-runs bootstrap — schemas, functions, secrets, PostgREST + auth config — against the same project; for mid-deploy failures or config changes), **Relink to a different Supabase project** (for deleted/wrong projects, or a project transferred to a new org), or **Cancel**. The picker shows a dim hint above: _"If you just changed schemas or functions, cancel and run `npx agentlink-sh@latest env deploy <name>` instead."_ — steering users away from the heavier full-setup when the lighter deploy would do. When relinking lands on the **same** project already registered for the env (e.g. after a transfer), the CLI detects it and offers to keep the password on file or update it instead of forcing re-entry. `--retry` triggers the full-setup path non-interactively; `--project-ref <ref>` triggers relink; `--keep-password` reuses the stored DB password in non-interactive same-project relinks.
 
-`env add` / `env relink` run an **org-first picker** — the user picks the Supabase organization BEFORE the connect-existing-vs-create-new choice, so both paths browse the correct org's projects. The picker merges API-visible orgs with cached orgs from previous logins and offers "+ Authorize a different organization…" to add a new one. On token validation failure (401/403 — org membership revoked, integration restrictions), the CLI surfaces "▲ Stored credentials for \<org\> are no longer accepted" and kicks off re-auth automatically.
+`env add` runs an **org-first picker** — the user picks the Supabase organization BEFORE the connect-existing-vs-create-new choice, so both paths browse the correct org's projects. The picker merges API-visible orgs with cached orgs from previous logins and offers "+ Authorize a different organization…" to add a new one. On token validation failure (401/403 — org membership revoked, integration restrictions), the CLI surfaces "▲ Stored credentials for \<org\> are no longer accepted" and kicks off re-auth automatically.
 
 Initial project link can also be done during scaffold with the `--link` flag — see "Scaffold with `--link`" above.
-
-> `env relink` still works as a deprecated alias and prints a warning. Prefer `env add`.
 
 ### Picker visibility rules
 
@@ -462,7 +460,7 @@ The three env pickers behave slightly differently:
 
 ### Clean-tree gate
 
-`env add`, `env relink`, and `--force-update` abort if the git working tree is dirty — rollback on a dirty tree mixes user changes with AgentLink's writes and is painful to untangle. Bypass with `--allow-dirty` when needed. **`env deploy` does NOT gate on a clean tree** — `db apply` is idempotent, so re-running against a dirty tree is safe.
+`env add` and `--force-update` abort if the git working tree is dirty — rollback on a dirty tree mixes user changes with AgentLink's writes and is painful to untangle. Bypass with `--allow-dirty` when needed. **`env deploy` does NOT gate on a clean tree** — `db apply` is idempotent, so re-running against a dirty tree is safe.
 
 ---
 
@@ -472,12 +470,12 @@ Supabase OAuth tokens are **scoped to a single organization** — the consent sc
 
 **Where credentials live**: `~/.config/agentlink/credentials.json`, with the active tokens keyed by org ID under `oauth_by_org`. Each entry carries its own access token, refresh token, expiry, and cached org name/slug. A legacy single-org `oauth` slot is still read for back-compat; a PAT (`supabase_access_token`) set via `npx agentlink-sh@latest sb token set` is the final fallback for CI.
 
-**Where org IDs live on disk**: each `CloudEnvironment` in `agentlink.json` carries an optional `orgId`. Populated on `env add`, and lazily backfilled on older manifests when `env add`/`env relink`/`env use` runs. Silent when there's nothing to do (no API calls if all envs already have `orgId`).
+**Where org IDs live on disk**: each `CloudEnvironment` in `agentlink.json` carries an optional `orgId`. Populated on `env add`, and lazily backfilled on older manifests when `env add`/`env use` runs. Silent when there's nothing to do (no API calls if all envs already have `orgId`). A stale `orgId` (project transferred to a new org) is now auto-corrected on `env deploy` / `env config` / `env add --retry` — `agentlink.json` is updated with a notice and the correct token re-pinned.
 
 **Per-project credentials** live under `project_credentials[projectRef]` in the same file:
 
 - `db_password` — entered by the user at `env add` time. Not re-fetchable from the Management API, so we persist it. File mode 0600.
-- `secret_key` — the service-role-equivalent API key. Cached here so commands that need it don't re-fetch it on every invocation, and refreshed whenever the CLI fetches API keys (env add / use / relink / retry / config + scaffold). If the user rotates the key in the Supabase dashboard, the next CLI command picks up the fresh value and overwrites the cache.
+- `secret_key` — the service-role-equivalent API key. Cached here so commands that need it don't re-fetch it on every invocation, and refreshed whenever the CLI fetches API keys (env add / use / retry / config + scaffold). If the user rotates the key in the Supabase dashboard, the next CLI command picks up the fresh value and overwrites the cache.
 
 **What ends up in `.env.local`'s managed block** for cloud envs: `VITE_/NEXT_PUBLIC_SUPABASE_URL`, `VITE_/NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_DB_URL`, and `SUPABASE_SECRET_KEY` (server-only, no prefix — same rule as `SUPABASE_DB_URL`). All five are managed keys, so stale copies outside the block get stripped on every rewrite, preventing dev/prod env shadowing when the user runs `env use`.
 
