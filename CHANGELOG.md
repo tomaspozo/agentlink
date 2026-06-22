@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.2.4] - 2026-06-21
+
 ### Added
 
 - **New `skills/cli/references/resend.md` — the single source for Resend configuration.** Covers both consumers of Resend (Auth SMTP for the built-in mailer + `_hook_send_email`, and the transactional edge functions like `internal-invite-member`), now that Resend is configured **per cloud environment**: the FROM address is the source of truth in `agentlink.json` (`cloud.environments.<env>.resend.fromEmail`, hand-editable) while the API key lives only in that env's Supabase secret store and is **sticky** (untouched unless `--api-key` is passed). Documents the `--api-key`/`--email`/`--name` flags (positionals are deprecated), the first-time all-or-nothing rule, the cross-domain `--yes` confirmation, local resend-box vs cloud SMTP, recipes (change display name, rotate key, promote dev→prod), and the "email not sending" debug flow.
