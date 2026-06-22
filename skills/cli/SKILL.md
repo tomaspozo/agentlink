@@ -23,7 +23,7 @@ AgentLink does NOT install its own tooling, and it does NOT require an AI coding
 | **Supabase CLI** | Always | `supabase --version` | Point at https://agentlink.sh/start. |
 | **Docker** + **`psql`** | **Local dev** (`--local`) | `docker info`, `psql --version` | Required only for the local path; cloud-only scaffolds don't need them. |
 | **Supabase account** | **Cloud dev / prod** (`env add dev`/`prod`) | — (browser OAuth at `env add`) | The user must own the OAuth + project creation; the agent can't browse. |
-| **Resend account** | **Transactional email** (auth emails, product email) | — | Add the API key when wiring email; not needed to scaffold. |
+| **Resend account** | **Transactional email** (auth emails, product email) | — | Configured per-env: `resend setup --env <env> --api-key … --email …`. Not needed to scaffold. See [Resend setup](./references/resend.md). |
 
 > ⚠️ **If `node`/`npx` is absent, the scaffold command times out with no useful output.** That is NOT a signal to build the project by hand — it's a missing-Node signal. Surface it to the user, get Node installed, then run the CLI.
 
@@ -525,4 +525,5 @@ Always prefer the CLI (`--force-update`) first. Only fix manually when the CLI c
 - **[Upgrading](./references/upgrading.md)** — Moving an existing project onto a newer AgentLink version: `check` → `--dry-run` → `--force-update` → `check`, the base-snapshot file-level merge (fast-forward / customized / conflict / preserved), and the disposable `--skip-env --skip-install` reference for base reconstruction and diffing.
 - **[Migration System](./references/migration_system.md)** — Deep dive: two-tier migrations, how `db apply` / `db migrate` work, adding extensions
 - **[Troubleshooting](./references/troubleshooting.md)** — Common errors and manual fixes
+- **[Resend setup](./references/resend.md)** — Per-env transactional email: source-of-truth model (FROM in `agentlink.json`, key in the secret store), `--api-key`/`--email`/`--name` flags, sticky-key rules, recipes (change display name, rotate key), and the "email not sending" debug flow
 - **[Known Issues](./references/known_issues.md)** — Transient/upstream toolchain quirks (e.g. `supabase start` storage health-check flake on first start) and their workarounds — not AgentLink bugs

@@ -180,3 +180,4 @@ Load these as needed:
 - **[📦 Dependencies & Deployment](./references/dependencies.md)** — Per-function `deno.json`, import maps, bare specifiers, sub-path mapping, version pinning, `--use-api` deployment
 - **[📁 Edge Function Patterns](./references/edge_functions.md)** — Folder structure details, response helpers, feature-specific modules
 - **[🔑 API Key Migration](./references/api_key_migration.md)** — Migrate from legacy anon/service_role keys to new publishable/secret keys
+- **[📧 Resend setup](../cli/references/resend.md)** — For functions that send email (`internal-invite-member`, `internal-send-auth-email`, …): how `RESEND_API_KEY` / `RESEND_FROM_EMAIL` are configured per-env, local resend-box vs cloud, and the "email not sending" debug flow

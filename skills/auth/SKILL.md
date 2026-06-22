@@ -481,20 +481,19 @@ If these companions are available, defer email hook implementation and template 
 npx skills add resend/resend-skills resend/email-best-practices resend/react-email
 ```
 
+**How Resend is configured (per environment):** the FROM address is the source of truth in `agentlink.json` under `cloud.environments.<env>.resend.fromEmail`; the API key lives only in that env's Supabase secret store (never in git or `.env.local`). For the full model — secret vs non-secret, local resend-box vs cloud SMTP, the `--api-key`/`--email`/`--name` flags, and how to change just the display name — see **[Resend setup](../cli/references/resend.md)** in the CLI skill.
+
 ### Troubleshooting: emails not sending
 
-If a user reports that signup confirmations, password resets, or invitation emails aren't arriving, **check Resend configuration before debugging the edge function**. Run `npx agentlink-sh@latest check` and look at `resend_configured`:
+If a user reports that signup confirmations, password resets, or invitation emails aren't arriving, **verify Resend is configured for that environment before debugging the edge function.** Resend is per-env now — there's no `check` flag for it. Instead:
 
-- **`false`** — Resend isn't set up. Likely causes:
-  - `.env.local` still has the placeholder `RESEND_API_KEY=re_your_api_key_here` or `RESEND_FROM_EMAIL=Your App <noreply@yourdomain.com>`.
-  - Cloud mode: the project's edge-function secrets are missing `RESEND_API_KEY` (the values exist in `.env.local` but were never pushed to Supabase).
-
-  **Fix:** tell the user to run `npx agentlink-sh@latest resend setup`. It walks them through getting an API key + verified-domain FROM address, writes both to `.env.local`, and (in cloud mode) pushes them to the edge-function secrets. Don't try to debug the `internal-send-auth-email` or `internal-invite-member` functions until this is green — they silently no-op without these vars.
-
-- **`true`** — Resend is wired up. The issue is elsewhere. Check, in order:
-  1. Edge function logs in the Supabase dashboard for actual send errors (most common: unverified FROM domain).
-  2. The `pgmq.q_agentlink_tasks` queue has unprocessed messages (worker not running).
-  3. The auth hook URI in `auth.config` actually points at `_hook_send_email`.
+1. **Read `agentlink.json`** → `cloud.environments.<env>.resend`. If absent, Resend was never set up for that env.
+   - **Fix:** tell the user to run `npx agentlink-sh@latest resend setup --env <env>` (first time needs `--api-key` + `--email` together, or a saved default account). Don't debug `internal-send-auth-email` / `internal-invite-member` until this exists — they silently no-op without the secret.
+2. **Validate the secret is actually pushed** (debug): confirm the env's Supabase edge-function secret store contains `RESEND_API_KEY`. If the manifest has a `resend` block but the secret is missing (e.g. a manual dashboard wipe), re-run `resend setup --env <env>` to force a re-push.
+3. If both are green, the issue is elsewhere — check, in order:
+   1. Edge function logs in the Supabase dashboard for actual send errors (most common: FROM domain not verified under the API key's Resend account).
+   2. The `pgmq.q_agentlink_tasks` queue has unprocessed messages (worker not running).
+   3. The auth hook URI in `auth.config` actually points at `_hook_send_email`.
 
 ---
 
