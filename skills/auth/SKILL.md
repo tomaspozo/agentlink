@@ -469,6 +469,8 @@ workspace. No code path requires a UI picker.
 
 ## Email Hooks with Resend
 
+> This section covers **auth** emails only (signup confirm, magic link, recovery, email change) — the ones GoTrue triggers. For **app-driven** emails (welcome, "export ready", receipts, alerts), use the [notifications skill](../notifications/SKILL.md): `api._admin_send_email(...)` → `internal-send-email`, same queue, different path.
+
 Supabase Auth Hooks let you replace the default email sender with a custom Send Email hook backed by Resend. Three companion skills handle this integration:
 
 - **`resend-skills`** — Resend API integration and sending logic

@@ -9,6 +9,7 @@ skills:
   - auth
   - edge-functions
   - frontend
+  - notifications
 ---
 
 # App Development

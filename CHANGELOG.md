@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **New `notifications` skill — the entry point for transactional / non-auth email.** Teaches the builder how AgentLink sends app-driven email (welcome, "export ready", receipts, alerts) through the queue: `api._admin_send_email` → PGMQ → `internal-queue-worker` → `internal-send-email` → Resend, with `public.internal_logs_email` for idempotency/observability. `SKILL.md` covers the server-only send rule, the send API, the welcome sample + its confirmation-timing nuance, and cross-links auth (auth emails), cli (per-env Resend setup), edge-functions, and database. `references/transactional-email.md` is the deep dive: add-an-email recipe, the `internal_logs_*` convention, retry/dead-letter via `read_ct`, local resend-box testing, and troubleshooting. Registered in `agents/builder.md` (now 7 preloaded skills); `auth` and `edge-functions` SKILLs cross-link it so non-auth email is routed to the right place.
+
 ## [1.2.4] - 2026-06-21
 
 ### Added

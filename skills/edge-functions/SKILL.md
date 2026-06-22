@@ -24,7 +24,7 @@ pg_cron (e.g. every 1m)
        └─ edge fn: RPC to write results back
 ```
 
-For bursty or per-item work, enqueue into PGMQ (`api.agentlink_tasks`) and let `internal-queue-worker` drain it — cron just wakes the worker. See the [database](../database/SKILL.md) cron + queue conventions, and [recipes.md](../../agents/references/recipes.md) for full worked examples (scheduled URL pinger, queued email, periodic sync).
+For bursty or per-item work, enqueue into PGMQ (`api.agentlink_tasks`) and let `internal-queue-worker` drain it — cron just wakes the worker. See the [database](../database/SKILL.md) cron + queue conventions, and [recipes.md](../../agents/references/recipes.md) for full worked examples (scheduled URL pinger, queued email, periodic sync). For sending app-driven (non-auth) email specifically, use the [notifications](../notifications/SKILL.md) skill — it rides this same queue via `api._admin_send_email` → `internal-send-email`.
 
 ## IMPORTANT!
 
