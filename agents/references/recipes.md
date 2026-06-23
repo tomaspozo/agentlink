@@ -185,9 +185,10 @@ WHERE next_check_at <= now();
 invite RPC if the email provider is slow or down. This is the scaffolded flow; reuse it as the
 template for any "do a side-effect after a mutation" feature.
 
-**Flow:** `api.invitation_create` (client RPC) → `_internal_admin_create_invitation` enqueues an
-`internal-invite-member` task → `internal-queue-worker` drains it → `internal-invite-member`
-(edge function) sends the email via Resend.
+**Flow:** `api.invitation_create` (client RPC) → `_internal_admin_create_invitation` calls
+`api._admin_send_email('invite', …)` → that enqueues an `internal-send-email` task →
+`internal-queue-worker` drains it → `internal-send-email` (edge function) renders the `invite`
+template and sends it via Resend.
 
 ### 1. The mutation enqueues instead of emailing inline
 
@@ -196,14 +197,17 @@ The client RPC `api.invitation_create` (`SECURITY INVOKER`, guarded by
 `public._internal_admin_create_invitation`, which ends with:
 
 ```sql
-PERFORM api._admin_enqueue_task(
-  'internal-invite-member',
-  jsonb_build_object('email', v_email, 'token', v_token, 'tenant_name', v_tenant_name)
+PERFORM api._admin_send_email(
+  'invite',                              -- email_id → picks the template in internal-send-email
+  v_email,                               -- recipient
+  jsonb_build_object('token', v_token, 'tenant_name', v_tenant_name)
+  -- no dedupe_key: a resend must always deliver
 );
 ```
 
-The RPC returns immediately; the email happens out-of-band. `_admin_enqueue_task` also wakes
-`internal-queue-worker`, so there's no wait for the next cron tick.
+`api._admin_send_email` is the single front door for transactional email — it enqueues an
+`internal-send-email` task. The RPC returns immediately; the email happens out-of-band.
+The enqueue also wakes `internal-queue-worker`, so there's no wait for the next cron tick.
 
 ### 2. The worker drains and dispatches (scaffolded — don't rewrite it)
 
@@ -223,18 +227,23 @@ for (const msg of messages) {
 
 ### 3. The target function does the external work
 
-`internal-invite-member` (`auth: "secret"`, since only the worker/service_role invokes it) reads
-the payload and calls Resend. To add a *new* queued side-effect, write a new `internal-<thing>`
-edge function with `auth: "secret"`, register it in `config.toml`, and enqueue it by name — the
-worker dispatches it generically.
+`internal-send-email` (`auth: "secret"`, since only the worker/service_role invokes it) reads the
+payload, looks up the `email_id` (`'invite'`) in its `TEMPLATES` registry — defined in
+`internal-send-email/index.ts`, with templates under
+`supabase/functions/internal-send-email/_templates/` — renders that template with the params, and
+calls Resend. To send a *new* kind of transactional email, add a template file and register it in
+`TEMPLATES` keyed by its `email_id`, then call `api._admin_send_email('<email_id>', recipient,
+params)` — no new edge function needed. For a non-email queued side-effect, write a new
+`internal-<thing>` edge function with `auth: "secret"`, register it in `config.toml`, and enqueue
+it by name — the worker dispatches it generically.
 
 ### What goes where
 
 | Step | Layer | Why |
 |---|---|---|
 | Validate + authorize + write the invite | `api.invitation_create` (INVOKER) + `_internal_admin_create_invitation` (DEFINER) | Business logic + authz live in RPCs |
-| Hand off the email | `api._admin_enqueue_task` → PGMQ | Side-effect is decoupled so the mutation never blocks on it |
-| Send the email | `internal-invite-member` edge function (`auth: "secret"`) | Third-party API (Resend) = edge function |
+| Hand off the email | `api._admin_send_email('invite', …)` → PGMQ | Side-effect is decoupled so the mutation never blocks on it |
+| Render + send the email | `internal-send-email` edge function (`auth: "secret"`), `invite` template | Third-party API (Resend) = edge function; template chosen by `email_id` |
 
 ---
 

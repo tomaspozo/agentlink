@@ -399,7 +399,7 @@ UI and the `/accept-invite` flow.
 | `api.membership_update_role(p_membership_id uuid, p_role text)` | Change a member's role (rejects `'owner'`; rejects self) | `membership.update` |
 | `api.membership_remove(p_membership_id uuid)` | Remove a member (rejects self) | `membership.delete` |
 | `api.invitation_list()` | List pending invitations for the current tenant | `invitation.create` |
-| `api.invitation_create(p_email text, p_role text)` | Invite — enqueues `internal-invite-member` to send the email | `invitation.create` |
+| `api.invitation_create(p_email text, p_role text)` | Invite — sends the workspace-invite email via `api._admin_send_email('invite', …)` → `internal-send-email` | `invitation.create` |
 | `api.invitation_resend(p_invitation_id uuid)` | Re-enqueue the email for an existing invitation (token unchanged) | `invitation.create` |
 | `api.invitation_revoke(p_invitation_id uuid)` | Cancel a pending invitation | `invitation.delete` |
 | `api.invitation_accept(p_token uuid)` | Accept an invitation; idempotent on second click | (caller must be authenticated) |
@@ -490,7 +490,7 @@ npx skills add resend/resend-skills resend/email-best-practices resend/react-ema
 If a user reports that signup confirmations, password resets, or invitation emails aren't arriving, **verify Resend is configured for that environment before debugging the edge function.** Resend is per-env now — there's no `check` flag for it. Instead:
 
 1. **Read `agentlink.json`** → `cloud.environments.<env>.resend`. If absent, Resend was never set up for that env.
-   - **Fix:** tell the user to run `npx agentlink-sh@latest resend setup --env <env>` (first time needs `--api-key` + `--email` together, or a saved default account). Don't debug `internal-send-auth-email` / `internal-invite-member` until this exists — they silently no-op without the secret.
+   - **Fix:** tell the user to run `npx agentlink-sh@latest resend setup --env <env>` (first time needs `--api-key` + `--email` together, or a saved default account). Don't debug `internal-send-auth-email` / `internal-send-email` until this exists — they silently no-op without the secret.
 2. **Validate the secret is actually pushed** (debug): confirm the env's Supabase edge-function secret store contains `RESEND_API_KEY`. If the manifest has a `resend` block but the secret is missing (e.g. a manual dashboard wipe), re-run `resend setup --env <env>` to force a re-push.
 3. If both are green, the issue is elsewhere — check, in order:
    1. Edge function logs in the Supabase dashboard for actual send errors (most common: FROM domain not verified under the API key's Resend account).

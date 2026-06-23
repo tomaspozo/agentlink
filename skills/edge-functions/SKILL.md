@@ -115,7 +115,7 @@ Functions that are **never** called from client code — they're only enqueued v
 | Pattern | Examples | When to use |
 |---|---|---|
 | Bare name | `stripe-webhook`, `share-image`, `chart-render` | Anything a client (or external service) might hit. |
-| `internal-` prefix | `internal-send-auth-email`, `internal-invite-member`, `internal-queue-worker` | Queue workers, auth-hook handlers, cron-only functions, anything wrapped with `auth: "secret"` and never exposed to users. |
+| `internal-` prefix | `internal-send-auth-email`, `internal-send-email`, `internal-queue-worker` | Queue workers, auth-hook handlers, cron-only functions, anything wrapped with `auth: "secret"` and never exposed to users. |
 
 Three reasons:
 1. **Discoverability.** A reader scanning `supabase/functions/` sees the privilege boundary at a glance — no need to open `index.ts` to learn whether a function is user-facing.
@@ -180,4 +180,4 @@ Load these as needed:
 - **[📦 Dependencies & Deployment](./references/dependencies.md)** — Per-function `deno.json`, import maps, bare specifiers, sub-path mapping, version pinning, `--use-api` deployment
 - **[📁 Edge Function Patterns](./references/edge_functions.md)** — Folder structure details, response helpers, feature-specific modules
 - **[🔑 API Key Migration](./references/api_key_migration.md)** — Migrate from legacy anon/service_role keys to new publishable/secret keys
-- **[📧 Resend setup](../cli/references/resend.md)** — For functions that send email (`internal-invite-member`, `internal-send-auth-email`, …): how `RESEND_API_KEY` / `RESEND_FROM_EMAIL` are configured per-env, local resend-box vs cloud, and the "email not sending" debug flow
+- **[📧 Resend setup](../cli/references/resend.md)** — For functions that send email (`internal-send-email`, `internal-send-auth-email`, …): how `RESEND_API_KEY` / `RESEND_FROM_EMAIL` are configured per-env, local resend-box vs cloud, and the "email not sending" debug flow

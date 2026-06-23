@@ -172,6 +172,8 @@ When the user explicitly says "deploy to prod" / "ship this" / "run env deploy p
 | Background / scheduled / async work | `pg_cron` + PGMQ via the prebuilt admin functions | `database` |
 | Authorization | `auth_verify_access('<entity>.<action>')` guard in the RPC + RLS isolation | `auth` |
 | Multi-tenancy | scaffolded `tenants` / `memberships` / `invitations` | `auth` |
+| App-driven / transactional email (welcome, "export ready", receipts, alerts) | `api._admin_send_email(...)` → `internal-send-email` | `notifications` |
+| Supabase **Auth** email (signup confirm, magic link, recovery, email change) | Send Email hook (`_hook_send_email` → `internal-send-auth-email`) — **separate function** | `auth` |
 | Frontend | TanStack Start + `typedRpc` | `frontend` |
 
 ### RPC-First → `rpc` skill

@@ -532,13 +532,14 @@ BEGIN
 
   SELECT name INTO v_tenant_name FROM public.tenants WHERE id = p_tenant_id;
 
-  PERFORM api._admin_enqueue_task(
-    'internal-invite-member',
+  PERFORM api._admin_send_email(
+    'invite',
+    v_invitation.email,
     jsonb_build_object(
-      'email', v_invitation.email,
       'token', v_invitation.token::text,
       'tenant_name', v_tenant_name
     )
+    -- no dedupe_key: a resend must always deliver
   );
 
   RETURN jsonb_build_object(

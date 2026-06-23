@@ -6,7 +6,7 @@ depend on it:
 - **Auth SMTP** — Supabase's built-in mailer (signup confirmation, password
   reset, magic link) routed through Resend's SMTP, plus the `_hook_send_email`
   auth hook.
-- **Transactional edge functions** — `internal-invite-member`,
+- **Transactional edge functions** — `internal-send-email`,
   `internal-approval-decision`, `internal-send-auth-email`, etc., which call
   Resend directly and read `RESEND_API_KEY` / `RESEND_FROM_EMAIL`.
 

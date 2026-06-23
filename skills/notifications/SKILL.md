@@ -96,6 +96,20 @@ confirmation email. Customize the copy in `_templates/welcome.tsx`, or remove th
 > user confirms, move the trigger to `AFTER UPDATE OF email_confirmed_at ON auth.users`.
 > See [transactional-email.md](references/transactional-email.md) for the full recipe.
 
+## Migrating projects scaffolded before the unified path (`internal-invite-member`)
+
+Older AgentLink projects shipped a **dedicated `internal-invite-member` edge function** for workspace invites (enqueued directly from `_internal_admin_create_invitation` / `_internal_admin_resend_invitation`). New scaffolds fold that into this path — the **`invite`** entry in `internal-send-email`'s registry — so all app email goes through one function.
+
+If you're in an older project and the user wants the consolidated setup, **recommend migrating, but confirm with the user first** — it removes an edge function and (on cloud) leaves an orphaned deployment to delete. Steps:
+
+1. Add an `invite` entry to `internal-send-email`'s `TEMPLATES` registry (subject + render building the `/accept-invite?token=…` URL from `{ token, tenant_name }`); move `internal-invite-member/_templates/team-invite.tsx` to `internal-send-email/_templates/`.
+2. Repoint `public._internal_admin_create_invitation` and `_internal_admin_resend_invitation` to `api._admin_send_email('invite', email, jsonb_build_object('token', …, 'tenant_name', …))`. **Pass no `dedupe_key`** — resending an invitation must deliver a fresh email.
+3. Delete `supabase/functions/internal-invite-member/` and remove its `[functions.internal-invite-member]` block from `supabase/config.toml`.
+4. `npx agentlink-sh@latest db apply`, then `db migrate <name>` and deploy.
+5. **Cloud only:** delete the now-orphaned deployed function — `supabase functions delete internal-invite-member`.
+
+The same shape applies to any other bespoke per-email function (e.g. an app's `internal-approval-decision`): move its template into the registry, repoint its enqueue to `api._admin_send_email`, delete the function. Auth emails are the exception — they stay on the auth hook.
+
 ## Deeper reference
 
 - **[references/transactional-email.md](references/transactional-email.md)** — full
