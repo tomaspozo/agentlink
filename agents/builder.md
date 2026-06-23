@@ -212,6 +212,15 @@ Background work runs on `pg_cron` and `pgmq` — no external job runners. **Reus
 
 Canonical flow for scheduled work against the outside world: `pg_cron → _internal_admin_call_edge_function('internal-<worker>') → edge fn: RPC fetch the due set → fetch each URL → RPC write results back`. For bursty/per-item work, enqueue with `api._admin_enqueue_task` and let `internal-queue-worker` drain it. See **[references/recipes.md](./references/recipes.md)** for full worked examples.
 
+### Email: two paths, never crossed → `notifications` / `auth` skills
+
+Both ride the **same** queue + worker, but they are **different functions for different triggers** — pick by who originates the send:
+
+- **App-driven / transactional** (welcome, "export ready", "payment failed", receipts, digests, alerts) → `notifications` skill. Fired by **your** code or a DB event via `api._admin_send_email('<email_id>', recipient, params, dedupe_key)`, rendered by the **`internal-send-email`** function. This is the only path you build for custom email — register a template, call the one RPC.
+- **Supabase Auth** (signup confirm, magic link, recovery, email change) → `auth` skill. Fired by **GoTrue**, not your code, through the Send Email hook **`_hook_send_email` → `internal-send-auth-email`** — a **separate function** with its own templates. Don't route auth email through `api._admin_send_email`, and don't add auth templates to the `internal-send-email` registry.
+
+When in doubt: *does your code decide to send it?* → notifications. *Does an auth event trigger it?* → auth hook. The scaffolded `welcome` email is deliberately a notification (queue), **not** an auth hook, so it never collides with the signup confirmation.
+
 ### Authorization (four layers) → `auth` skill
 
 Schema isolation is the table boundary (only `api.*` is exposed). **Permission/action authz lives in RPC guards**: every mutating `api.*` RPC calls `public.auth_verify_access('<entity>.<action>')` as its first statement (raises HTTP 403). **RLS is isolation-only** (`tenant_id`/ownership) defense-in-depth on every table — never check permissions in RLS. The frontend `useHasPermission()` / route guards are UX only. Adding a capability = seed the permission key + guard the RPC + gate the frontend.
