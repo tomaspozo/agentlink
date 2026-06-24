@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-06-24
+
 ### Added
 
 - **`database` skill: "deprecate, don't delete" rule for deployed cron/storage resources.** The imperative deploy step only applies files that are present and never reconciles deletions (unlike `rbac/`), so removing a `cron/` or `storage/` file leaves the resource live in an already-deployed DB. New rule in `skills/database/SKILL.md`: rename to `deprecated-<name>.sql`, comment out the original definition, then for cron append an idempotent `cron.unschedule(jobid) FROM cron.job WHERE jobname='<name>'` (the bare `unschedule` throws when absent and rolls back the cron folder); for storage emit no SQL and delete the bucket from the dashboard (objects cascade), since `DELETE FROM storage.buckets` orphans objects that keep counting against Storage usage.
