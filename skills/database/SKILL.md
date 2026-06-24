@@ -92,6 +92,20 @@ On deploy they go out with every `env deploy`. Concretely:
 | A storage **bucket** or its `storage.objects` **policies** | `storage/<name>.sql` | `db apply` or `db resources` |
 | An **RBAC permission** key, or a role→permission **binding** | `rbac/permissions.sql`, `rbac/role_permissions.sql` | `db apply` or `db resources` |
 
+**🛑 Removing an already-deployed `cron/` or `storage/` resource — deprecate the file, don't just delete it.** Deleting a `cron/` or `storage/` `.sql` file does **nothing** to a database that already has the resource: the imperative step only *applies* the files present — unlike `rbac/`, it never reconciles deletions. The job keeps firing / the bucket keeps existing on local, dev, **and prod**. Use a **tombstone** so the removal travels through the normal deploy path:
+
+1. Rename `<name>.sql` → `deprecated-<name>.sql` (one resource per file, so the file *is* the resource).
+2. Comment out the original `cron.schedule(...)` / bucket `INSERT` + policies so the imperative step stops re-creating it.
+3. Add a header line: *why* it's deprecated, and "safe to delete this file after the next release, once every env has deployed past it."
+4. Then, **by resource type**:
+   - **Cron** — append an **idempotent** unschedule. It re-runs on every deploy, so it must no-op when the job is already gone. The bare `cron.unschedule('<name>')` **THROWS** when absent → rolls back the whole cron folder on the next run; use the `jobid` form instead:
+     ```sql
+     SELECT cron.unschedule(jobid) FROM cron.job WHERE jobname = '<name>';
+     ```
+     This removes the job from every env on the next `db apply` / `env deploy`, then cleanly no-ops.
+   - **Storage** — add **NO removal SQL**. Deleting a bucket in SQL (`DELETE FROM storage.buckets`) orphans its objects, which keep counting against the user's Supabase **Storage usage** (a common, hard-to-diagnose billing/support issue). Instead, **tell the user** to delete the bucket from the Supabase **dashboard** (Storage → Buckets) so its objects cascade properly. The leftover `storage.objects` policy is inert once the bucket is gone (it filters on a `bucket_id` that matches no rows) — leave it, or have the user remove it in the dashboard too.
+5. Apply the tombstone like any imperative change (`db apply` or `db resources`; it also ships with every `env deploy`). Once every long-lived env has deployed it, the `deprecated-*` file is safe to delete.
+
 **Two different "permissions" — don't confuse them:**
 - A **GRANT** on a table/function (who may `SELECT` / `EXECUTE` it) is **DDL** → it lives in that object's own `schemas/<schema>/{tables,functions}/<obj>.sql` file and applies with **`db apply`**. Changing who can run an RPC at the SQL level = edit its function file + `db apply`.
 - The **RBAC permission model** (the `auth_verify_access('entity.action')` keys your RPCs check, and their role bindings) is **reference data** → it lives in `rbac/permissions.sql` + `rbac/role_permissions.sql` and applies with **`db resources`** (or `db apply` / `env deploy`). Adding a new gated capability = add the permission key + binding here, *and* call `auth_verify_access(...)` in the RPC (which is a schema-file change).
