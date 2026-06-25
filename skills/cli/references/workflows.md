@@ -39,7 +39,7 @@ npx agentlink-sh@latest . --skip-env
 
 This lays down the full project — templates, schemas, config, frontend, plugin, companion skills — and installs deps. No Supabase touching. Then hand off:
 
-> "Scaffold done. Open a terminal in `<path>` and run `npx agentlink-sh@latest env add dev` to create the Supabase project. I can't do that step — it needs a browser for OAuth."
+> "Scaffold done. Open a terminal in `<path>` and run `pnpm exec agentlink env add dev` to create the Supabase project. I can't do that step — it needs a browser for OAuth."
 
 The scaffolded `AGENTS.md` already surfaces this as a prominent "▶ Next step" callout, so the next session of Claude Code (or a different agent) will see it immediately.
 
@@ -97,7 +97,7 @@ Requires Docker running + `psql` installed. Prompts at `agentlink.sh/start` if m
 **Commands**
 
 ```bash
-npx agentlink-sh@latest env add prod
+pnpm exec agentlink env add prod
 ```
 
 Interactive flow:
@@ -128,11 +128,11 @@ Interactive flow:
 **Commands**
 
 ```bash
-npx agentlink-sh@latest env use              # Interactive picker (✓ marks the current env)
-npx agentlink-sh@latest env use local        # Local Docker
-npx agentlink-sh@latest env use dev          # Cloud dev
-npx agentlink-sh@latest env use prod         # Cloud prod — requires y/N confirm
-npx agentlink-sh@latest env list             # See what's configured
+pnpm exec agentlink env use              # Interactive picker (✓ marks the current env)
+pnpm exec agentlink env use local        # Local Docker
+pnpm exec agentlink env use dev          # Cloud dev
+pnpm exec agentlink env use prod         # Cloud prod — requires y/N confirm
+pnpm exec agentlink env list             # See what's configured
 ```
 
 `env use` rewrites the managed block of `.env.local` so `db apply` / `supabase functions serve` / `db sql` hit the right env, and persists `manifest.cloud.default` so subsequent commands resolve consistently. User-added env vars outside the block are preserved.
@@ -141,9 +141,9 @@ npx agentlink-sh@latest env list             # See what's configured
 
 **Watch-outs**
 
-- `env use prod` is **allowed** but requires explicit confirmation — the CLI prints an amber warning (`▲ Using prod as your active dev environment is NOT recommended`) and prompts `Continue? (y/N)` with default No. If the user just wants to deploy to prod without making it their active env, suggest `npx agentlink-sh@latest env deploy prod` instead (a one-shot action that doesn't touch `.env.local` or `cloud.default`).
+- `env use prod` is **allowed** but requires explicit confirmation — the CLI prints an amber warning (`▲ Using prod as your active dev environment is NOT recommended`) and prompts `Continue? (y/N)` with default No. If the user just wants to deploy to prod without making it their active env, suggest `pnpm exec agentlink env deploy prod` instead (a one-shot action that doesn't touch `.env.local` or `cloud.default`).
 - Once `cloud.default === "prod"`, every subsequent `env deploy` / `db apply` / `db sql` / `db rebuild` prints an `▲ Active env: prod` banner at the top. Tell users that's expected — it's a persistent reminder that their next data-touching command hits production.
-- The `env use` picker hides `local` on cloud-only projects (projects scaffolded without `--local`, where the active env isn't already local). If the user insists on jumping to local Docker anyway, explicit `npx agentlink-sh@latest env use local` still works.
+- The `env use` picker hides `local` on cloud-only projects (projects scaffolded without `--local`, where the active env isn't already local). If the user insists on jumping to local Docker anyway, explicit `pnpm exec agentlink env use local` still works.
 - If switching to `local`, the user still needs to run `supabase start` to bring up the Docker stack.
 
 ---
@@ -161,24 +161,24 @@ npx agentlink-sh@latest env list             # See what's configured
 
 ```bash
 # Interactive picker — preselects cloud.default
-npx agentlink-sh@latest env deploy
+pnpm exec agentlink env deploy
 
 # Explicit target
-npx agentlink-sh@latest env deploy dev
-npx agentlink-sh@latest env deploy prod       # y/N confirm required
+pnpm exec agentlink env deploy dev
+pnpm exec agentlink env deploy prod       # y/N confirm required
 
 # Preview before shipping
-npx agentlink-sh@latest env deploy prod --dry-run
+pnpm exec agentlink env deploy prod --dry-run
 
 # CI-friendly
-npx agentlink-sh@latest env deploy prod --yes --non-interactive
+pnpm exec agentlink env deploy prod --yes --non-interactive
 ```
 
 > **Prod is migrations-only — capture schema changes as a migration FIRST.** On `prod`, `env deploy` does **not** run `db apply` (step 2 below is skipped). So a schema change you made and `db apply`'d on **dev** does **not** reach prod just by running `env deploy prod` — it reaches prod only through a committed **migration**. The repeatable loop is:
 >
 > 1. Edit schema files under `supabase/database/`, `db apply` to **dev**, verify.
-> 2. `npx agentlink-sh@latest db migrate <name>` — generate the migration, **review the SQL**, commit it (with the schema files).
-> 3. `npx agentlink-sh@latest env deploy prod` (explicit user approval) — replays the migration on prod (step 1 below) + deploys functions.
+> 2. `pnpm exec agentlink db migrate <name>` — generate the migration, **review the SQL**, commit it (with the schema files).
+> 3. `pnpm exec agentlink env deploy prod` (explicit user approval) — replays the migration on prod (step 1 below) + deploys functions.
 > 4. Verify prod.
 >
 > Skip step 2 and `env deploy prod` pushes nothing new (db push replays only already-committed migrations; db apply is skipped on prod).
@@ -193,7 +193,7 @@ If ALL three directories are missing (bare project with an empty `supabase/` tre
 
 What it does NOT do — belongs elsewhere:
 
-- **Vault secrets / PostgREST config / auth config.** If `supabase/config.toml` or auth providers changed, use `npx agentlink-sh@latest env add <name>` → "Re-apply full setup" for the full reset, or `npx agentlink-sh@latest env config [secrets|db|auth|all] [env-name]` for a targeted push of just the drifted subsystem. `env config` is cloud-only, idempotent, and works on bare projects. Positional env name matches the rest of the env group (`env config secrets prod`).
+- **Vault secrets / PostgREST config / auth config.** If `supabase/config.toml` or auth providers changed, use `pnpm exec agentlink env add <name>` → "Re-apply full setup" for the full reset, or `pnpm exec agentlink env config [secrets|db|auth|all] [env-name]` for a targeted push of just the drifted subsystem. `env config` is cloud-only, idempotent, and works on bare projects. Positional env name matches the rest of the env group (`env config secrets prod`).
 - **Generate a migration file.** Use `db migrate <name>` explicitly when you want an auditable artifact committed to `supabase/migrations/`.
 - **Clean-tree gate.** `env deploy` is safe on dirty trees — no migration diff is generated. (The clean-tree gate still applies to `env add` / `--force-update`.)
 - **Data-risk analysis.** If the user wants that, point them at `db migrate` + manual review of the generated SQL.
@@ -201,7 +201,7 @@ What it does NOT do — belongs elsewhere:
 **Watch-outs**
 
 - **Deploy does NOT change the active env.** `env use dev && env deploy prod` leaves the active env on dev. If the user wants to do follow-up queries against prod, they need `env use prod` explicitly.
-- The top-level `npx agentlink-sh@latest deploy` command has been removed — the CLI errors with a pointer at `npx agentlink-sh@latest env deploy` if someone tries the old form. Same for `npx agentlink-sh@latest retry-deploy`.
+- The top-level `npx agentlink-sh@latest deploy` command has been removed — the CLI errors with a pointer at `pnpm exec agentlink env deploy` if someone tries the old form. Same for `npx agentlink-sh@latest retry-deploy`.
 - The agent never runs `env deploy` autonomously. Point the user at the command; don't execute it yourself.
 
 ---
@@ -223,37 +223,37 @@ What it does NOT do — belongs elsewhere:
 ```bash
 # Recovery A: mid-bootstrap failure OR config drift against the SAME project
 # (Re-runs schemas + functions + vault + PostgREST + auth + verify)
-npx agentlink-sh@latest env add dev --retry
-npx agentlink-sh@latest env add prod --retry
+pnpm exec agentlink env add dev --retry
+pnpm exec agentlink env add prod --retry
 
 # Recovery B: just need to re-apply schemas + functions (lighter)
-npx agentlink-sh@latest env deploy dev
-npx agentlink-sh@latest env deploy prod
+pnpm exec agentlink env deploy dev
+pnpm exec agentlink env deploy prod
 
 # Recovery C: relink to a different project (or the project was deleted)
-npx agentlink-sh@latest env add dev          # interactive — pick "Relink to a different Supabase project"
-npx agentlink-sh@latest env add dev --project-ref <new-ref> --non-interactive
+pnpm exec agentlink env add dev          # interactive — pick "Relink to a different Supabase project"
+pnpm exec agentlink env add dev --project-ref <new-ref> --non-interactive
 # Relinking to the SAME project (e.g. transferred to a new org) detects it and
 # offers to keep the password on file (or --keep-password in non-interactive/CI).
 
 # Recovery D: stale DB URL
-npx agentlink-sh@latest db url               # See current vs expected
-npx agentlink-sh@latest db url --fix         # Rewrite .env.local with the right pooler URL
+pnpm exec agentlink db url               # See current vs expected
+pnpm exec agentlink db url --fix         # Rewrite .env.local with the right pooler URL
 
 # Recovery E: just need to push config changes (no schema or function drift)
 # `env config` is the replacement for the removed `config apply` command.
 # Three independent subsystems; pick the one that drifted or use `all`.
 # Shape: env config [subcommand] [env-name] — both positional, --env flag still accepted.
-npx agentlink-sh@latest env config secrets prod   # Postgres Vault (SUPABASE_URL / publishable / secret) on prod
-npx agentlink-sh@latest env config auth dev       # Only auth config (hooks + signup) on dev
-npx agentlink-sh@latest env config db prod        # Only PostgREST (expose api schema) on prod
-npx agentlink-sh@latest env config all prod       # All three on prod (prompts for y/N)
-npx agentlink-sh@latest env config prod           # Env=prod, subcommand picker runs
-npx agentlink-sh@latest env config                # Both pickers (subcommand + env)
+pnpm exec agentlink env config secrets prod   # Postgres Vault (SUPABASE_URL / publishable / secret) on prod
+pnpm exec agentlink env config auth dev       # Only auth config (hooks + signup) on dev
+pnpm exec agentlink env config db prod        # Only PostgREST (expose api schema) on prod
+pnpm exec agentlink env config all prod       # All three on prod (prompts for y/N)
+pnpm exec agentlink env config prod           # Env=prod, subcommand picker runs
+pnpm exec agentlink env config                # Both pickers (subcommand + env)
 
 # Recovery F: broken migration FILES (duplicates, timestamp conflicts)
 #   db rebuild does NOT fix migration files — delete the bad ones, then:
-npx agentlink-sh@latest db migrate <name>          # regenerate a clean migration
+pnpm exec agentlink db migrate <name>          # regenerate a clean migration
 #   (for a remote/local version mismatch use `supabase migration repair` instead)
 ```
 
@@ -280,7 +280,7 @@ npx agentlink-sh@latest db migrate <name>          # regenerate a clean migratio
 
 ```bash
 # Already scaffolded, just need to register an env
-npx agentlink-sh@latest env add dev --project-ref <ref>
+pnpm exec agentlink env add dev --project-ref <ref>
 
 # Not scaffolded yet, but have all credentials
 npx agentlink-sh@latest <name> --link \
@@ -297,7 +297,7 @@ npx agentlink-sh@latest <name> --link \
 
 ## 7. Bare mode — Supabase env management on an existing codebase
 
-**Trigger:** user says "I already have a Next.js/Vite app, I just want AgentLink to manage my Supabase env," "don't scaffold anything, just wire up the env," "use AgentLink's env commands on my existing project," or runs `npx agentlink-sh@latest env add` in a directory that has no `agentlink.json`.
+**Trigger:** user says "I already have a Next.js/Vite app, I just want AgentLink to manage my Supabase env," "don't scaffold anything, just wire up the env," "use AgentLink's env commands on my existing project," or runs `pnpm exec agentlink env add` in a directory that has no `agentlink.json`.
 
 **Questions to ask**
 
@@ -309,7 +309,7 @@ npx agentlink-sh@latest <name> --link \
 
 ```bash
 cd my-existing-app
-npx agentlink-sh@latest env add dev
+pnpm exec agentlink env add dev
 ```
 
 Interactive flow when no `agentlink.json` is present:
@@ -348,14 +348,14 @@ Interactive flow when no `agentlink.json` is present:
 **Upgrade path**
 
 ```bash
-npx agentlink-sh@latest --force-update
+pnpm exec agentlink --force-update
 ```
 
 Converts a bare project to the full scaffold: re-applies template files, generates migrations, runs the setup SQL. Requires a clean git tree.
 
 **Watch-outs**
 
-- Bare mode does NOT run the cloud bootstrap at `env add` time — the Supabase project is created but vault secrets / PostgREST / auth config are NOT applied. If the user later wants any of those, `npx agentlink-sh@latest env config all [env]` applies them without touching schemas.
+- Bare mode does NOT run the cloud bootstrap at `env add` time — the Supabase project is created but vault secrets / PostgREST / auth config are NOT applied. If the user later wants any of those, `pnpm exec agentlink env config all [env]` applies them without touching schemas.
 - The `bare: true` flag in `agentlink.json` is orthogonal to `mode`. The first `env add dev` flips `mode` to `"cloud"`, but `bare` persists — that's how `env use` etc. continue to respect the bare boundary across every subsequent command.
 - On bare projects, `env config auth` will apply `AUTH_CONFIG` with hook references to pg-functions that don't exist (`_hook_before_user_created`, `_hook_send_email`). Supabase's API returns a clear error — at that point the user either upgrades via `--force-update` or drops in their own hook functions first.
 
@@ -373,10 +373,10 @@ Converts a bare project to the full scaffold: re-applies template files, generat
 
 ```bash
 # Interactive — shows the dashboard reset link, then prompts for the new password
-npx agentlink-sh@latest db password
+pnpm exec agentlink db password
 
 # Non-interactive
-npx agentlink-sh@latest db password "new-password-here"
+pnpm exec agentlink db password "new-password-here"
 ```
 
 **Watch-outs**
@@ -399,15 +399,15 @@ npx agentlink-sh@latest db password "new-password-here"
 
 ```bash
 # Generate a GitHub Actions workflow for this env
-npx agentlink-sh@latest env add prod --setup-ci
-npx agentlink-sh@latest env add dev --setup-ci
+pnpm exec agentlink env add prod --setup-ci
+pnpm exec agentlink env add dev --setup-ci
 ```
 
 The generator writes `.github/workflows/deploy-<env>.yml` using `env deploy <name> --yes --non-interactive`. Invoke exactly this form in custom CI workflows too:
 
 ```yaml
 - name: Deploy to prod
-  run: npx agentlink-sh@latest env deploy prod --yes --non-interactive
+  run: pnpm exec agentlink env deploy prod --yes --non-interactive
   env:
     SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
     SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
@@ -434,14 +434,14 @@ The generator writes `.github/workflows/deploy-<env>.yml` using `env deploy <nam
 
 ```bash
 # Active env (cloud.default if cloud, else local)
-npx agentlink-sh@latest db backup
+pnpm exec agentlink db backup
 
 # Explicit target — most useful before touching prod
-npx agentlink-sh@latest db backup --env prod
-npx agentlink-sh@latest db backup --env dev
+pnpm exec agentlink db backup --env prod
+pnpm exec agentlink db backup --env dev
 
 # Override URL entirely (e.g., backing up a non-registered project)
-npx agentlink-sh@latest db backup --db-url "postgresql://postgres.[ref]:[pwd]@aws-0-[region].pooler.supabase.com:5432/postgres"
+pnpm exec agentlink db backup --db-url "postgresql://postgres.[ref]:[pwd]@aws-0-[region].pooler.supabase.com:5432/postgres"
 ```
 
 What it does:
@@ -464,6 +464,6 @@ What it does:
 
 ## What the agent does NOT do
 
-- **Does not deploy.** Always point users at `npx agentlink-sh@latest env deploy` (interactive) or `npx agentlink-sh@latest env deploy <dev|prod>` (explicit).
+- **Does not deploy.** Always point users at `pnpm exec agentlink env deploy` (interactive) or `pnpm exec agentlink env deploy <dev|prod>` (explicit).
 - **Does not install tooling.** If Claude Code / Supabase CLI / psql is missing, point at `https://agentlink.sh/start`.
 - **Does not create envs beyond dev/prod.** If the user asks for `staging`, explain the fixed model and ask what they actually need (usually a separate `prod` cloud project under a different org serves the "staging" role).

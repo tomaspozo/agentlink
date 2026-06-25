@@ -80,7 +80,7 @@ Three steps, all mirroring the shipped `welcome` example:
    from the server-side event that should trigger it (a trigger, an `_internal_admin_*`
    function, or a `secret`-auth edge function).
 
-Then `npx agentlink-sh@latest db apply` (for any new SQL) and deploy the function.
+Then `pnpm exec agentlink db apply` (for any new SQL) and deploy the function.
 
 ## The sample: welcome email
 
@@ -105,7 +105,7 @@ If you're in an older project and the user wants the consolidated setup, **recom
 1. Add an `invite` entry to `internal-send-email`'s `TEMPLATES` registry (subject + render building the `/accept-invite?token=…` URL from `{ token, tenant_name }`); move `internal-invite-member/_templates/team-invite.tsx` to `internal-send-email/_templates/`.
 2. Repoint `public._internal_admin_create_invitation` and `_internal_admin_resend_invitation` to `api._admin_send_email('invite', email, jsonb_build_object('token', …, 'tenant_name', …))`. **Pass no `dedupe_key`** — resending an invitation must deliver a fresh email.
 3. Delete `supabase/functions/internal-invite-member/` and remove its `[functions.internal-invite-member]` block from `supabase/config.toml`.
-4. `npx agentlink-sh@latest db apply`, then `db migrate <name>` and deploy.
+4. `pnpm exec agentlink db apply`, then `db migrate <name>` and deploy.
 5. **Cloud only:** delete the now-orphaned deployed function — `supabase functions delete internal-invite-member`.
 
 The same shape applies to any other bespoke per-email function (e.g. an app's `internal-approval-decision`): move its template into the registry, repoint its enqueue to `api._admin_send_email`, delete the function. Auth emails are the exception — they stay on the auth hook.

@@ -221,7 +221,7 @@ After completing all steps, run through this checklist:
 - [ ] No references to `VITE_SUPABASE_ANON_KEY` in codebase
 - [ ] `verify_jwt = false` set for all functions in `config.toml`
 - [ ] Edge function secrets configured (`npx supabase secrets list`)
-- [ ] Vault secrets present (`npx agentlink-sh@latest check` passes)
+- [ ] Vault secrets present (`pnpm exec agentlink check` passes)
 - [ ] Seed file updated with new vault secret names
 - [ ] All edge functions use `withSupabase` wrapper (no manual `createClient`)
 - [ ] Old shared client files removed

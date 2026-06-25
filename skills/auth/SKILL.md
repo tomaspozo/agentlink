@@ -95,7 +95,7 @@ through per function.
 
 ### Profile creation on sign-up
 
-> **Scaffolded by the CLI.** Profiles, tenants, and memberships are created automatically on signup via the `_internal_admin_handle_new_user` trigger. The SQL below is for reference — it already exists in your project. If missing, run `npx agentlink-sh@latest --force-update` — do not recreate manually.
+> **Scaffolded by the CLI.** Profiles, tenants, and memberships are created automatically on signup via the `_internal_admin_handle_new_user` trigger. The SQL below is for reference — it already exists in your project. If missing, run `pnpm exec agentlink --force-update` — do not recreate manually.
 
 User metadata belongs in a `profiles` table, not in Supabase Auth metadata. The trigger creates the profile and — for direct signups — a default tenant + owner membership. Invited users (created via `generateLink({ type: 'invite' })`) only get a profile; `invitation_accept()` handles adding them to the inviter's tenant. JWT claims (`tenant_id`, `tenant_role`, `permissions`) are populated automatically on every JWT mint by the custom access-token hook (`_hook_custom_access_token`) — the trigger doesn't touch `auth.users.raw_app_meta_data`:
 
@@ -182,7 +182,7 @@ CREATE TRIGGER trg_auth_users_new_user
 > row. In that case it calls `refreshSession()` once, which re-runs the hook
 > against the now-present membership.
 
-**Need to customize signup logic?** If the app requires additional work on signup (e.g., creating rows in app-specific tables, syncing with external services), edit `supabase/database/schemas/public/functions/_internal_admin_handle_new_user.sql` and modify the function body. Keep the same function name. The update flow preserves your edits to this file; other managed functions live in their own files and keep receiving CLI updates. Apply with `npx agentlink-sh@latest db apply`.
+**Need to customize signup logic?** If the app requires additional work on signup (e.g., creating rows in app-specific tables, syncing with external services), edit `supabase/database/schemas/public/functions/_internal_admin_handle_new_user.sql` and modify the function body. Keep the same function name. The update flow preserves your edits to this file; other managed functions live in their own files and keep receiving CLI updates. Apply with `pnpm exec agentlink db apply`.
 
 ### Profile RPCs
 
@@ -245,7 +245,7 @@ RLS is always enabled on every table. Policies filter rows based on who's asking
 Always name policies with bare snake_case identifiers following `{role}_{action}_{scope}` (e.g., `users_read_own_charts`, `admins_delete_memberships`). Never wrap a policy name in double quotes, never include spaces, mixed case, or reserved words.
 
 ```sql
--- ❌ NOT THIS — quoted name with spaces breaks `npx agentlink-sh@latest db apply`
+-- ❌ NOT THIS — quoted name with spaces breaks `pnpm exec agentlink db apply`
 CREATE POLICY "Members can read own tenant" ON public.tenants ...
 
 -- ✅ THIS
@@ -328,7 +328,7 @@ USING (public._auth_chart_can_read(id));
 
 ## Multi-Tenancy Overview
 
-> **Scaffolded by the CLI.** The CLI scaffolds a complete multi-tenancy model including tables, RLS policies, auth helpers, and API RPCs. If missing, run `npx agentlink-sh@latest --force-update` — do not recreate manually. The agent builds application-specific tables on top of this foundation.
+> **Scaffolded by the CLI.** The CLI scaffolds a complete multi-tenancy model including tables, RLS policies, auth helpers, and API RPCs. If missing, run `pnpm exec agentlink --force-update` — do not recreate manually. The agent builds application-specific tables on top of this foundation.
 
 The multi-tenancy model uses these tables:
 
@@ -420,7 +420,7 @@ table policies are isolation-only — they no longer check the permission.
 
 Do all of these (the guard alone, or the frontend alone, is never enough):
 
-1. **Declare the permission** in `supabase/database/rbac/permissions.sql` and bind it to roles in `supabase/database/rbac/role_permissions.sql` (each file fills the `rbac_desired` staging table — just add `VALUES` rows). **Apply it**: `npx agentlink-sh@latest db apply` (applies rbac alongside schema) or `db resources` (rbac + cron + storage only); both also run on every `env deploy`. The reconcile converges the DB to exactly the declared set — **full reconcile**: removing a row REVOKES that permission on every env (incl. prod). NB: these rows are reference data in `rbac/`, *not* in the table files under `schemas/public/tables/` — those define structure only and never carry row data. (This is distinct from a SQL **GRANT** on a table/function, which is DDL in the object's own schema file.)
+1. **Declare the permission** in `supabase/database/rbac/permissions.sql` and bind it to roles in `supabase/database/rbac/role_permissions.sql` (each file fills the `rbac_desired` staging table — just add `VALUES` rows). **Apply it**: `pnpm exec agentlink db apply` (applies rbac alongside schema) or `db resources` (rbac + cron + storage only); both also run on every `env deploy`. The reconcile converges the DB to exactly the declared set — **full reconcile**: removing a row REVOKES that permission on every env (incl. prod). NB: these rows are reference data in `rbac/`, *not* in the table files under `schemas/public/tables/` — those define structure only and never carry row data. (This is distinct from a SQL **GRANT** on a table/function, which is DDL in the object's own schema file.)
 2. **Guard the RPC**: `PERFORM public.auth_verify_access('<key>')` as the first statement of the mutating `api.*` function; scope queries with `WHERE tenant_id = (SELECT public._auth_tenant_id())`.
 3. **Isolate the table**: ensure an isolation-only RLS policy exists (tenant/ownership, no permission predicate).
 4. **Gate the frontend**: route guard `requirePermission('<key>')` + control gating `useHasPermission('<key>')` (UX only).
@@ -490,7 +490,7 @@ npx skills add resend/resend-skills resend/email-best-practices resend/react-ema
 If a user reports that signup confirmations, password resets, or invitation emails aren't arriving, **verify Resend is configured for that environment before debugging the edge function.** Resend is per-env now — there's no `check` flag for it. Instead:
 
 1. **Read `agentlink.json`** → `cloud.environments.<env>.resend`. If absent, Resend was never set up for that env.
-   - **Fix:** tell the user to run `npx agentlink-sh@latest resend setup --env <env>` (first time needs `--api-key` + `--email` together, or a saved default account). Don't debug `internal-send-auth-email` / `internal-send-email` until this exists — they silently no-op without the secret.
+   - **Fix:** tell the user to run `pnpm exec agentlink resend setup --env <env>` (first time needs `--api-key` + `--email` together, or a saved default account). Don't debug `internal-send-auth-email` / `internal-send-email` until this exists — they silently no-op without the secret.
 2. **Validate the secret is actually pushed** (debug): confirm the env's Supabase edge-function secret store contains `RESEND_API_KEY`. If the manifest has a `resend` block but the secret is missing (e.g. a manual dashboard wipe), re-run `resend setup --env <env>` to force a re-push.
 3. If both are green, the issue is elsewhere — check, in order:
    1. Edge function logs in the Supabase dashboard for actual send errors (most common: FROM domain not verified under the API key's Resend account).

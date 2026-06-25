@@ -14,6 +14,9 @@ skills:
 
 # App Development
 
+<!-- AGENTLINK_VERSION: 1.3.1 — kept in lockstep with the agentlink-sh CLI by the release script. Do not hand-edit. -->
+> **AgentLink version:** `1.3.1` (plugin + CLI ship in lockstep — same number). A project records the version it was scaffolded/last-updated with in `agentlink.json` (`version` / `appliedVersion`). If this plugin's major is **ahead** of a project's recorded major, the project is on an older contract — check `agentlink-sh changelog --since <project version>` before applying template changes, and never hand-migrate across a major; let `agentlink upgrade` do it.
+
 These are your app development guidelines — not the project itself. The user's project is what they ask you to build. Supabase is the backend. Follow these patterns when building it.
 
 **Always plan before building.** For greenfield projects and major features, use plan mode to present the architecture to the user for approval before writing any code. The CLI scaffolds a React + TanStack Start (SPA mode) frontend. If the project already has a frontend, work with what exists. Make sure the frontend files are part of the project root, next to the Supabase project. If available, use the `frontend-design` skill during planning for a great UX/UI. Also, reference `agentlink:frontend` for frontend setup guidelines.
@@ -80,7 +83,7 @@ Scaffold via the AgentLink CLI — never the Supabase connector MCP. **First ask
   ```bash
   npx agentlink-sh@latest <name> --skip-env
   ```
-  > "Scaffold done. Open the project at `<path>` in your agent (Claude Code or Cursor) and run `npx agentlink-sh@latest env add dev` in a terminal — it needs a browser for OAuth, which I don't have."
+  > "Scaffold done. Open the project at `<path>` in your agent (Claude Code or Cursor) and run `pnpm exec agentlink env add dev` in a terminal — it needs a browser for OAuth, which I don't have."
 - **Local** — no browser needed, so you can do it end-to-end if Docker is running:
   ```bash
   npx agentlink-sh@latest <name> --local
@@ -100,11 +103,24 @@ After the user completes `env add dev` (cloud) — or immediately (local) — ru
 
 **The Supabase connector MCP is never used for project creation, schema application, SQL execution, or edge-function deploys** — all database and deploy work goes through the CLI (`db apply`, `db migrate`, `env deploy`); MCP tools (`apply_migration`, `execute_sql`, `create_project`) must not substitute. Load the `cli` skill for the full setup workflow (questions to ask, frontend flags, local-Docker opt-in) — Workflow #1 in `references/workflows.md`.
 
+### Running the CLI — prefer the project-local install (since 1.4)
+
+Projects scaffolded with **1.4+** pin `agentlink-sh` as a devDependency, so the project runs its **own** CLI version — reproducible, and it never auto-jumps to a breaking new major just because a newer one published. **Prefer the local CLI** for in-project commands.
+
+⚠️ **The package is `agentlink-sh`; the installed binary is `agentlink`** (no `-sh`). So you *install* with the package name and *run* with the bin name:
+
+- **Check it's installed:** `pnpm exec agentlink --version` (or look for `agentlink-sh` in `package.json` devDependencies). If that resolves, use **`pnpm exec agentlink <cmd>`** for every in-project command below instead of `npx agentlink-sh@latest`.
+- **If it's missing** (a pre-1.4 project, or the dep isn't installed yet): add it with **`pnpm add -D agentlink-sh`** (package name), then use `pnpm exec agentlink`. Running `--force-update` also backfills the declaration automatically.
+- **Don't use bare `npx agentlink`** — it only resolves the local bin when the dep is already installed; with no local install it fetches a *different* npm package named `agentlink`, not ours. Use `pnpm exec agentlink` (local) or `npx agentlink-sh@latest` (one-shot).
+- **Only `create` uses `@latest`** — scaffolding a brand-new project has no local CLI to run yet: `npx agentlink-sh@latest <name>`.
+
+The command docs below and in the `cli` skill still write `npx agentlink-sh@latest` for brevity; when a local install exists, `pnpm exec agentlink` is the equivalent and the preferred form.
+
 ### Everyday CLI ops
 
 Check `AGENTS.md` for the mode and its commands; in **cloud mode never run `npx supabase start`/`stop`** — the DB is remote. The core loop:
 
-- **`check`** (`npx agentlink-sh@latest check`) — read-only JSON health report (`ready`, `database`, `files`). Run it before starting work, after errors, or when something seems missing; look at which fields are `false`.
+- **`check`** (`pnpm exec agentlink check`) — read-only JSON health report (`ready`, `database`, `files`). Run it before starting work, after errors, or when something seems missing; look at which fields are `false`.
 - **`--force-update`** — re-applies template files, `config.toml` patches, and SQL setup to fix what `check` flags (Supabase must be running). Typical loop: `check` → `--force-update` → `check`.
 - **`info <name>`** — prints a managed component's docs (type, signature, related) from the CLI catalog (`components.json`).
 - **`--debug`** — writes `agentlink-debug.log`; use on unclear scaffold/update failures (ask the user to share it if needed).
@@ -116,7 +132,7 @@ Load the `cli` skill for the full command set, env/deploy flows, and recovery �
 
 Schema files under `supabase/database/` are **one object per file**. The CLI tracks a committed base snapshot at `.agentlink/template-base/` (**never hand-edit it**) and 3-way merges your files against it on `--force-update`: pristine files fast-forward to the new template, your edits are preserved silently, and edits that collide with an upstream change surface as a conflict to reconcile.
 
-**To customize a managed function** (e.g. make `_internal_admin_handle_new_user` also insert an accounts row), just **edit its per-object file in place**, keep the same name + schema, run `npx agentlink-sh@latest db apply`, and tell the user it's a project-specific override. There are no inline annotations — never add `-- @agentlink` comments. Load the `cli` skill (and `references/upgrading.md`) for the full merge model.
+**To customize a managed function** (e.g. make `_internal_admin_handle_new_user` also insert an accounts row), just **edit its per-object file in place**, keep the same name + schema, run `pnpm exec agentlink db apply`, and tell the user it's a project-specific override. There are no inline annotations — never add `-- @agentlink` comments. Load the `cli` skill (and `references/upgrading.md`) for the full merge model.
 
 ### Command reference
 
@@ -128,34 +144,34 @@ The boundary is **production**, not deployment in general. The agent's everyday 
 
 **The agent CAN — autonomously, against `local` or `dev`:**
 
-- `npx agentlink-sh@latest db apply` — apply schemas to the active env (local or dev).
+- `pnpm exec agentlink db apply` — apply schemas to the active env (local or dev).
 - `supabase functions deploy [name]` — deploy edge functions to the active cloud-dev project (or all functions if `name` omitted). The agent should run this whenever it adds or modifies a function on a cloud-dev project — otherwise the new code never reaches the server and the user can't test it.
 - `supabase secrets set KEY=value` — set edge-function secrets on the active cloud-dev project.
-- `npx agentlink-sh@latest env deploy dev --yes` — full dev-env apply (schemas + functions + secrets). Equivalent to running the three above in sequence.
-- `npx agentlink-sh@latest db migrate <name>` — generate a migration file for review (doesn't touch the dev DB; diffs your schema files against the existing migrations — **no Docker required**). `--legacy` uses an alternate baseline built from your cloud prod/dev env.
+- `pnpm exec agentlink env deploy dev --yes` — full dev-env apply (schemas + functions + secrets). Equivalent to running the three above in sequence.
+- `pnpm exec agentlink db migrate <name>` — generate a migration file for review (doesn't touch the dev DB; diffs your schema files against the existing migrations — **no Docker required**). `--legacy` uses an alternate baseline built from your cloud prod/dev env.
 
 **The agent must NOT — without explicit, in-message user approval:**
 
-- `npx agentlink-sh@latest env deploy prod` (and `--yes` / `--non-interactive` variants).
-- `npx agentlink-sh@latest env use prod` (switching the active env to prod silently changes which DB every subsequent agent action targets).
+- `pnpm exec agentlink env deploy prod` (and `--yes` / `--non-interactive` variants).
+- `pnpm exec agentlink env use prod` (switching the active env to prod silently changes which DB every subsequent agent action targets).
 - `supabase db push` against a `prod` project URL.
 - `supabase functions deploy` when the active env is `prod`.
 - `supabase secrets set` against a `prod` project ref.
-- `npx agentlink-sh@latest env add prod` / `npx agentlink-sh@latest env add prod --retry` / `npx destroy` against any prod env.
+- `pnpm exec agentlink env add prod` / `pnpm exec agentlink env add prod --retry` / `npx destroy` against any prod env.
 
 The signal is the **active env name in `agentlink.json` (`manifest.cloud.default`)**. If it's `local` or `dev`, deploy freely. If it's `prod`, stop and ask. The fixed three-env model (`local`, `dev`, `prod`) means the agent never has to guess whether an env is production-tier — the name tells you.
 
 **Available commands the agent surfaces but doesn't auto-run:**
 
-- `npx agentlink-sh@latest env deploy [name]` — picker form, preselects active env. The agent points users here when they want to deploy from prod themselves.
-- `npx agentlink-sh@latest env deploy <name> --dry-run` — preview a deploy without applying. Safe to run against any env, including `prod`, since it doesn't mutate.
-- `npx agentlink-sh@latest env add prod` — first-time prod setup (full bootstrap). Always developer-initiated.
-- `npx agentlink-sh@latest env add <name> --retry` — re-apply a partially-failed bootstrap. Agent can run against `dev`; defer to the user for `prod`.
-- `npx agentlink-sh@latest env use <name>` — switch the active env. `local ↔ dev` is fine for the agent; `→ prod` requires user approval.
+- `pnpm exec agentlink env deploy [name]` — picker form, preselects active env. The agent points users here when they want to deploy from prod themselves.
+- `pnpm exec agentlink env deploy <name> --dry-run` — preview a deploy without applying. Safe to run against any env, including `prod`, since it doesn't mutate.
+- `pnpm exec agentlink env add prod` — first-time prod setup (full bootstrap). Always developer-initiated.
+- `pnpm exec agentlink env add <name> --retry` — re-apply a partially-failed bootstrap. Agent can run against `dev`; defer to the user for `prod`.
+- `pnpm exec agentlink env use <name>` — switch the active env. `local ↔ dev` is fine for the agent; `→ prod` requires user approval.
 
 When the user explicitly says "deploy to prod" / "ship this" / "run env deploy prod" — that's the explicit approval. Run it once, in one command, and don't infer permission to do future prod deploys from a single approval.
 
-> The top-level `npx deploy` command was removed — the CLI errors with a pointer at `npx agentlink-sh@latest env deploy` if anyone types the old form. CI workflows generated by older `env add --setup-ci` runs must be regenerated (they now emit `env deploy <name> --yes --non-interactive`).
+> The top-level `npx deploy` command was removed — the CLI errors with a pointer at `pnpm exec agentlink env deploy` if anyone types the old form. CI workflows generated by older `env add --setup-ci` runs must be regenerated (they now emit `env deploy <name> --yes --non-interactive`).
 
 ---
 
@@ -248,11 +264,16 @@ How to handle technical/architecture choices while building:
 The agent focuses on development: write SQL, apply it, keep building. Migrations are a separate deployment concern.
 
 1. **Write SQL** to schema files in `supabase/database/` (one object per file) — not to migration files.
-2. **Apply** — `npx agentlink-sh@latest db apply`.
+2. **Apply** — `pnpm exec agentlink db apply`.
 3. **Fix errors with more SQL — never reset the database.**
 4. **Iterate** until the feature is complete.
 
 Schema files are the source of truth; the live database is the working copy — keep them in sync. **Shipping schema to prod is migrations-only:** `db apply` (declarative) is the dev/local loop and is deliberately skipped on prod, so a schema change reaches prod ONLY through a committed migration — build + `db apply` on dev → `db migrate <name>` (review, commit) → `env deploy prod` (with explicit user approval) replays it via `db push`. **Never hand-author migration files**; if `db migrate` reports "No changes detected," the committed migrations already capture your schema files (no Docker needed to check) — confirm the change is written to a schema file, but don't write the SQL yourself. Load the `database` skill for schema-file conventions, the full directory layout, and worked examples.
+
+**🛑 Migrations are forward-only — never rewrite migration history.** A migration file becomes **immutable** the moment it is *either* committed to git *or* deployed to any environment — it's part of the shared deployment record that CI, other clones, and every env's migration ledger replay in order, so changing it corrupts that history (and makes the file diverge from what a deployed env already ran).
+
+- **Editing a committed migration is forbidden.** No exceptions. To correct it, change the schema files and generate a **new** `db migrate` migration that fixes it *forward*.
+- **An uncommitted migration may be edited or regenerated only after you explicitly confirm with the user that it has NOT been deployed to production.** A prod deploy from a dirty tree can run an uncommitted migration; if that happened, it's already in prod's ledger — treat it as immutable and fix forward. When unsure, ask before touching it.
 
 ### Always schema-qualify
 

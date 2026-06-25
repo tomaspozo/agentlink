@@ -10,7 +10,7 @@ depend on it:
   `internal-approval-decision`, `internal-send-auth-email`, etc., which call
   Resend directly and read `RESEND_API_KEY` / `RESEND_FROM_EMAIL`.
 
-`npx agentlink-sh@latest resend setup` wires both in one command.
+`pnpm exec agentlink resend setup` wires both in one command.
 
 ## The model: per environment
 

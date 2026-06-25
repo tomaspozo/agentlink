@@ -46,7 +46,7 @@ if echo "$normalized" | grep -qE '(^|[;&|]|[[:space:]])([^[:space:]]*supabase[[:
   echo "" >&2
   echo "Alternative: fix errors with more SQL (psql), or 'db apply' to converge dev." >&2
   echo "If the user explicitly asked to reset, have them run it manually:" >&2
-  echo "  npx agentlink-sh@latest db rebuild" >&2
+  echo "  pnpm exec agentlink db rebuild" >&2
   echo "(replays migrations, re-applies schema files, and restores the imperative" >&2
   echo " resources — rbac, cron, storage — that a raw 'supabase db reset' drops.)" >&2
   exit 2

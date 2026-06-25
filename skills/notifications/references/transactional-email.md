@@ -176,7 +176,7 @@ PERFORM api._admin_send_email(
 );
 ```
 
-Then `npx agentlink-sh@latest db apply` (for new SQL) and deploy functions.
+Then `pnpm exec agentlink db apply` (for new SQL) and deploy functions.
 
 ---
 

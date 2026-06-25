@@ -89,7 +89,7 @@ trigger on their descriptions just like in Claude Code.
 
 Don't have Cursor yet? Grab it at [cursor.com](https://cursor.com/referral?code=IMIH9YQ5EFRF).
 
-Every CLI command runs through `npx agentlink-sh@latest <subcommand>` — e.g. `npx agentlink-sh@latest check`, `db apply`, `env deploy prod`.
+In a scaffolded project (1.4+), run CLI commands through the project-local binary: `pnpm exec agentlink <subcommand>` — e.g. `pnpm exec agentlink check`, `db apply`, `env deploy prod`. (Creating a brand-new project uses `npx agentlink-sh@latest <name>`, since there's no local install yet.)
 
 ## Usage
 
@@ -115,8 +115,8 @@ The CLI owns setup; the agent builds.
 
 - **New project:** `npx agentlink-sh@latest my-app` — runs the wizard, which asks whether your first (dev) environment is Supabase Cloud or local Docker, then scaffolds schemas, vault secrets, edge functions, and a React + TanStack Start (SPA) frontend. `prod` is added later with `env add prod`.
 - **Skip the prompt:** pass `--local` to go straight to local Docker.
-- **Validate setup:** `npx agentlink-sh@latest check` — verifies extensions, internal functions, vault secrets, the `api` schema, and file layout.
-- **After a CLI upgrade:** `npx agentlink-sh@latest --force-update` — re-applies managed templates, config, and SQL.
+- **Validate setup:** `pnpm exec agentlink check` — verifies extensions, internal functions, vault secrets, the `api` schema, and file layout.
+- **After a CLI upgrade:** `pnpm exec agentlink --force-update` — re-applies managed templates, config, and SQL.
 
 In cloud mode the CLI authenticates via OAuth, creates the project in your chosen org/region, and runs database operations through the Supabase Management API. In local mode SQL runs via `psql` against `localhost:54322` and a Supabase MCP server is installed for migration and advisor tooling.
 

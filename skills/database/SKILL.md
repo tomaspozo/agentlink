@@ -76,14 +76,14 @@ When creating or editing schema objects, put each in its own file under `supabas
 - **`supabase/database/rbac/`** — roles / permissions / role→permission bindings (the dedicated reference-data reconcile).
 - (Inside a function body, `INSERT`/`UPDATE` is fine — that's part of the function's DDL, not a standalone seed.)
 
-**Imperative folders — `cron/`, `storage/`, `rbac/`.** These three top-level folders under `supabase/database/` are **excluded** from `db apply`'s schema diff *and* from the migration diff, and applied imperatively by the deploy step on **every** path — `db apply` (local/dev), `db rebuild`, and **every `env deploy`** (all envs incl. prod, which is migrations-only). Reason: the `cron` and `storage` schemas are excluded from `db apply`'s schema diff and from migrations, so `cron.schedule()`, buckets, and storage policies never survive a migration; and RBAC is reference DATA, not DDL. This deploy step is the only path that reliably reaches prod — **do not** hand-append these to migration files. To apply just these folders without a full `db apply` (e.g. after editing a cron job or bucket), run `npx agentlink-sh@latest db resources`.
+**Imperative folders — `cron/`, `storage/`, `rbac/`.** These three top-level folders under `supabase/database/` are **excluded** from `db apply`'s schema diff *and* from the migration diff, and applied imperatively by the deploy step on **every** path — `db apply` (local/dev), `db rebuild`, and **every `env deploy`** (all envs incl. prod, which is migrations-only). Reason: the `cron` and `storage` schemas are excluded from `db apply`'s schema diff and from migrations, so `cron.schedule()`, buckets, and storage policies never survive a migration; and RBAC is reference DATA, not DDL. This deploy step is the only path that reliably reaches prod — **do not** hand-append these to migration files. To apply just these folders without a full `db apply` (e.g. after editing a cron job or bucket), run `pnpm exec agentlink db resources`.
 
 - **`cron/` and `storage/` must be IDEMPOTENT** (they re-run on every deploy): `cron.schedule(name, …)` upserts by job name (`cron.unschedule(name)` to remove); storage buckets use `INSERT … ON CONFLICT (id) DO UPDATE`; storage policies use `DROP POLICY IF EXISTS` + `CREATE POLICY`. Each folder's files run in sorted order, one transaction per folder.
 - **`rbac/` is reference DATA, not schema.** The roles/permissions/role_permissions *tables* live in `schemas/public/tables/` (structure only). Their *rows* live in `rbac/<entity>.sql`, each filling an `rbac_desired` staging table, converged to **exactly** the declared set: **full reconcile** for permissions + bindings (a removed row is REVOKED everywhere — the only way revokes reach prod); roles are **upsert-only** (a referenced role can't be deleted: `memberships.role` FKs into `roles(name)`).
 
 **🛑 Editing `cron/`, `storage/`, or `rbac/`? The workflow is: edit the file → APPLY it.** A change to these folders does nothing until applied, and they are **excluded from the schema diff** — so `db apply`'s schema step won't carry them, and a `cron.schedule()`/bucket/policy/RBAC row dropped into a `schemas/` file silently never runs. After editing:
-- `npx agentlink-sh@latest db apply` applies them **alongside** your schema (the normal dev loop already covers them — `db apply` runs the imperative step too), **or**
-- `npx agentlink-sh@latest db resources` applies **only** `storage/` + `cron/` + `rbac/` (no schema diff, no type-gen) — reach for this when that's *all* you changed (`db rbac-sync` is the rbac-only subset).
+- `pnpm exec agentlink db apply` applies them **alongside** your schema (the normal dev loop already covers them — `db apply` runs the imperative step too), **or**
+- `pnpm exec agentlink db resources` applies **only** `storage/` + `cron/` + `rbac/` (no schema diff, no type-gen) — reach for this when that's *all* you changed (`db rbac-sync` is the rbac-only subset).
 On deploy they go out with every `env deploy`. Concretely:
 
 | You're changing… | Edit | Then |
@@ -111,7 +111,7 @@ On deploy they go out with every `env deploy`. Concretely:
 - The **RBAC permission model** (the `auth_verify_access('entity.action')` keys your RPCs check, and their role bindings) is **reference data** → it lives in `rbac/permissions.sql` + `rbac/role_permissions.sql` and applies with **`db resources`** (or `db apply` / `env deploy`). Adding a new gated capability = add the permission key + binding here, *and* call `auth_verify_access(...)` in the RPC (which is a schema-file change).
 
 - One object per file. A table file is **self-contained**: table definition + constraints + indexes + `ENABLE ROW LEVEL SECURITY` + policies + triggers + grants all live together.
-- To edit an existing object, edit its file in place (don't create a parallel file) — then run `npx agentlink-sh@latest db apply`.
+- To edit an existing object, edit its file in place (don't create a parallel file) — then run `pnpm exec agentlink db apply`.
 
 ### Migrating an existing `supabase/schemas/` project to `supabase/database/`
 
@@ -125,7 +125,7 @@ Older projects keep declarative SQL under `supabase/schemas/`. The home moved to
    - cron job → `supabase/database/cron/<name>.sql` (imperative)
    - storage bucket + policies → `supabase/database/storage/<name>.sql` (imperative)
    Split any consolidated/multi-object files into one-object-per-file as you go. `db apply` resolves dependency order, so file naming/order doesn't matter.
-2. **Apply:** `npx agentlink-sh@latest db apply` — confirm the `database/` tree applies cleanly.
+2. **Apply:** `pnpm exec agentlink db apply` — confirm the `database/` tree applies cleanly.
 3. **Delete `supabase/schemas/`** once everything is migrated and applying — nothing else references it.
 
 Never relocate `supabase/schemas/` into `.agentlink/.incoming/` — that directory is gitignored and cleared on the next update.
@@ -148,7 +148,7 @@ There are **no inline annotations** — never add `-- @agentlink` comments. Plai
 CREATE OR REPLACE FUNCTION api.chart_create(...)
 ```
 
-**To customize a CLI-shipped file**, just edit its per-object file in place (e.g., `supabase/database/schemas/public/functions/_internal_admin_handle_new_user.sql`), keep the same function name and schema, and run `npx agentlink-sh@latest db apply`. The next CLI update preserves your edit — silently when only you changed it, or as a surfaced conflict when the template also changed. (Leave the `.agentlink/` directory alone — it's CLI-managed state, not something to hand-edit.) See the builder agent's "Customizing a managed function" section for the full model.
+**To customize a CLI-shipped file**, just edit its per-object file in place (e.g., `supabase/database/schemas/public/functions/_internal_admin_handle_new_user.sql`), keep the same function name and schema, and run `pnpm exec agentlink db apply`. The next CLI update preserves your edit — silently when only you changed it, or as a surfaced conflict when the template also changed. (Leave the `.agentlink/` directory alone — it's CLI-managed state, not something to hand-edit.) See the builder agent's "Customizing a managed function" section for the full model.
 
 **Which schema for what:**
 - `api.*` — Client-facing RPCs (the only things exposed via the Data API)
@@ -189,13 +189,13 @@ The CLI keeps this enforced on prod: `db migrate` appends a blanket `REVOKE EXEC
 ## Development Loop
 
 1. **Write SQL** to the appropriate schema file (see organization above)
-2. **Apply** — `npx agentlink-sh@latest db apply`
+2. **Apply** — `pnpm exec agentlink db apply`
 3. **Fix errors** with more SQL — never reset the database
 4. **Iterate** until the feature is complete
 
 > **Companion:** If `supabase-postgres-best-practices` is available, invoke it to review schema changes before proceeding.
 
-`db apply` auto-generates TypeScript types after applying schemas. To regenerate types separately: `npx agentlink-sh@latest db types`.
+`db apply` auto-generates TypeScript types after applying schemas. To regenerate types separately: `pnpm exec agentlink db types`.
 
 The DB URL is auto-resolved from `.env.local` (written by the CLI during setup). No `--db-url` flag needed in either local or cloud mode.
 
@@ -260,19 +260,19 @@ GRANT EXECUTE ON FUNCTION public._internal_admin_get_secret(text) TO service_rol
 
 If something is missing or broken, use `check` to diagnose and `--force-update` to fix:
 
-1. **Diagnose:** `npx agentlink-sh@latest check` → read the JSON output, look at which fields are `false`
-2. **Fix:** `npx agentlink-sh@latest --force-update` → re-applies all setup (templates, config, SQL, migrations)
-3. **Verify:** `npx agentlink-sh@latest check` → confirm `ready: true`
+1. **Diagnose:** `pnpm exec agentlink check` → read the JSON output, look at which fields are `false`
+2. **Fix:** `pnpm exec agentlink --force-update` → re-applies all setup (templates, config, SQL, migrations)
+3. **Verify:** `pnpm exec agentlink check` → confirm `ready: true`
 
 | Issue | Diagnose with `check` | Fix |
 |-------|----------------------|-----|
-| Missing `_internal_admin_*` functions | `database.functions: false` | `npx agentlink-sh@latest --force-update` |
-| Missing extensions (`pg_net`, `supabase_vault`) | `database.extensions: false` | `npx agentlink-sh@latest --force-update` |
-| Missing vault secrets | `database.secrets: false` | `npx agentlink-sh@latest --force-update` |
-| Missing `api` schema or grants | `database.api_schema: false` | `npx agentlink-sh@latest --force-update` |
-| Missing `supabase/database/` structure | `files: false` | `npx agentlink-sh@latest --force-update` |
+| Missing `_internal_admin_*` functions | `database.functions: false` | `pnpm exec agentlink --force-update` |
+| Missing extensions (`pg_net`, `supabase_vault`) | `database.extensions: false` | `pnpm exec agentlink --force-update` |
+| Missing vault secrets | `database.secrets: false` | `pnpm exec agentlink --force-update` |
+| Missing `api` schema or grants | `database.api_schema: false` | `pnpm exec agentlink --force-update` |
+| Missing `supabase/database/` structure | `files: false` | `pnpm exec agentlink --force-update` |
 
-Use `npx agentlink-sh@latest info <component>` to understand what a missing component does before fixing it.
+Use `pnpm exec agentlink info <component>` to understand what a missing component does before fixing it.
 
 ---
 

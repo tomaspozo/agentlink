@@ -41,7 +41,7 @@ See the `database` skill's table-privileges rule and the `auth` skill's Security
 
 **Cause:** `database/schemas/api/schema.sql` doesn't exist on disk, so when `db apply` builds the schema files the `api` schema is never created and objects referencing `api.*` fail.
 
-**Fix:** Verify `supabase/database/schemas/api/schema.sql` exists on disk (`db apply` resolves dependency order, so the `api` schema is created before objects that reference it). Run `npx agentlink-sh@latest --force-update` to regenerate it.
+**Fix:** Verify `supabase/database/schemas/api/schema.sql` exists on disk (`db apply` resolves dependency order, so the `api` schema is created before objects that reference it). Run `pnpm exec agentlink --force-update` to regenerate it.
 
 ---
 
@@ -49,7 +49,7 @@ See the `database` skill's table-privileges rule and the `auth` skill's Security
 
 **Cause:** Running `npx supabase migration up` or `npx supabase db reset` on a database where objects already exist. Schema files use `CREATE OR REPLACE` (idempotent), but generated migrations may use plain `CREATE`.
 
-**Fix:** Don't use `migration up` / a raw reset to re-apply on a running local DB. Apply your schema changes with `npx agentlink-sh@latest db apply` — it reconciles existing objects (handling changes to existing tables). Migrations are for production deployments on clean databases; replaying them onto a populated DB is what triggers this. (Avoid hand-running `psql -f <schema-file>` — it bypasses `db apply` and leaves the CLI's tracking state stale.)
+**Fix:** Don't use `migration up` / a raw reset to re-apply on a running local DB. Apply your schema changes with `pnpm exec agentlink db apply` — it reconciles existing objects (handling changes to existing tables). Migrations are for production deployments on clean databases; replaying them onto a populated DB is what triggers this. (Avoid hand-running `psql -f <schema-file>` — it bypasses `db apply` and leaves the CLI's tracking state stale.)
 
 ---
 
@@ -116,7 +116,7 @@ npx supabase migration repair <new_version> --status applied --local
 **Fix:** Fix the ordering (see above) or merge the problematic migrations. As a last resort, delete all migrations and regenerate:
 ```bash
 rm supabase/migrations/*.sql
-npx agentlink-sh@latest --force-update
+pnpm exec agentlink --force-update
 ```
 
 ---
@@ -129,9 +129,9 @@ npx agentlink-sh@latest --force-update
 
 **Fix:** Use `db rebuild` instead of a raw reset — it replays migrations **and** re-applies the schema files + imperative resources in one step:
 ```bash
-npx agentlink-sh@latest db rebuild
+pnpm exec agentlink db rebuild
 ```
-If you already ran a raw `supabase db reset`, just run `npx agentlink-sh@latest db apply` — it detects the reset and reapplies the **full** schema plus the imperative resources. Local-only; the agent is blocked from running `db rebuild` or a raw reset directly — resets are user-initiated.
+If you already ran a raw `supabase db reset`, just run `pnpm exec agentlink db apply` — it detects the reset and reapplies the **full** schema plus the imperative resources. Local-only; the agent is blocked from running `db rebuild` or a raw reset directly — resets are user-initiated.
 
 ---
 
@@ -143,7 +143,7 @@ If you already ran a raw `supabase db reset`, just run `npx agentlink-sh@latest 
 
 **Fix:**
 ```bash
-npx agentlink-sh@latest db url --fix
+pnpm exec agentlink db url --fix
 ```
 Fetches the correct pooler URL from the Supabase Management API and updates `.env.local`. Run `db url` (without `--fix`) first to see the current vs expected URL.
 
@@ -168,7 +168,7 @@ Fetches the correct pooler URL from the Supabase Management API and updates `.en
 **Fix:** Delete the duplicate migration files, then regenerate a clean one:
 ```bash
 # remove the redundant *_agentlink_setup.sql copies, keep one (or none), then:
-npx agentlink-sh@latest db migrate setup
+pnpm exec agentlink db migrate setup
 ```
 (`db rebuild` only resets + re-applies — it does **not** touch migration files anymore; regenerating migrations is a separate `db migrate` step.)
 
@@ -196,16 +196,16 @@ npx supabase db push
 **Fix:**
 ```bash
 # Full relink (run env add, pick "Relink to a different Supabase project", or pass --project-ref)
-npx agentlink-sh@latest env add dev
+pnpm exec agentlink env add dev
 
 # If a PREVIOUS env add died mid-bootstrap against the SAME project, use --retry instead:
-npx agentlink-sh@latest env add dev --retry
+pnpm exec agentlink env add dev --retry
 ```
 
 - **Relink** rewrites the env to point at a different cloud project and re-runs the full bootstrap. Use when the project was deleted, the DB URL is wrong, or you need to switch to a different project.
 - **`--retry`** (or the interactive "Re-apply full setup" option) re-runs the bootstrap against the stored `projectRef` without touching the manifest or `.env.local`. Use when a previous `env add` failed partway through — link, db push, vault upserts, functions deploy, or auth config died — and you want to resume without rewiring anything. Also applicable when auth providers / PostgREST config / vault secrets changed and need to be pushed.
 
-If you just need to re-apply schemas and functions (no config changes), `npx agentlink-sh@latest env deploy <name>` is the lighter, idempotent option — it skips vault / PostgREST / auth. If you just need to re-push server-side config (no schemas / functions), `npx agentlink-sh@latest env config [secrets|db|auth|all] [env]` is lighter still — skips schemas, migrations, functions, and verify.
+If you just need to re-apply schemas and functions (no config changes), `pnpm exec agentlink env deploy <name>` is the lighter, idempotent option — it skips vault / PostgREST / auth. If you just need to re-push server-side config (no schemas / functions), `pnpm exec agentlink env config [secrets|db|auth|all] [env]` is lighter still — skips schemas, migrations, functions, and verify.
 
 Both preserve existing migrations.
 
@@ -220,7 +220,7 @@ Both preserve existing migrations.
 For CI, re-link the same project without re-entering the DB password:
 
 ```bash
-npx agentlink-sh@latest env add <name> --project-ref <ref> --keep-password --non-interactive
+pnpm exec agentlink env add <name> --project-ref <ref> --keep-password --non-interactive
 ```
 
 `--keep-password` reuses the stored DB password instead of prompting. Without it, a non-interactive same-project relink updates the password from `SUPABASE_DB_PASSWORD`, or errors telling you to pass `--keep-password` or set `SUPABASE_DB_PASSWORD`.
@@ -229,7 +229,7 @@ npx agentlink-sh@latest env add <name> --project-ref <ref> --keep-password --non
 
 ### `env add` asked me about "bare mode" — what is that?
 
-**Symptom:** Running `npx agentlink-sh@latest env add dev` in a directory that has no `agentlink.json` surfaces a "No agentlink.json found" menu with three options: *Run the full AgentLink scaffold*, *Continue without full features*, *Cancel*.
+**Symptom:** Running `pnpm exec agentlink env add dev` in a directory that has no `agentlink.json` surfaces a "No agentlink.json found" menu with three options: *Run the full AgentLink scaffold*, *Continue without full features*, *Cancel*.
 
 **Cause:** The CLI detected the directory isn't scaffolded and offered bare mode — Supabase env plumbing without the full AgentLink scaffold. This is intentional: users who just want env management on an existing codebase shouldn't be forced to scaffold over their own file structure.
 
@@ -239,13 +239,13 @@ npx agentlink-sh@latest env add <name> --project-ref <ref> --keep-password --non
 - **Continue without full features** if the user wants Supabase env wiring only (OAuth, project, `.env.local`). Writes `agentlink.json` with `bare: true`. No schemas, no server-side config, no AGENTS.md touched. Full details: workflow #7 in `workflows.md`.
 - **Cancel** if the menu appeared by accident (e.g., ran `env add` from the wrong directory).
 
-Bare projects can upgrade later via `npx agentlink-sh@latest --force-update`.
+Bare projects can upgrade later via `pnpm exec agentlink --force-update`.
 
 ---
 
 ### `env deploy` says "Nothing to deploy"
 
-**Symptom:** Running `npx agentlink-sh@latest env deploy <name>` prints `Nothing to deploy — no supabase/database, supabase/migrations, or supabase/functions found.` and exits 0 without touching the cloud.
+**Symptom:** Running `pnpm exec agentlink env deploy <name>` prints `Nothing to deploy — no supabase/database, supabase/migrations, or supabase/functions found.` and exits 0 without touching the cloud.
 
 **Cause:** The project has no `supabase/` subsystem directories — usually because it's a bare-mode project (workflow #7) where the user hasn't added any SQL or edge functions yet, or someone deleted those directories.
 
@@ -255,21 +255,21 @@ Bare projects can upgrade later via `npx agentlink-sh@latest --force-update`.
 - `supabase/migrations/*.sql` + `supabase/config.toml` for migrations (then `env deploy` runs `supabase db push`).
 - `supabase/functions/<name>/index.ts` for edge functions (then `env deploy` runs `supabase functions deploy`).
 
-Or upgrade to the full AgentLink scaffold: `npx agentlink-sh@latest --force-update`.
+Or upgrade to the full AgentLink scaffold: `pnpm exec agentlink --force-update`.
 
 ---
 
 ### `env config` says "No agentlink.json found"
 
-**Symptom:** Running `npx agentlink-sh@latest env config secrets` prints `No agentlink.json found. Run: npx agentlink-sh@latest env add <name>` and exits.
+**Symptom:** Running `pnpm exec agentlink env config secrets` prints `No agentlink.json found. Run: pnpm exec agentlink env add <name>` and exits.
 
 **Cause:** `env config` operates on a registered cloud env, so it presupposes `env add` has already run. Unlike `env add` (which offers bare-mode onboarding when no manifest exists), `env config` doesn't auto-scaffold — the command assumes you have a target.
 
 **Fix:**
 
 ```bash
-npx agentlink-sh@latest env add dev      # Register the env first (offers bare mode if no manifest)
-npx agentlink-sh@latest env config secrets prod
+pnpm exec agentlink env add dev      # Register the env first (offers bare mode if no manifest)
+pnpm exec agentlink env config secrets prod
 ```
 
 ---
@@ -366,8 +366,12 @@ psql "$DB_URL" -f supabase/database/schemas/public/tables/charts.sql
 
 ### Fix a broken migration
 
+> **🛑 Migrations are forward-only.** Editing a migration that is **committed** or **deployed to any environment** is forbidden — it rewrites the shared deployment record and diverges from what deployed envs already ran. The steps below apply **only to an uncommitted migration that has not been deployed to production** — confirm that with the user first. If it's committed or deployed, leave it untouched: fix the schema files and run `db migrate <name>` to generate a **new** migration that corrects it forward. See [migration_system.md](./migration_system.md) → *Migrations are forward-only*.
+
+For an uncommitted, not-yet-deployed migration:
+
 1. Edit the migration file in `supabase/migrations/`
-2. If the migration was already applied, you need to revert and re-apply:
+2. If the migration was already applied **to the local/dev DB**, revert and re-apply:
 ```bash
 npx supabase migration repair <version> --status reverted --local
 # Fix the SQL in the file
@@ -378,6 +382,8 @@ npx supabase migration repair <version> --status applied --local
 ```
 
 ### Remove a migration
+
+> Same forward-only rule: only remove a migration that is **uncommitted AND not deployed to production** (confirm with the user). Deleting a committed or deployed migration rewrites the deployment record — don't. Fix forward with a new migration instead.
 
 ```bash
 # Mark as reverted
@@ -392,26 +398,26 @@ rm supabase/migrations/<version>_name.sql
 
 | Situation | Action |
 |-----------|--------|
-| Missing component reported by `check` | `npx agentlink-sh@latest --force-update` |
+| Missing component reported by `check` | `pnpm exec agentlink --force-update` |
 | `db migrate` prints "No changes detected" | The committed migrations already capture your schema files (no Docker needed to check). Confirm the change is written to a schema file; don't hand-author |
 | `db migrate` output looks wrong | Review/edit the generated migration SQL before committing |
 | Need a migration for auth schema changes | Write migration file + repair |
 | Timestamp collision | Rename file + repair |
-| CLI version is outdated | `npx agentlink-sh@latest --force-update` |
+| CLI version is outdated | `pnpm exec agentlink --force-update` |
 | Migration references non-existent object | Fix ordering or merge migrations |
 | Need to undo a migration | `repair --status reverted` + delete file |
-| DB URL is wrong / connection fails | `npx agentlink-sh@latest db url --fix` |
-| Duplicate migration files | Delete the redundant files, then `npx agentlink-sh@latest db migrate <name>` to regenerate one (`db rebuild` does not touch migration files) |
+| DB URL is wrong / connection fails | `pnpm exec agentlink db url --fix` |
+| Duplicate migration files | Delete the redundant files, then `pnpm exec agentlink db migrate <name>` to regenerate one (`db rebuild` does not touch migration files) |
 | `db push` says remote versions not found | `npx supabase migration repair --status reverted <versions>` + re-push |
-| Cloud project deleted / need new project | `npx agentlink-sh@latest env add dev` (prompts to relink) |
-| `env add` died partway OR config drifted | `npx agentlink-sh@latest env add <name> --retry` (re-apply full setup) |
-| Need to push schema / function changes (no config drift) | `npx agentlink-sh@latest env deploy <name>` |
-| Need to push config only (no schemas / functions) | `npx agentlink-sh@latest env config [secrets\|db\|auth\|all] [env]` |
-| Existing codebase, want Supabase env plumbing only | `npx agentlink-sh@latest env add dev` → choose "Continue without full features" (bare mode) |
+| Cloud project deleted / need new project | `pnpm exec agentlink env add dev` (prompts to relink) |
+| `env add` died partway OR config drifted | `pnpm exec agentlink env add <name> --retry` (re-apply full setup) |
+| Need to push schema / function changes (no config drift) | `pnpm exec agentlink env deploy <name>` |
+| Need to push config only (no schemas / functions) | `pnpm exec agentlink env config [secrets\|db\|auth\|all] [env]` |
+| Existing codebase, want Supabase env plumbing only | `pnpm exec agentlink env add dev` → choose "Continue without full features" (bare mode) |
 | `env deploy` prints "Nothing to deploy" | Add files to `supabase/database/` / `supabase/migrations/` / `supabase/functions/`, or run `--force-update` for the full scaffold |
-| Broken migration state on new project | `npx agentlink-sh@latest db rebuild` |
-| DB password was reset in dashboard | `npx agentlink-sh@latest db password "newpass"` |
+| Broken migration state on new project | `pnpm exec agentlink db rebuild` |
+| DB password was reset in dashboard | `pnpm exec agentlink db password "newpass"` |
 | Plugin/skills missing after scaffold | Claude Code installs on first launch; in Cursor run `/add-plugin tomaspozo/agentlink`. Re-run `npx agentlink-sh@latest install` for skills |
 | Supabase CLI / `psql` not found | Install via `https://agentlink.sh/start`, open a new terminal |
 | `Forbidden` (403) on env add | Upgrade CLI; re-auth is automatic on v0.21+ |
-| `npx agentlink-sh@latest deploy` errors "no longer a top-level command" | Use `npx agentlink-sh@latest env deploy` (same functionality, under the env group) |
+| `npx agentlink-sh@latest deploy` errors "no longer a top-level command" | Use `pnpm exec agentlink env deploy` (same functionality, under the env group) |

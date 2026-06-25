@@ -115,7 +115,7 @@ already carrying the weight.
 Generate TypeScript types from your database schema:
 
 ```bash
-npx agentlink-sh@latest db types
+pnpm exec agentlink db types
 ```
 
 This works in both local and cloud mode. Types are written to
@@ -138,7 +138,7 @@ const { data } = await supabase.rpc("chart_get_by_id", { p_chart_id: id });
 ```
 
 `db apply` regenerates types automatically (non-fatal on failure). To
-regenerate manually: `npx agentlink-sh@latest db types`.
+regenerate manually: `pnpm exec agentlink db types`.
 
 ---
 

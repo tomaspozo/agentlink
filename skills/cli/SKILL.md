@@ -5,7 +5,15 @@ description: AgentLink CLI usage, project scaffolding, updates, and migration ma
 
 # CLI
 
-The `agentlink-sh` CLI scaffolds new Supabase projects and updates existing ones. It handles infrastructure setup, template files, database configuration, and migration generation. Every invocation runs through `npx agentlink-sh@latest` — there's no install step.
+The `agentlink-sh` CLI scaffolds new Supabase projects and updates existing ones. It handles infrastructure setup, template files, database configuration, and migration generation.
+
+> **Running the CLI (since 1.4): prefer the project-local install.** Projects scaffolded with **1.4+** pin `agentlink-sh` as a devDependency, so the project carries its **own** CLI version — reproducible, and it never auto-jumps across a breaking major. Note the names differ: the **package** is `agentlink-sh`, the installed **binary** is `agentlink` (no `-sh`). For in-project commands (`check`, `db apply`, `db migrate`, `env deploy`, `--force-update`, …):
+> - **Use `pnpm exec agentlink <cmd>`** when the dep is present (check with `pnpm exec agentlink --version`, or look for `agentlink-sh` in `package.json`).
+> - **If it's missing** (a pre-1.4 project): add it with `pnpm add -D agentlink-sh`, or run `--force-update` once (it backfills the declaration), then `pnpm install`.
+> - **Don't use bare `npx agentlink`** — with no local install it resolves a different npm package, not ours. Use `pnpm exec agentlink` (local) or `npx agentlink-sh@latest` (one-shot).
+> - **Only `create` uses `@latest`** — a brand-new project has no local CLI yet: `npx agentlink-sh@latest <name>`.
+>
+> The command docs below still write `npx agentlink-sh@latest` for brevity; when a local install exists, `pnpm exec agentlink` is the equivalent and preferred form.
 
 > **Workflow playbook:** see `references/workflows.md` for common user scenarios — "start a new project from zero," "add a prod env," "deploy to prod," "recover from a failed deploy," etc. Each entry lists what questions to ask the user and which commands to run.
 
@@ -57,7 +65,7 @@ npx agentlink-sh@latest <name> --skip-env
 After scaffold completes, the user finishes setup by running this in a terminal:
 
 ```bash
-npx agentlink-sh@latest env add dev
+pnpm exec agentlink env add dev
 ```
 
 That step does the browser OAuth, creates/links the cloud project, provisions schema + edge functions, and populates `.env.local`. The scaffolded `AGENTS.md` surfaces this as a prominent "▶ Next step" callout at the top.
@@ -91,7 +99,7 @@ For users who want Supabase env plumbing (OAuth, project create/select, `.env.lo
 
 ```bash
 cd my-existing-app
-npx agentlink-sh@latest env add dev
+pnpm exec agentlink env add dev
 # → "No agentlink.json found" menu with three choices:
 #     - Run the full AgentLink scaffold (recommended) → exits, tells user to run `npx agentlink-sh@latest`
 #     - Continue without full features → writes a minimal agentlink.json, runs the Supabase flow
@@ -102,12 +110,12 @@ If the user picks "Continue without full features," the CLI writes a minimal `ag
 
 What works in bare mode: `env add`/`use`/`remove`/`list`, `env config [secrets|db|auth|all]`, `db password`, `db url`. What's a no-op until the user adds content: `db apply` (skips with "supabase/database/ not found"), `env deploy` (picks up migrations/schemas/functions incrementally as they appear).
 
-Upgrade path: `npx agentlink-sh@latest --force-update` converts a bare project to the full scaffold.
+Upgrade path: `pnpm exec agentlink --force-update` converts a bare project to the full scaffold.
 
 ### Update an existing project
 
 ```bash
-npx agentlink-sh@latest --force-update
+pnpm exec agentlink --force-update
 ```
 
 Re-applies template files, patches `config.toml`, runs SQL setup, and regenerates migrations if schemas changed. Use after a CLI version upgrade or when `check` reports missing components.
@@ -115,8 +123,8 @@ Re-applies template files, patches `config.toml`, runs SQL setup, and regenerate
 ### Diagnose
 
 ```bash
-npx agentlink-sh@latest check            # Check default environment
-npx agentlink-sh@latest check --env dev  # Check specific environment
+pnpm exec agentlink check            # Check default environment
+pnpm exec agentlink check --env dev  # Check specific environment
 ```
 
 Outputs JSON with `ready`, `supabase_running`, `database` (extensions, queues, functions, secrets, api_schema), and `files`. Read-only — reports problems but does not fix them.
@@ -124,8 +132,8 @@ Outputs JSON with `ready`, `supabase_running`, `database` (extensions, queues, f
 ### Component info
 
 ```bash
-npx agentlink-sh@latest info          # Summary list
-npx agentlink-sh@latest info <name>   # Detail for one component
+pnpm exec agentlink info          # Summary list
+pnpm exec agentlink info <name>   # Detail for one component
 ```
 
 Shows type, summary, description, signature, and related components. Use to understand what a missing component does.
@@ -138,7 +146,7 @@ Shows type, summary, description, signature, and related components. Use to unde
 | `--no-frontend`           | Skip frontend scaffolding (backend only)                                                                                                                                                                                    |
 | `-y, --yes`               | Auto-confirm all prompts                                                                                                                                                                                                    |
 | `--local`                 | Use local Docker instead of Supabase Cloud (cloud is default)                                                                                                                                                               |
-| `--skip-env`              | Scaffold files only — skip all Supabase setup (OAuth, project creation, Docker). User runs `npx agentlink-sh@latest env add dev` after. **Use for agent-driven scaffolding.** Mutually exclusive with `--local` / `--link`. |
+| `--skip-env`              | Scaffold files only — skip all Supabase setup (OAuth, project creation, Docker). User runs `pnpm exec agentlink env add dev` after. **Use for agent-driven scaffolding.** Mutually exclusive with `--local` / `--link`. |
 | `--force-update`          | Force update even if project is up to date                                                                                                                                                                                  |
 | `--link`                  | Non-interactive scaffold + link (requires `--project-ref`, `--db-url`, `--api-url`, `--publishable-key`, `--secret-key`). Mutually exclusive with `--skip-env`.                                                             |
 | `--project-ref <ref>`     | Supabase project reference ID (used with `--link`)                                                                                                                                                                          |
@@ -158,9 +166,9 @@ Shows type, summary, description, signature, and related components. Use to unde
 ### Apply schemas
 
 ```bash
-npx agentlink-sh@latest db apply                    # Auto-detects DB from .env.local
-npx agentlink-sh@latest db apply --env dev          # Target specific environment
-npx agentlink-sh@latest db apply --db-url "postgresql://..."  # Explicit DB URL
+pnpm exec agentlink db apply                    # Auto-detects DB from .env.local
+pnpm exec agentlink db apply --env dev          # Target specific environment
+pnpm exec agentlink db apply --db-url "postgresql://..."  # Explicit DB URL
 ```
 
 Pushes your schema-file changes to the live DB — **no Docker needed**. It handles changes to existing objects, so editing a table/column (an `ALTER`) lands without a rebuild. `--legacy` falls back to a create-only mode; `--allow-destructive` is required only for row-data-loss ops (`DROP TABLE`/`COLUMN`/`SCHEMA`, `TRUNCATE`). `db apply` also applies the imperative resources (`storage/`, `cron/`, `rbac/`).
@@ -168,8 +176,8 @@ Pushes your schema-file changes to the live DB — **no Docker needed**. It hand
 ### Apply imperative resources only
 
 ```bash
-npx agentlink-sh@latest db resources                 # storage/ + cron/ + rbac/, nothing else
-npx agentlink-sh@latest db resources --env dev
+pnpm exec agentlink db resources                 # storage/ + cron/ + rbac/, nothing else
+pnpm exec agentlink db resources --env dev
 ```
 
 Applies **only** the imperative folders (`supabase/database/` `storage/`, `cron/`, `rbac/`) — no schema diff, no type-gen. Use it after editing a cron job, storage bucket, or RBAC file when you don't want a full `db apply`. Idempotent. (`db rbac-sync` is the rbac-only subset.)
@@ -177,31 +185,31 @@ Applies **only** the imperative folders (`supabase/database/` `storage/`, `cron/
 ### Run SQL
 
 ```bash
-npx agentlink-sh@latest db sql "SELECT * FROM public.profiles LIMIT 5"
-npx agentlink-sh@latest db sql "SELECT 1" --env dev
-npx agentlink-sh@latest db sql "SELECT 1" --json    # JSON output (cloud only)
+pnpm exec agentlink db sql "SELECT * FROM public.profiles LIMIT 5"
+pnpm exec agentlink db sql "SELECT 1" --env dev
+pnpm exec agentlink db sql "SELECT 1" --json    # JSON output (cloud only)
 ```
 
 ### Generate types
 
 ```bash
-npx agentlink-sh@latest db types                    # Auto-detects output path
-npx agentlink-sh@latest db types --env dev          # From specific environment
-npx agentlink-sh@latest db types --output types/db.ts  # Custom output path
+pnpm exec agentlink db types                    # Auto-detects output path
+pnpm exec agentlink db types --env dev          # From specific environment
+pnpm exec agentlink db types --output types/db.ts  # Custom output path
 ```
 
 ### Generate migration
 
 ```bash
-npx agentlink-sh@latest db migrate add_charts       # From default DB
-npx agentlink-sh@latest db migrate add_charts --env dev
+pnpm exec agentlink db migrate add_charts       # From default DB
+pnpm exec agentlink db migrate add_charts --env dev
 ```
 
 ### Set database password
 
 ```bash
-npx agentlink-sh@latest db password                  # Interactive: shows dashboard reset link + prompts
-npx agentlink-sh@latest db password "newpassword"    # Non-interactive: sets directly
+pnpm exec agentlink db password                  # Interactive: shows dashboard reset link + prompts
+pnpm exec agentlink db password "newpassword"    # Non-interactive: sets directly
 ```
 
 Shows or sets the database password for the active cloud project. The password is stored in `~/.config/agentlink/credentials.json` (per project ref). Use when the DB password was reset in the Supabase dashboard.
@@ -211,9 +219,9 @@ Shows or sets the database password for the active cloud project. The password i
 Packages Supabase's recommended `db dump` triplet into a single command — `roles.sql` (`--role-only`), `schema.sql` (definitions), and `data.sql` (`--use-copy --data-only -x storage.buckets_vectors -x storage.vector_indexes`). Files land under `supabase/backups/<env>/<YYYY-MM-DDTHH-MM-SS>/`; each run creates a fresh timestamped subdirectory so previous backups survive a failed new run.
 
 ```bash
-npx agentlink-sh@latest db backup                    # Active env (cloud.default, or local if none)
-npx agentlink-sh@latest db backup --env prod         # Target prod (shows ▲ Active env: prod if active)
-npx agentlink-sh@latest db backup --db-url "..."     # Override URL entirely
+pnpm exec agentlink db backup                    # Active env (cloud.default, or local if none)
+pnpm exec agentlink db backup --env prod         # Target prod (shows ▲ Active env: prod if active)
+pnpm exec agentlink db backup --db-url "..."     # Override URL entirely
 ```
 
 On first run, appends `supabase/backups/` to the project's root `.gitignore` under an "AgentLink — database backups" comment (idempotent on re-runs). Snapshots may contain real production data, so default-gitignored is non-negotiable.
@@ -227,7 +235,7 @@ Read-only against the target DB. Works on cloud envs, local Docker, and bare pro
 ### Database rebuild (local reset + re-apply)
 
 ```bash
-npx agentlink-sh@latest db rebuild
+pnpm exec agentlink db rebuild
 ```
 
 Resets the database the right way and brings it back: runs `supabase db reset` (replays the committed migrations — migration files are **never touched**) **then** re-applies the schema files and the **imperative resources** (`rbac/`, `cron/`, `storage/`). A raw `supabase db reset` replays migrations only, so it silently DROPS custom roles/permissions, cron jobs, and storage buckets/policies (those are excluded from migrations) — `db rebuild` restores them. Now that `db apply` handles changes to existing objects, **it usually handles drift on its own** (a changed column just converges, and after a raw `supabase db reset` it detects the reset and reapplies the full schema) — so `db rebuild` is for genuine recovery: a DB in a weird state, or a change `db apply` refused as data-destructive. **Same command across envs:** local resets the Docker stack; a cloud **dev** env runs `supabase db reset --db-url <dev>` (resets the remote dev DB) behind an explicit typed confirmation (`--yes` to skip). **Production is a hard block** — `db rebuild` against prod is rejected outright, no override. **The agent is blocked from running `db rebuild` (and any raw `supabase db reset`) — resets are user-initiated**; if a reset is needed, point the user at this command. If the user already ran a raw `supabase db reset`, `db apply` alone reapplies the full schema + imperative resources (it detects the reset).
@@ -237,8 +245,8 @@ Resets the database the right way and brings it back: runs `supabase db reset` (
 ### Database URL check
 
 ```bash
-npx agentlink-sh@latest db url        # Show correct pooler URL from Supabase API
-npx agentlink-sh@latest db url --fix  # Also update .env.local if it's wrong
+pnpm exec agentlink db url        # Show correct pooler URL from Supabase API
+pnpm exec agentlink db url --fix  # Also update .env.local if it's wrong
 ```
 
 Fetches the real pooler DB URL from the Supabase Management API (Supavisor, IPv4-compatible, transaction mode) and compares it with the value stored in `.env.local`. Use when `db apply` or `db sql` fails with connection errors.
@@ -255,14 +263,14 @@ Fetches the real pooler DB URL from the Supabase Management API (Supavisor, IPv4
 
 ```bash
 # Development — the agent's loop
-npx agentlink-sh@latest db apply
+pnpm exec agentlink db apply
 
 # Deployment — apply current schemas + edge functions to a cloud env
-npx agentlink-sh@latest env deploy dev
-npx agentlink-sh@latest env deploy prod      # Prompts y/N confirm
+pnpm exec agentlink env deploy dev
+pnpm exec agentlink env deploy prod      # Prompts y/N confirm
 
 # Optional — when the user explicitly asks for a migration artifact
-npx agentlink-sh@latest db migrate descriptive_name
+pnpm exec agentlink db migrate descriptive_name
 npx supabase db push                              # Push the generated migration
 ```
 
@@ -312,7 +320,7 @@ No interactive prompts. All connection details come from `--link` flags.
 3. Install frontend + backend deps (npm install in user's project dir)
 4. Configure Claude Code (pending-env AGENTS.md mode, Next-step callout)
 5. Install plugin + companion skills
-6. User runs `npx agentlink-sh@latest env add dev` in a terminal to finish setup
+6. User runs `pnpm exec agentlink env add dev` in a terminal to finish setup
 ```
 
 Output is a complete scaffolded repo with no env yet — the user's browser OAuth happens in the `env add dev` step afterward.
@@ -333,12 +341,12 @@ Output is a complete scaffolded repo with no env yet — the user's browser OAut
 ### Deploy
 
 ```bash
-npx agentlink-sh@latest env deploy                      # Interactive picker — preselects cloud.default
-npx agentlink-sh@latest env deploy dev                  # → targets dev
-npx agentlink-sh@latest env deploy prod                 # → targets prod (requires y/N confirm)
-npx agentlink-sh@latest env deploy prod --yes           # Skip the prod confirm (CI)
-npx agentlink-sh@latest env deploy prod --yes --non-interactive  # Full CI form
-npx agentlink-sh@latest env deploy dev --dry-run        # Print target without applying
+pnpm exec agentlink env deploy                      # Interactive picker — preselects cloud.default
+pnpm exec agentlink env deploy dev                  # → targets dev
+pnpm exec agentlink env deploy prod                 # → targets prod (requires y/N confirm)
+pnpm exec agentlink env deploy prod --yes           # Skip the prod confirm (CI)
+pnpm exec agentlink env deploy prod --yes --non-interactive  # Full CI form
+pnpm exec agentlink env deploy dev --dry-run        # Print target without applying
 ```
 
 `env deploy` is a **three-step operation**, each step gated on the corresponding `supabase/` directory existing:
@@ -353,14 +361,14 @@ Does NOT generate a migration file, and does NOT mutate `manifest.cloud.default`
 
 Things `env deploy` deliberately does NOT do (belong elsewhere):
 
-- **Vault secrets / PostgREST config / auth config.** These are applied during `env add` (initial bootstrap). For targeted re-applies without the heavier schemas/functions path, use `npx agentlink-sh@latest env config [secrets|db|auth|all] [env-name]` — same primitives, cloud-only, idempotent, works on bare projects. For a full reset (schemas + functions + config + verify) use `env add <name> --retry`.
+- **Vault secrets / PostgREST config / auth config.** These are applied during `env add` (initial bootstrap). For targeted re-applies without the heavier schemas/functions path, use `pnpm exec agentlink env config [secrets|db|auth|all] [env-name]` — same primitives, cloud-only, idempotent, works on bare projects. For a full reset (schemas + functions + config + verify) use `env add <name> --retry`.
 - **Migration file generation.** Use `db migrate <name>` explicitly when you want an auditable artifact.
 - **Clean-tree gate.** `db apply` is idempotent, so running against a dirty tree is safe; the only reviewability loss is at the migration-diff level, which `env deploy` doesn't generate anyway.
 - **Data-risk analysis.** That was tied to the migration diff; use `db migrate` + review the generated SQL when you want it.
 
 **The top-level `npx agentlink-sh@latest deploy` command has been removed.** The CLI intercepts `npx agentlink-sh@latest deploy` and `npx agentlink-sh@latest retry-deploy` with an error pointing at the new verb. CI workflows using `deploy --prod` / `deploy --ci` must migrate to `env deploy <name> --yes --non-interactive` (the `env add --setup-ci` generator emits the new form).
 
-**The agent deploys to the active dev env (local or `dev`) freely; it does not target `prod` without explicit, in-message user approval.** Deploying edge functions to `dev` after writing them, applying schemas to `dev`, and setting `dev` edge-function secrets are all part of the agent's normal workflow — without those, the user can't actually test what the agent built. The hard boundary is production: `npx agentlink-sh@latest env deploy prod`, `supabase db push` against a prod URL, `supabase functions deploy` while the active env is `prod`, and `npx agentlink-sh@latest env use prod` are all developer-initiated. When users ask to deploy to prod, point them to `npx agentlink-sh@latest env deploy prod` (interactive y/N gate) or `npx agentlink-sh@latest env deploy prod --dry-run` (preview without applying).
+**The agent deploys to the active dev env (local or `dev`) freely; it does not target `prod` without explicit, in-message user approval.** Deploying edge functions to `dev` after writing them, applying schemas to `dev`, and setting `dev` edge-function secrets are all part of the agent's normal workflow — without those, the user can't actually test what the agent built. The hard boundary is production: `pnpm exec agentlink env deploy prod`, `supabase db push` against a prod URL, `supabase functions deploy` while the active env is `prod`, and `pnpm exec agentlink env use prod` are all developer-initiated. When users ask to deploy to prod, point them to `pnpm exec agentlink env deploy prod` (interactive y/N gate) or `pnpm exec agentlink env deploy prod --dry-run` (preview without applying).
 
 ### Server-side config (`env config`)
 
@@ -377,13 +385,13 @@ Both positionals are optional; omit either for an interactive picker:
 
 ```bash
 # Shape: env config [subcommand] [env-name]
-npx agentlink-sh@latest env config                      # Pick subcommand + env interactively
-npx agentlink-sh@latest env config secrets              # Subcommand given, env picker
-npx agentlink-sh@latest env config prod                 # Rotation: "prod" isn't a valid subcommand but IS a valid env → treated as env, subcommand picker runs
-npx agentlink-sh@latest env config secrets prod         # Both specified
-npx agentlink-sh@latest env config auth prod            # Just auth, against prod (confirms)
-npx agentlink-sh@latest env config all dev --yes        # Full re-apply to dev, no prompts
-npx agentlink-sh@latest env config secrets --env prod   # --env flag still accepted (for CI)
+pnpm exec agentlink env config                      # Pick subcommand + env interactively
+pnpm exec agentlink env config secrets              # Subcommand given, env picker
+pnpm exec agentlink env config prod                 # Rotation: "prod" isn't a valid subcommand but IS a valid env → treated as env, subcommand picker runs
+pnpm exec agentlink env config secrets prod         # Both specified
+pnpm exec agentlink env config auth prod            # Just auth, against prod (confirms)
+pnpm exec agentlink env config all dev --yes        # Full re-apply to dev, no prompts
+pnpm exec agentlink env config secrets --env prod   # --env flag still accepted (for CI)
 ```
 
 **How it relates to the other env commands:**
@@ -398,35 +406,35 @@ AgentLink enforces a **fixed three-environment model**: `local`, `dev`, `prod`. 
 
 | Env     | Meaning                   | Created by                                                                                            |
 | ------- | ------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `local` | Local Docker Supabase     | `npx agentlink-sh@latest env use local` (switches to it; the Docker stack itself is `supabase start`) |
-| `dev`   | The cloud development env | `npx agentlink-sh@latest env add dev`                                                                 |
-| `prod`  | The cloud production env  | `npx agentlink-sh@latest env add prod`                                                                |
+| `local` | Local Docker Supabase     | `pnpm exec agentlink env use local` (switches to it; the Docker stack itself is `supabase start`) |
+| `dev`   | The cloud development env | `pnpm exec agentlink env add dev`                                                                 |
+| `prod`  | The cloud production env  | `pnpm exec agentlink env add prod`                                                                |
 
 Attempts to add `staging`, `dev2`, `production`, etc. fail with a clear error. Legacy manifests carrying off-model names are blocked at command entry with an `env remove` hint. Inspection commands (`env list`, `env remove`) remain permissive so users can see and clean up legacy entries.
 
 ```bash
 # Interactive pickers — all three accept no-name and show a selector
-npx agentlink-sh@latest env add                         # Picker: dev / prod (linked / not linked)
-npx agentlink-sh@latest env use                         # Picker: local (if relevant) / dev / prod
-npx agentlink-sh@latest env deploy                      # Picker: registered cloud envs, preselects cloud.default
+pnpm exec agentlink env add                         # Picker: dev / prod (linked / not linked)
+pnpm exec agentlink env use                         # Picker: local (if relevant) / dev / prod
+pnpm exec agentlink env deploy                      # Picker: registered cloud envs, preselects cloud.default
 
 # Explicit
-npx agentlink-sh@latest env add dev                     # Add or relink the cloud dev env
-npx agentlink-sh@latest env add prod                    # Add the prod env
-npx agentlink-sh@latest env use local                   # Switch active env to local Docker
-npx agentlink-sh@latest env use dev                     # Switch active env to cloud dev
-npx agentlink-sh@latest env use prod                    # Switch to prod (y/N confirm required)
-npx agentlink-sh@latest env list                        # Show all environments + their orgs
-npx agentlink-sh@latest env remove <name>               # Remove an env (offers to forget its DB password too)
+pnpm exec agentlink env add dev                     # Add or relink the cloud dev env
+pnpm exec agentlink env add prod                    # Add the prod env
+pnpm exec agentlink env use local                   # Switch active env to local Docker
+pnpm exec agentlink env use dev                     # Switch active env to cloud dev
+pnpm exec agentlink env use prod                    # Switch to prod (y/N confirm required)
+pnpm exec agentlink env list                        # Show all environments + their orgs
+pnpm exec agentlink env remove <name>               # Remove an env (offers to forget its DB password too)
 
 # Non-interactive (for agents / CI)
-npx agentlink-sh@latest env add prod --project-ref <ref> --non-interactive
-npx agentlink-sh@latest env add dev  --project-ref <ref> --non-interactive   # Relinks dev if it exists
-npx agentlink-sh@latest env deploy prod --yes --non-interactive              # CI-friendly deploy
-npx agentlink-sh@latest env remove staging -y                                # Legacy cleanup allowed
+pnpm exec agentlink env add prod --project-ref <ref> --non-interactive
+pnpm exec agentlink env add dev  --project-ref <ref> --non-interactive   # Relinks dev if it exists
+pnpm exec agentlink env deploy prod --yes --non-interactive              # CI-friendly deploy
+pnpm exec agentlink env remove staging -y                                # Legacy cleanup allowed
 
 # Recovery
-npx agentlink-sh@latest env add dev --retry             # Re-apply full setup (schemas, functions, secrets, PostgREST + auth) if a previous deploy died mid-way
+pnpm exec agentlink env add dev --retry             # Re-apply full setup (schemas, functions, secrets, PostgREST + auth) if a previous deploy died mid-way
 ```
 
 `env use <name>` rewrites the managed block of `.env.local` so downstream `db apply` / `functions serve` / `db sql` hit the right env, and persists `manifest.cloud.default` so every subsequent command resolves the same target. User-added variables outside the block are preserved.
@@ -444,7 +452,7 @@ npx agentlink-sh@latest env add dev --retry             # Re-apply full setup (s
 
 After confirming, every subsequent `env deploy` / `db apply` / `db sql` / `db rebuild` prints an `▲ Active env: prod` banner at the top as a persistent reminder across terminals and agent sessions.
 
-`env add <name>` handles both new environments and relinking existing ones. When the env already exists, a recovery prompt offers three actions: **Re-apply full setup** (re-runs bootstrap — schemas, functions, secrets, PostgREST + auth config — against the same project; for mid-deploy failures or config changes), **Relink to a different Supabase project** (for deleted/wrong projects, or a project transferred to a new org), or **Cancel**. The picker shows a dim hint above: _"If you just changed schemas or functions, cancel and run `npx agentlink-sh@latest env deploy <name>` instead."_ — steering users away from the heavier full-setup when the lighter deploy would do. When relinking lands on the **same** project already registered for the env (e.g. after a transfer), the CLI detects it and offers to keep the password on file or update it instead of forcing re-entry. `--retry` triggers the full-setup path non-interactively; `--project-ref <ref>` triggers relink; `--keep-password` reuses the stored DB password in non-interactive same-project relinks.
+`env add <name>` handles both new environments and relinking existing ones. When the env already exists, a recovery prompt offers three actions: **Re-apply full setup** (re-runs bootstrap — schemas, functions, secrets, PostgREST + auth config — against the same project; for mid-deploy failures or config changes), **Relink to a different Supabase project** (for deleted/wrong projects, or a project transferred to a new org), or **Cancel**. The picker shows a dim hint above: _"If you just changed schemas or functions, cancel and run `pnpm exec agentlink env deploy <name>` instead."_ — steering users away from the heavier full-setup when the lighter deploy would do. When relinking lands on the **same** project already registered for the env (e.g. after a transfer), the CLI detects it and offers to keep the password on file or update it instead of forcing re-entry. `--retry` triggers the full-setup path non-interactively; `--project-ref <ref>` triggers relink; `--keep-password` reuses the stored DB password in non-interactive same-project relinks.
 
 `env add` runs an **org-first picker** — the user picks the Supabase organization BEFORE the connect-existing-vs-create-new choice, so both paths browse the correct org's projects. The picker merges API-visible orgs with cached orgs from previous logins and offers "+ Authorize a different organization…" to add a new one. On token validation failure (401/403 — org membership revoked, integration restrictions), the CLI surfaces "▲ Stored credentials for \<org\> are no longer accepted" and kicks off re-auth automatically.
 
@@ -455,7 +463,7 @@ Initial project link can also be done during scaffold with the `--link` flag —
 The three env pickers behave slightly differently:
 
 - **`env add` picker** lists `dev` and `prod`. Each row is annotated `— linked to <projectRef>` or `— not linked`. Selecting a linked env cascades into the 3-way recovery prompt (Re-apply / Relink / Cancel).
-- **`env use` picker** lists cloud envs in the manifest with a ✓ next to the active one. Envs not yet in the manifest are disabled with a `run env add <name> first` hint. **`local` only appears when relevant**: it shows up when (a) local is already the active env, or (b) the project was scaffolded in local mode. Cloud-only projects won't see `local` as an option (explicit `npx agentlink-sh@latest env use local` still works if forced).
+- **`env use` picker** lists cloud envs in the manifest with a ✓ next to the active one. Envs not yet in the manifest are disabled with a `run env add <name> first` hint. **`local` only appears when relevant**: it shows up when (a) local is already the active env, or (b) the project was scaffolded in local mode. Cloud-only projects won't see `local` as an option (explicit `pnpm exec agentlink env use local` still works if forced).
 - **`env deploy` picker** lists every registered cloud env and preselects `cloud.default` (when it's a cloud env). Throws a clear error with an `env add` hint if no cloud env is registered.
 
 ### Clean-tree gate
@@ -485,7 +493,7 @@ Supabase OAuth tokens are **scoped to a single organization** — the consent sc
 
 ## Schema Files vs Migrations
 
-**Schema files** (`supabase/database/`) are the source of truth for application SQL. They use idempotent patterns (`CREATE OR REPLACE`, `IF NOT EXISTS`) and are applied with `npx agentlink-sh@latest db apply` — **no Docker needed**. It pushes the delta to the live DB and handles changes to existing objects (an `ALTER`), so editing an object just works. The agent writes and modifies these during development. (One-off `psql -c "…"` is fine for a quick manual statement, but `db apply` is the loop.)
+**Schema files** (`supabase/database/`) are the source of truth for application SQL. They use idempotent patterns (`CREATE OR REPLACE`, `IF NOT EXISTS`) and are applied with `pnpm exec agentlink db apply` — **no Docker needed**. It pushes the delta to the live DB and handles changes to existing objects (an `ALTER`), so editing an object just works. The agent writes and modifies these during development. (One-off `psql -c "…"` is fine for a quick manual statement, but `db apply` is the loop.)
 
 **Migrations** (`supabase/migrations/`) are the deployment record for production. They're generated by `db migrate`: it diffs your committed migrations against the schema files (**no Docker**). `npx supabase db diff` is deliberately not used (it sorts schema files alphabetically and breaks on cross-file FK references). See [migration_system.md](./references/migration_system.md) for the baseline details and `--legacy`.
 
@@ -510,7 +518,7 @@ The CLI handles most cases, but if it fails or produces incorrect results, the a
 1. **Write a migration file directly** — Create `supabase/migrations/<timestamp>_<name>.sql` with the correct SQL
 2. **Mark it as applied** — `npx supabase migration repair <version> --status applied --local` (or `--linked` for cloud)
 3. **Apply SQL via psql** — `psql <db_url> -c "SQL"` or pipe a schema file
-4. **Fix a broken migration** — Edit the file in `supabase/migrations/`, then repair
+4. **Fix a broken migration** — **only if it is uncommitted AND not yet deployed to production** (confirm with the user): edit the file in `supabase/migrations/`, then repair. **If it's committed or already deployed, do NOT edit it** — migrations are forward-only (see [migration_system.md](./references/migration_system.md) → *Migrations are forward-only*). Fix the schema files and generate a **new** migration that corrects it forward.
 
 Always prefer the CLI (`--force-update`) first. Only fix manually when the CLI can't handle the situation.
 

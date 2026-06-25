@@ -22,7 +22,7 @@ Captures everything in your `public` and `api` schemas — tables, functions, in
 
 ## How `db apply` works (the development loop)
 
-`npx agentlink-sh@latest db apply` pushes your schema-file changes to the live DB — **no Docker needed**. It handles changes to existing objects, so editing a table/column (an `ALTER`), changing a default, etc. just lands; you don't need a rebuild. This is the only command the agent uses during development — run it after every schema-file edit.
+`pnpm exec agentlink db apply` pushes your schema-file changes to the live DB — **no Docker needed**. It handles changes to existing objects, so editing a table/column (an `ALTER`), changing a default, etc. just lands; you don't need a rebuild. This is the only command the agent uses during development — run it after every schema-file edit.
 
 `--legacy` falls back to a create-only mode (which can't pick up changes to an existing object); `--allow-destructive` is required only for row-data-loss ops (`DROP TABLE`/`COLUMN`/`SCHEMA`, `TRUNCATE`).
 
@@ -63,8 +63,25 @@ Non-destructive — no reset of the dev DB, no data backup/restore.
 
 ---
 
+## Migrations are forward-only (immutable once committed or deployed)
+
+A migration file is a permanent entry in the deployment record. It becomes **immutable** the moment *either* of these is true:
+
+- **It's committed to git** — CI, other clones, and `env deploy` all replay `supabase/migrations/` **in order**; rewriting a committed migration diverges that shared history.
+- **It's been deployed to any environment** (especially prod) — `db push` recorded it in that env's migration ledger. Editing the file makes it disagree with the SQL the env actually ran, and the ledger won't re-run it.
+
+**The rule:**
+
+1. **Never edit a committed migration.** Forbidden, no exceptions. Fix the schema files and run `db migrate <name>` to generate a **new** migration that corrects the problem *forward*.
+2. **An uncommitted migration may be edited or regenerated ONLY after confirming with the user that it has not been deployed to production.** (An `env deploy prod` from a dirty tree can push an uncommitted migration.) If it was deployed, treat it as immutable and fix forward. When in doubt, ask.
+
+The safe regeneration path for an uncommitted, **not-yet-deployed** migration is to delete the file and re-run `db migrate` — nothing depends on it yet. Once it's committed or deployed, that option is gone: forward fixes only.
+
+---
+
 ## Rules worth remembering
 
+- **Migrations are forward-only** — never edit a migration that's committed or deployed; fix forward with a new `db migrate`. Edit an uncommitted one only after confirming it hasn't reached prod (see above).
 - **The `api` schema must exist before objects reference it** — which is why `database/schemas/api/schema.sql` is created by **both** a pre-start migration AND a schema file. Don't remove either.
 - **One object per file.** `db apply` resolves dependency order automatically, so file count and naming are irrelevant. The recursive `schema_paths` glob in `config.toml` (`["./database/**/*.sql"]`) picks up every file:
 
@@ -77,4 +94,4 @@ Non-destructive — no reset of the dev DB, no data backup/restore.
 
 ## Adding a new extension
 
-In your project: add the `CREATE EXTENSION` to the infrastructure migration and, if anything references the extension's types in schema files, add a `cluster/extensions/<ext>.sql` file. For an existing project, `npx agentlink-sh@latest --force-update` writes any new extension template and applies it.
+In your project: add the `CREATE EXTENSION` to the infrastructure migration and, if anything references the extension's types in schema files, add a `cluster/extensions/<ext>.sql` file. For an existing project, `pnpm exec agentlink --force-update` writes any new extension template and applies it.

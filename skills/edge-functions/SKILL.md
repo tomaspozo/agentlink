@@ -90,7 +90,7 @@ export default {
    enabled = true
    verify_jwt = false
    ```
-6. **Test** — Local: `npx supabase functions serve` / Deploy: `npx agentlink-sh@latest env deploy <dev|prod>` (pushes schemas + functions to the chosen env). Direct `npx supabase functions deploy --use-api` also works for functions-only pushes.
+6. **Test** — Local: `npx supabase functions serve` / Deploy: `pnpm exec agentlink env deploy <dev|prod>` (pushes schemas + functions to the chosen env). Direct `npx supabase functions deploy --use-api` also works for functions-only pushes.
 
 ---
 

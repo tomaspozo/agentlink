@@ -10,9 +10,9 @@ How to move an existing project onto a newer AgentLink version — and what to d
 
 Always try the CLI first. It knows how to merge managed files against the base snapshot, patch `config.toml`, apply the SQL, and bump the setup hash — none of which you should reproduce by hand.
 
-1. **`npx agentlink-sh@latest check`** — read-only. Reports `ready`, `supabase_running`, `database` (extensions, queues, functions, secrets, api_schema), and `files`. The `setupHash` on disk vs. the template hash tells you whether there's drift. Look at which fields are `false`.
+1. **`pnpm exec agentlink check`** — read-only. Reports `ready`, `supabase_running`, `database` (extensions, queues, functions, secrets, api_schema), and `files`. The `setupHash` on disk vs. the template hash tells you whether there's drift. Look at which fields are `false`.
 
-2. **`npx agentlink-sh@latest --dry-run`** — **this is the "what would change" tool.** It computes the full plan without touching disk, DB, or network, so it's safe on a dirty tree. It prints:
+2. **`pnpm exec agentlink --dry-run`** — **this is the "what would change" tool.** It computes the full plan without touching disk, DB, or network, so it's safe on a dirty tree. It prints:
    - **Setup hash** — on-disk vs. template, with `(match)` or `(drift)`.
    - **Base snapshot** — a status block reporting whether `.agentlink/template-base/` is present and complete (it's the committed record of the templates last shipped; the merge compares disk against it).
    - **Template files** (out of the full set) grouped against the base snapshot as `unchanged` / `would create` / `would fast-forward` (disk is pristine — overwritten with the new template) / `customized` (you edited it, no upstream change — preserved silently) / `CONFLICT` (you edited it **and** the template changed — disk preserved, 3-way reconcile surfaced) / `preserved (no base)` (no base entry — disk preserved, fail-safe).
@@ -22,9 +22,9 @@ Always try the CLI first. It knows how to merge managed files against the base s
 
    Read this first. It almost always answers "what does the upgrade do to my project?" without any disposable-project trick.
 
-3. **`npx agentlink-sh@latest --force-update`** — applies it. Updates template files (file-level merge against the base snapshot — see below), patches `config.toml`, runs the SQL setup, deploys functions on cloud, regenerates migrations if schemas changed. **Requires Supabase running** (local: `supabase start`; cloud: it links automatically). Gates on a clean git tree — commit or stash first, or pass `--allow-dirty` (rollback then gets messy because your edits and AgentLink's writes are mixed).
+3. **`pnpm exec agentlink --force-update`** — applies it. Updates template files (file-level merge against the base snapshot — see below), patches `config.toml`, runs the SQL setup, deploys functions on cloud, regenerates migrations if schemas changed. **Requires Supabase running** (local: `supabase start`; cloud: it links automatically). Gates on a clean git tree — commit or stash first, or pass `--allow-dirty` (rollback then gets messy because your edits and AgentLink's writes are mixed).
 
-4. **`npx agentlink-sh@latest check`** again — confirm `ready: true`.
+4. **`pnpm exec agentlink check`** again — confirm `ready: true`.
 
 After a real update the CLI prints a **Changed files** summary grouped by area and points you at:
 - `git diff` to review
@@ -96,7 +96,7 @@ diff -u  supabase/migrations/20200101000000_initial_agentlink_bootstrap.sql \
 - `supabase/config.toml` (env-specific) — let `--dry-run`'s `config.toml` plan tell you about patches instead
 - `AGENTS.md`, `.claude/settings.json`
 
-**3. The reference is just a comparison source.** Apply deltas back into the real project by editing the schema/function files and then running `npx agentlink-sh@latest db apply` (and, on cloud, `supabase functions deploy`) — the same workflow as any schema change. Don't copy `agentlink.json`/`config.toml` across. Delete `/tmp/agentlink-ref` when done.
+**3. The reference is just a comparison source.** Apply deltas back into the real project by editing the schema/function files and then running `pnpm exec agentlink db apply` (and, on cloud, `supabase functions deploy`) — the same workflow as any schema change. Don't copy `agentlink.json`/`config.toml` across. Delete `/tmp/agentlink-ref` when done.
 
 **4. Respect your customizations.** If you've edited a managed file to own it, the reference will show the template's version — that's expected drift, not a regression to "fix." The base-snapshot merge already preserves your edit (as `customized`, or surfaces a `conflict` if upstream also changed). Only port deltas you actually want.
 
@@ -106,8 +106,8 @@ diff -u  supabase/migrations/20200101000000_initial_agentlink_bootstrap.sql \
 
 | Situation | Do this |
 | --- | --- |
-| "What will the upgrade change?" | `npx agentlink-sh@latest --dry-run` |
-| Apply the upgrade | `npx agentlink-sh@latest --force-update` (Supabase must be running) |
+| "What will the upgrade change?" | `pnpm exec agentlink --dry-run` |
+| Apply the upgrade | `pnpm exec agentlink --force-update` (Supabase must be running) |
 | Dirty tree blocks the update | commit/stash, or `--force-update --allow-dirty` (messier rollback) |
 | Review what landed | `git diff` |
 | Roll back | `git checkout . && git clean -fd supabase/ .claude/` |

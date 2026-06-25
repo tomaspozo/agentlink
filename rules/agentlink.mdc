@@ -73,7 +73,7 @@ deploys):
   local Docker or Supabase Cloud.** Don't default silently.
 - **Cloud** → the agent can't do browser OAuth → scaffold files only with
   `npx agentlink-sh@latest <name> --skip-env`, then hand off
-  `npx agentlink-sh@latest env add dev` for the user to run in a terminal.
+  `pnpm exec agentlink env add dev` for the user to run in a terminal.
 - **Local** → no browser needed → the agent runs it end-to-end with `--local`
   (requires Docker + `psql`).
 - `--skip-env` is **not** a blanket agent default — it forces the cloud path.
