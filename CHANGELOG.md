@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-06-25
+
 ### Added
 
 - **Migrations are forward-only — a new immutability rule.** A migration becomes immutable the moment it is *either* committed to git *or* deployed to any environment: editing a committed migration is **forbidden** (fix forward with a new `db migrate`), and an uncommitted migration may be edited/regenerated **only after confirming with the user that it has not reached production** (a prod deploy from a dirty tree can push one). Added at the decision layer in `agents/builder.md` and as an authoritative section in `skills/cli/references/migration_system.md`; the "Fix a broken migration" / "Remove a migration" troubleshooting steps and the `cli` skill's manual-fix list were reconciled to gate on uncommitted-and-not-deployed instead of telling the agent to edit migration files.

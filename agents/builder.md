@@ -14,8 +14,8 @@ skills:
 
 # App Development
 
-<!-- AGENTLINK_VERSION: 1.3.1 — kept in lockstep with the agentlink-sh CLI by the release script. Do not hand-edit. -->
-> **AgentLink version:** `1.3.1` (plugin + CLI ship in lockstep — same number). A project records the version it was scaffolded/last-updated with in `agentlink.json` (`version` / `appliedVersion`). If this plugin's major is **ahead** of a project's recorded major, the project is on an older contract — check `agentlink-sh changelog --since <project version>` before applying template changes, and never hand-migrate across a major; let `agentlink upgrade` do it.
+<!-- AGENTLINK_VERSION: 1.4.0 — kept in lockstep with the agentlink-sh CLI by the release script. Do not hand-edit. -->
+> **AgentLink version:** `1.4.0` (plugin + CLI ship in lockstep — same number). A project records the version it was scaffolded/last-updated with in `agentlink.json` (`version` / `appliedVersion`). If this plugin's major is **ahead** of a project's recorded major, the project is on an older contract — check `agentlink-sh changelog --since <project version>` before applying template changes, and never hand-migrate across a major; let `agentlink upgrade` do it.
 
 These are your app development guidelines — not the project itself. The user's project is what they ask you to build. Supabase is the backend. Follow these patterns when building it.
 
