@@ -10,7 +10,6 @@
 ### Changed
 
 - **Prefer the project-local CLI (`pnpm exec agentlink`) over `npx …@latest` for in-project work** (pairs with the CLI's 1.4 devDependency pinning). `agents/builder.md` and the `cli` skill gained a "Running the CLI" section explaining the convention and the name split — the **package** is `agentlink-sh`, the installed **binary** is `agentlink`, and bare `npx agentlink` is unsafe (it resolves a *different* npm package when no local install exists). Swept ~230 in-project command references across the skills, `README.md`, `rules/agentlink.mdc`, and the destructive-DB hooks from `npx agentlink-sh@latest <cmd>` to `pnpm exec agentlink <cmd>`; `create` and recovery commands keep `@latest` (no local CLI exists yet). The hooks now point users at `pnpm exec agentlink db rebuild` — the block matcher is invocation-prefix-agnostic, so destructive-reset blocking still fires.
-- **The release script bumps both plugin manifests, the `builder.md` stamp, and the changelog in lockstep with the CLI.** `scripts/release.sh` gained a `--lockstep` mode (skips the confirm prompt, tolerates an empty `[Unreleased]` for a CLI-only release) and now also stamps `agents/builder.md`. The normal entry point is the CLI repo's `scripts/release.sh`, which invokes this with `--lockstep` so both repos release at the same version.
 
 ## [1.3.1] - 2026-06-24
 
