@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-06-25
+
 ### Changed
 
 - **The release script bumps both plugin manifests, the `builder.md` stamp, and the changelog in lockstep with the CLI.** `scripts/release.sh` gained a `--lockstep` mode (skips the confirm prompt, tolerates an empty `[Unreleased]` for a CLI-only release) and now also stamps `agents/builder.md`. The normal entry point is the CLI repo's `scripts/release.sh`, which invokes this with `--lockstep` so both repos release at the same version.
