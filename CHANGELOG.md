@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-07-02
+
 > **Agent 2.0** — the plugin is rewritten to the **identity-only auth model** + **native MCP**. The JWT proves identity only (no tenant, no permissions in the token); the active workspace is asserted per request via an `x-workspace-id` header, resolved by a `public._auth_pre_request()` db-pre-request hook into a transaction-local GUC, with role/permissions read from `api.session_context()`. The 1.x machinery is gone (`session_tenants`, `_hook_custom_access_token`, `_internal_admin_set_session_tenant`/`sync_session_tenants`, `api.tenant_select`, all `app_metadata.tenant_id/permissions` JWT claims). Skills **auth / frontend / rpc / database** were updated to the new model; **edge-functions** gained an MCP reference; **cli** gained the 1.x → 2.0 upgrade runbook. New scaffold objects: `public._auth_pre_request`, `api.session_context`, `api.tenant_update`, `api.tenant_delete`, the imperative `config/` folder (`config/db_pre_request.sql`), and the `mcp` edge function + `_shared/mcp.ts`. Version bumped to **2.0.0** (plugin + CLI in lockstep).
 
 ### Added
