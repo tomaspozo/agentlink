@@ -4,13 +4,33 @@ Client-side authentication UI: sign-in, sign-up, password reset, email confirmat
 
 ## Contents
 
+- [Identity-only model (2.0)](#identity-only-model-20)
 - [Canonical flow](#canonical-flow)
 - [Page-by-page reference](#page-by-page-reference)
 - [Hooks layer](#hooks-layer)
+- [Auth state changes & listener safety](#auth-state-changes--listener-safety)
 - [Customizing without breaking the flow](#customizing-without-breaking-the-flow)
 - [Cross-device PKCE: why OTP-paste is always visible](#cross-device-pkce)
 - [OAuth callback (extension point)](#oauth-callback-extension-point)
 - [Post-auth actions (e.g. invitation acceptance)](#post-auth-actions)
+- [Permission gating (authorization UX)](#permission-gating-authorization-ux)
+
+---
+
+## Identity-only model (2.0)
+
+The JWT proves **identity only** — it carries no workspace and no permissions.
+The active workspace is a **per-request** choice, asserted with an
+`x-workspace-id` header that `lib/supabase.ts` injects on every Data-API
+request. Role and permissions are read from `api.session_context()` for that
+workspace, not from the token.
+
+This is why the flows below **never** call `supabase.auth.refreshSession()` to
+"pick up" a workspace, never decode the JWT for a tenant claim, and never call
+`api.tenant_select()`. Sign-in and invite-accept just establish identity; the
+`WorkspaceProvider` then resolves the active workspace and its context. See the
+[frontend SKILL](../SKILL.md#workspaces-roles--permissions) for the workspace
+context itself.
 
 ---
 
@@ -32,7 +52,7 @@ Client-side authentication UI: sign-in, sign-up, password reset, email confirmat
                          │                  │                │
                          │                  └────────┬───────┘
                          │                           │
-                         │              type=signup|magiclink → refreshSession → /dashboard
+                         │              type=signup|magiclink → /dashboard
                          │              type=recovery        → /update-password
                          │              type=email_change    → success page
                          │
@@ -43,9 +63,9 @@ Client-side authentication UI: sign-in, sign-up, password reset, email confirmat
 
             /accept-invite?token=&[code=]
                          │
-                         ├─ ?code present (new user)   → exchangeCodeForSession → invitation_accept → refreshSession → /dashboard
+                         ├─ ?code present (new user)   → exchangeCodeForSession → invitation_accept → setActive(joined) → /dashboard
                          └─ no ?code (existing user)   → if no session: /sign-in?next=/accept-invite?token=...
-                                                       → else: invitation_accept → refreshSession → /dashboard
+                                                       → else: invitation_accept → setActive(joined) → /dashboard
 
             /settings/members  (in-app, gated)
                          ├─ membership_list    — show members + roles
@@ -75,7 +95,7 @@ Two consolidations to keep in mind:
 | `/forgot-password` | Request a recovery email | `useResetPasswordFlow` | success → `/check-inbox?type=recovery&email=…` |
 | `/update-password` | Set a new password (recovery destination + in-app change) | `useUpdatePasswordFlow` | success → `/dashboard` |
 | `/auth/confirm` | Single PKCE callback for link clicks | `useEffect` `exchangeCodeForSession` | branches on `?type=` |
-| `/accept-invite` | Workspace invitation acceptance | `useAcceptInvite` | accepted → `/dashboard`; logged out → `/sign-in?next=…` |
+| `/accept-invite` | Workspace invitation acceptance | `useAcceptInvitation` (+ inline PKCE exchange) | accepted → `setActive(joined)` → `/dashboard`; logged out → `/sign-in?next=…` |
 | `/settings/members` | Admin: list, invite, revoke, resend, update role, remove | RPC calls (no hooks layer needed) | mutations refresh the table |
 
 ### Route layout
@@ -107,7 +127,7 @@ Gating is by folder: `_anon/*` is anon-only, `_auth/*` is gated (each via the la
 
 ## Hooks layer
 
-`src/lib/auth/` ships a set of hooks. Each wraps one Supabase call with the canonical post-call logic — friendly errors via `formatAuthError`, post-signup `refreshSession()` so the JWT carries the `tenant_id` claim, etc. Hooks do not navigate; they return discriminated state and the page picks the destination.
+`src/lib/auth/` ships a set of hooks. Each wraps one Supabase call with the canonical post-call logic — friendly errors via `formatAuthError`, discriminated result state, etc. Hooks do not navigate; they return state and the page picks the destination. (Identity-only model: no hook calls `refreshSession()` to bake in a workspace — there is no tenant claim to refresh.)
 
 | Hook | Wraps | Returns |
 |------|-------|---------|
@@ -118,7 +138,7 @@ Gating is by folder: `_anon/*` is anon-only, `_auth/*` is gated (each via the la
 | `useUpdatePasswordFlow` | `auth.updateUser({ password })` | `{ submit, loading, error }` |
 | `useVerifyOtpFlow(kind)` | `auth.verifyOtp` | `{ submit, loading, error }` — `submit` returns a `VerifyResult` discriminator |
 | `useResendEmail({ type, email })` | type-aware: `auth.resend`, `signInWithOtp`, `resetPasswordForEmail` | `{ resend, loading, error, cooldownLeft }` |
-| `useAcceptInvite` | `exchangeCodeForSession` + `invitation_accept` RPC | `{ loading, error }` (auto-runs on mount with auth-lock guard) |
+| `useAcceptInvitation` | `invitation_accept` RPC + `setActiveWorkspaceId(joined)` | `{ accept, loading, error, setError }` — the `/accept-invite` state machine does the PKCE `exchangeCodeForSession` inline and calls `accept()` on click |
 
 ### `useResendEmail` is type-aware
 
@@ -142,7 +162,11 @@ if (result?.kind === "pending") {
 }
 ```
 
-When a session IS returned, the hook calls `refreshSession()` internally so the JWT picks up the `tenant_id` claim that `_internal_admin_handle_new_user` populates AFTER the initial mint.
+When a session IS returned, the user is signed in immediately — **no
+`refreshSession()`**. The AFTER-INSERT trigger materializes the user's default
+workspace; `WorkspaceProvider` then loads `api.tenant_list()` and selects it on
+the next render. There's no tenant claim to bake into the token, so there's
+nothing to refresh.
 
 ### `useVerifyOtpFlow` — type mapping
 
@@ -150,6 +174,49 @@ When verifying email-confirmation OTPs, supabase-js wants `type: 'email'` (the c
 
 - `signup`, `magiclink`, `invite` → SDK `type: 'email'`
 - `recovery` → SDK `type: 'recovery'`
+
+---
+
+## Auth state changes & listener safety
+
+`supabase.auth.onAuthStateChange` is how you react to sign-in / sign-out /
+token refresh. The scaffold's `AuthProvider` already subscribes for `{ user,
+session }`; you only touch this when building a callback page or a custom
+post-auth action.
+
+```typescript
+const { data: { subscription } } = supabase.auth.onAuthStateChange(
+  (event, session) => {
+    if (event === "SIGNED_OUT") window.location.href = "/sign-in";
+  },
+);
+subscription.unsubscribe(); // clean up on unmount
+```
+
+**Version floor: supabase-js ≥ 2.107.0.** v2.107.0 (PR #2392) removed the
+`navigator.locks`-based auth mutex — the root cause of async-callback deadlocks
+and "Lock broken by another request" errors. The scaffold pins this floor; keep
+it. On older versions you'd need `setTimeout(…, 0)` deferral around every
+Supabase call made from a listener.
+
+**Keep callbacks synchronous.** Even post-fix, the async `onAuthStateChange`
+overload is `@deprecated`, and awaiting inside a `TOKEN_REFRESHED` handler
+carries a residual re-entry risk. Dispatch Supabase work outside the callback:
+
+```typescript
+supabase.auth.onAuthStateChange((event) => {
+  if (event === "TOKEN_REFRESHED") {
+    void supabase.rpc("some_function"); // ✅ dispatch — don't await in the callback
+  }
+});
+```
+
+**Dual-path race — `onAuthStateChange` + `getSession()`.** A *logic* race that
+survives the ≥ 2.107.0 fix. A callback page reading a URL fragment has two
+paths resolve concurrently: `onAuthStateChange` fires when the fragment is
+consumed, and `getSession()` resolves once the session exists. If both trigger
+the same post-auth action it runs **twice**. Guard it — see
+[Post-auth actions](#post-auth-actions).
 
 ---
 
@@ -164,9 +231,11 @@ What you can change freely:
 
 What's load-bearing — change carefully:
 - **`useSignUpFlow`'s `!data.session` branch.** Skipping it produces the silent-failure bug (sign-up succeeds, no UI feedback, user stuck on the form).
-- **`refreshSession()` after signup.** The trigger writes `tenant_id` AFTER the initial JWT is minted; without refresh, every tenant-scoped RPC fails until the user reloads.
-- **`useAcceptInvite`'s auth-lock guard.** Two paths can race for the auth lock during invite acceptance — see [Post-auth actions](#post-auth-actions). The hook already implements the guard; don't reorder its operations.
-- **PKCE flow type.** `auth.confirm` and `useAcceptInvite` rely on `exchangeCodeForSession`, which requires `flowType: 'pkce'`. The scaffold sets it explicitly in `src/lib/supabase.ts`.
+- **The `/accept-invite` guard.** Two paths can race during invite acceptance — see [Post-auth actions](#post-auth-actions). The page/`useAcceptInvitation` flow already guards it; don't reorder its operations.
+- **PKCE flow type.** `auth.confirm` and `/accept-invite` rely on `exchangeCodeForSession`, which requires `flowType: 'pkce'`. The scaffold sets it explicitly in `src/lib/supabase.ts`.
+
+What you no longer need (identity-only model):
+- **No `refreshSession()` after signup or invite-accept.** There's no tenant claim in the JWT to refresh — the active workspace is a header, resolved by `WorkspaceProvider`. Don't reintroduce a post-auth refresh to "load the workspace."
 - **`/update-password` is NOT under `_anon`.** Recovery sessions have a session, so `_anon` would bounce them away. Keep it top-level.
 
 What's load-bearing — never change:
@@ -247,21 +316,25 @@ When the auth callback must perform an action after sign-in (e.g., accept an inv
 
 If both trigger the same work, the action runs **twice** (e.g., a double `invitation_accept`). On supabase-js < 2.107.0 this also surfaced as **"Lock broken by another request"** errors from the `navigator.locks`-based auth mutex; that mutex was removed in v2.107.0 (PR #2392), so the lock error is gone — but the double-execution is a plain logic bug that remains. The guard flag below fixes it regardless of SDK version.
 
-The `useAcceptInvite` hook already implements the canonical guard pattern. If you build a similar flow, mirror it:
+The `/accept-invite` flow already implements the canonical guard pattern. If you build a similar flow, mirror it:
 
 - **Guard flag**: `let handled = false` — only the first path executes
 - **Keep the `onAuthStateChange` callback synchronous** — dispatch the async work (`void doWork()`) rather than `await`-ing inside the listener (the async overload is still `@deprecated`)
 
 ```typescript
+import { setActiveWorkspaceId } from "@/lib/active-workspace";
+
 useEffect(() => {
   let handled = false;
 
   async function doWork() {
     if (handled) return;
     handled = true;
-    const { error } = await supabase.rpc("invitation_accept", { p_token: token });
+    const { data, error } = await supabase.rpc("invitation_accept", { p_token: token });
     if (error) { /* ... */ return; }
-    await supabase.auth.refreshSession();
+    // Identity-only: land the user in the workspace they just joined by
+    // selecting it — its id rides as the x-workspace-id header. No refreshSession.
+    if (data?.id) setActiveWorkspaceId(data.id);
     navigate("/dashboard");
   }
 
@@ -286,7 +359,7 @@ useEffect(() => {
 | Sign-up returns "User already registered" but the user never finished confirmation | Auth keeps the unconfirmed user. Looks like a duplicate. | Send them to resend (`useResendEmail({ type: 'signup' })`) |
 | Sign-in returns "Email not confirmed" | Session not issued yet | Render the "resend confirmation" CTA — don't ask for a different password |
 | "Email rate limit exceeded" | ~4 signups from the same IP within an hour | Show the rate-limit copy, not a generic error. The 30s cooldown on `useResendEmail` reduces the chance of hitting this. |
-| `refreshSession()` deadlock / "Lock broken by another request" | supabase-js < 2.107.0 `navigator.locks` mutex + `await` inside `onAuthStateChange` | Pin supabase-js ≥ 2.107.0 (PR #2392 removed the mutex). Still keep listeners synchronous and refresh after explicit user actions (signup, invite accept), not from inside `TOKEN_REFRESHED` handlers |
+| Auth deadlock / "Lock broken by another request" | supabase-js < 2.107.0 `navigator.locks` mutex + `await` inside `onAuthStateChange` | Pin supabase-js ≥ 2.107.0 (PR #2392 removed the mutex). Still keep listeners synchronous — dispatch Supabase work outside them, never `await` inside a `TOKEN_REFRESHED` handler |
 | Invite link "Invalid or expired" on second click | `invitation_accept` checks `accepted_at IS NULL` | The scaffold's `_internal_admin_complete_invitation` is idempotent — it returns success when the user already has a membership in the invited tenant |
 
 The `formatAuthError` helper in `lib/auth-errors.ts` maps these to friendly copy. Use it everywhere instead of surfacing raw Supabase strings.
@@ -298,11 +371,12 @@ The `formatAuthError` helper in `lib/auth-errors.ts` maps these to friendly copy
 > **UX only — never security.** The backend `auth_verify_access()` guard inside
 > every mutating RPC is the real gate (returns HTTP 403). The frontend just
 > avoids showing controls/pages the user can't use. Bypassing the UI still
-> hits the 403. Permissions come from the JWT `app_metadata.permissions` for
-> the **active workspace**.
+> hits the 403. Permissions come from `api.session_context()` for the **active
+> workspace** (via `WorkspaceProvider`) — never from the JWT.
 
 `useHasPermission(permission, mode?)` returns a boolean,
-failing safe to `false` while loading. Disable mutating buttons; hide nav.
+failing safe to `false` until the active workspace's context has resolved.
+Disable mutating buttons; hide nav.
 
 ```tsx
 const canManage = useHasPermission("membership.update");
@@ -326,7 +400,11 @@ export const Route = createFileRoute("/_auth/settings/members")({
 });
 ```
 
-`requirePermission` reads the session, refreshes once if the tenant claim
-isn't present yet (fresh-signup race), then redirects to `/forbidden` (a route
-under `_auth`, so the TopBar/workspace switcher stays mounted). Client controls
-inside the page gate with the same `useHasPermission(...)`.
+`requirePermission` runs outside React: it reads the session, resolves (and
+defaults, if needed) the active workspace via `ensureWorkspaceContext()`, reads
+that workspace's permissions from `api.session_context()`, then redirects —
+`/sign-in` when signed out, `/no-workspace` when the account has none, or
+`/forbidden` when the permission is missing (a route under `_auth`, so the
+TopBar/workspace switcher stays mounted). No refresh race — permissions are
+derived fresh server-side, not from a token claim. Client controls inside the
+page gate with the same `useHasPermission(...)`.

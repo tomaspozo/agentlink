@@ -1,6 +1,6 @@
 ---
 name: frontend
-description: Supabase client integration for frontend applications. Use when the task involves initializing the Supabase client, calling RPCs from frontend code, setting up environment variables for Supabase, managing auth sessions on the client, using TanStack Router or TanStack Query, building forms, or connecting any frontend framework to the Supabase backend.
+description: Frontend integration for the scaffolded React + TanStack Start (SPA) app on Supabase — client setup, RPC calls, TanStack Query and TanStack Router, React Hook Form + Zod forms, shadcn/ui primitives, the PageShell/PageHeader page anatomy, route guards and permission gating, workspace switching, the account section, SSR-later config, and client-side auth. Activate whenever the task touches the frontend, the client, or any workspace/account UI: initializing or calling the Supabase client, building pages/forms/tables, adding shadcn/ui components, wiring TanStack routes or queries, guarding routes by auth or permission, switching the active workspace, or turning on SSR.
 ---
 
 # Frontend — Supabase Client Integration
@@ -24,6 +24,8 @@ const supabase = createClient(
 ```
 
 The data API schema is always `api` (`{ db: { schema: 'api' } }`). Env vars use Vite's `VITE_` prefix and are read via `import.meta.env` — this holds even in TanStack Start SPA mode, since the build is Vite-based.
+
+The real scaffolded `lib/supabase.ts` adds two things the snippet above omits, and you should not strip them: a lazy `Proxy` so importing the module has no side effects (the SPA prerenders the route graph on the server), and a **global `fetch` wrapper that injects the `x-workspace-id` header** on every request from the active-workspace store. That header is the whole 2.0 workspace model — see [Auth on the Client](#auth-on-the-client). It also sets `auth: { flowType: "pkce", detectSessionInUrl: true }` for the email-confirm callbacks.
 
 ---
 
@@ -426,204 +428,41 @@ export const animalStatusLabels: Record<AnimalStatus, string> = {
 
 ## Auth on the Client
 
-### Listening for auth state changes
+The scaffold ships a **complete, working auth flow** — sign-in, sign-up, magic
+link, password recovery, email confirmation, and workspace-invitation
+acceptance. You extend it (OAuth buttons, copy, post-auth onboarding); you do
+not rebuild the gate. The deep patterns — the page/hook layer, `onAuthStateChange`
+listener safety, and post-auth actions — live in
+[Auth UI Patterns](./references/auth_ui.md).
 
-```typescript
-const { data: { subscription } } = supabase.auth.onAuthStateChange(
-  (event, session) => {
-    if (event === "SIGNED_OUT") {
-      window.location.href = "/sign-in";
-    }
-  }
-);
+### Identity-only model (2.0) — read this before touching auth
 
-// Clean up on unmount
-subscription.unsubscribe();
-```
+The JWT proves **identity only** — who the user is. It carries **no workspace
+and no permissions**. Two consequences define the entire client model:
 
-**Version floor: supabase-js ≥ 2.107.0.** v2.107.0 (PR #2392) removed the `navigator.locks`-based auth mutex, which was the root cause of the async-callback deadlocks and "Lock broken by another request" errors. The scaffold pins this floor; keep it. The patterns below are written for ≥ 2.107.0 — on older versions you would additionally need `setTimeout(…, 0)` deferral around every Supabase call made from a listener.
+- **The active workspace is asserted per request**, via an `x-workspace-id`
+  header. `lib/supabase.ts` injects it into every Data-API request through a
+  global `fetch` wrapper reading the active-workspace store — set once, no
+  client rebuild on switch. Switching workspace is just sending a different
+  header (`setActive(id)`).
+- **Role and permissions come from `api.session_context()`**, fetched for the
+  active workspace — never from `session.access_token` / `user.app_metadata`.
 
-**Caveat: avoid `await`-ing inside the callback anyway.** Even post-fix, the async `onAuthStateChange` overload remains `@deprecated`, and `refreshSession()` from inside a `TOKEN_REFRESHED` handler still carries a residual re-entry risk. Keep callbacks synchronous and dispatch any Supabase work outside them:
+> **Do not** decode the JWT for a `tenant_id`/`permissions` claim, call
+> `api.tenant_select()`, or `supabase.auth.refreshSession()` to "pick up" a
+> workspace. None of that exists in 2.0 — the workspace was never in the token.
+> See [Workspaces, Roles & Permissions](#workspaces-roles--permissions).
 
-```typescript
-supabase.auth.onAuthStateChange((event, session) => {
-  if (event === "TOKEN_REFRESHED") {
-    // ✅ Keep the callback synchronous; run the RPC outside it.
-    void supabase.rpc("some_function");
-    // Avoid `await supabase.rpc(...)` directly in the callback.
-  }
-});
-```
+### What the scaffold provides
 
-**Dual-path race when combining `onAuthStateChange` + `getSession()`.** This is a *logic* race, not a locking one — and it survives the ≥ 2.107.0 fix. Auth callback pages that read a URL hash fragment (e.g., `#access_token=...`) have two paths that resolve concurrently: `onAuthStateChange` fires when the fragment is consumed, and `getSession()` resolves once the session is established. If both trigger the same post-auth action (e.g., an `invitation_accept` RPC), it runs **twice**. The "Lock broken" symptom is gone, but the double execution is still a bug.
-
-Use a guard flag so only the first path to resolve executes the action:
-
-```typescript
-let handled = false;
-
-async function handlePostAuthAction() {
-  if (handled) return;
-  handled = true;
-  await supabase.rpc("invitation_accept", { p_token: token });
-  await supabase.auth.refreshSession();
-}
-
-supabase.auth.onAuthStateChange((event, session) => {
-  if (event === "SIGNED_IN" && session) {
-    void handlePostAuthAction(); // keep the callback itself synchronous
-  }
-});
-
-supabase.auth.getSession().then(({ data: { session } }) => {
-  if (session) void handlePostAuthAction();
-});
-```
-
-> **Load [Auth UI Patterns](./references/auth_ui.md) for the full post-auth action pattern (invitation acceptance example).**
-
-### Refresh session after claim changes
-
-When JWT claims change (e.g., after `api.tenant_select()`), the client must refresh to get the new token:
-
-```typescript
-await supabase.auth.refreshSession();
-```
-
-Without this, RLS policies use stale claims until the token naturally expires.
-
-### Post-signup & the `useTenantGuard` hook
-
-The custom access-token hook (`_hook_custom_access_token`) populates
-`tenant_id` / `tenant_role` / `permissions` on every JWT mint by reading
-`session_tenants` (per-device pin) with a fallback to the user's oldest
-membership. So in normal flows the very first JWT after sign-in already
-carries the right tenant — single-tenant apps need zero client-side
-selection logic.
-
-The one race that remains: a *direct signup* where the JWT is minted
-before the AFTER-INSERT trigger materializes the user's default
-membership. The session returned from `signUp()` lacks `tenant_id` until
-a refresh re-runs the hook. The scaffold handles this in two places:
-
-1. The scaffolded `/sign-up` route calls
-   `await supabase.auth.refreshSession()` immediately after `signUp()`
-   succeeds. Keep this whenever you replace or extend the sign-up flow.
-
-2. `useTenantGuard` is the safety net. When a gated page reads
-   tenant-scoped data and the JWT lacks `tenant_id`, the hook calls
-   `refreshSession()` once — the access-token hook re-runs against the
-   now-present membership, the new JWT has the tenant baked in, and we
-   set `ready = true`. No `tenant_list` / `tenant_select` calls needed
-   on the client.
-
-   ```typescript
-   import { useTenantGuard } from "@/hooks/use-tenant-guard";
-
-   function Dashboard() {
-     const { user } = useAuth();
-     const { ready, error } = useTenantGuard();
-
-     const { data } = useQuery({
-       ...myQueries.list(),
-       enabled: ready && !!user, // gate tenant-scoped queries on ready
-     });
-
-     if (!ready) return <ListSkeleton />;
-     if (error) return <EmptyState title="No workspace" description={error} />;
-     return <List items={data} />;
-   }
-   ```
-
-   Use it on every gated page that depends on `_auth_tenant_id()`.
-   Skip it on purely personal pages (profile, account settings) where
-   `auth.uid()` alone drives the policy.
-
-> **🛑 Critical gotcha — read tenant claims from `session.access_token`, NOT from `user.app_metadata`.**
->
-> `session.user.app_metadata` reflects the `auth.users.raw_app_meta_data`
-> database row. This scaffold deliberately stopped writing tenant claims
-> to `raw_app_meta_data` (they live in `public.session_tenants` now and
-> get injected into the access-token JWT by `_hook_custom_access_token`).
-> So `user.app_metadata.tenant_id` is always empty on the client even
-> when the hook is firing perfectly. **Decode the JWT directly:**
->
-> ```typescript
-> function decodeJwt(token: string | undefined) {
->   if (!token) return null;
->   const parts = token.split(".");
->   if (parts.length !== 3) return null;
->   const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
->   const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
->   try { return JSON.parse(decodeURIComponent(escape(atob(padded)))); }
->   catch { return null; }
-> }
->
-> const { session } = useAuth();
-> const claims = decodeJwt(session?.access_token);
-> const tenantId    = claims?.app_metadata?.tenant_id;
-> const tenantRole  = claims?.app_metadata?.tenant_role;
-> const permissions = claims?.app_metadata?.permissions ?? [];
-> ```
->
-> Every place that gates UI on tenant context — `useTenantGuard`,
-> `activeTenantId` derivations, role/permission badges — must decode
-> the access token, not read `user.app_metadata`. The scaffolded
-> `useTenantGuard` already does this; copy its pattern.
->
-> Server-side (RLS, RPCs) is unaffected — `auth.jwt()` in Postgres
-> reads from the actual JWT and continues to work via
-> `_auth_tenant_id()` and the `auth_verify_access(...)` guard.
-
-### Permissions & authorization (UX gating)
-
-> **🛑 The frontend permission check is UX only — never security.** The real
-> gate is the backend `auth_verify_access()` guard inside every mutating RPC,
-> which returns **403** regardless of what the UI shows. Hiding or disabling a
-> control does not secure it; a user who bypasses the UI (devtools, direct
-> `.rpc()`) still hits the 403. Never weaken a backend guard because the UI
-> hides a button.
-
-Permissions come from the JWT (`app_metadata.permissions`) for the **active
-workspace** — the same array the gotcha above decodes. The scaffold ships a
-hook for it:
-
-```typescript
-// fails safe to false while loading / tenant not ready
-const canEdit = useHasPermission("membership.update");
-<Button disabled={!canEdit}>Change role</Button>
-```
-
-Convention: **disable** mutating buttons (discoverable), **hide** nav entries
-the user can't use (`<RequirePermission permission="...">`).
-
-**Page guard** (route-level, also UX): block rendering a page when the active
-workspace lacks a permission. Use the route's `beforeLoad`:
-`beforeLoad: () => requirePermission("membership.read")` redirects to
-`/forbidden`. It reuses the `use-tenant-guard` refresh-once remedy so a fresh
-signup never false-denies.
-
-See `references/auth_ui.md` (recipes) and `references/routing.md` (the route
-seam). Scaffolded files: `hooks/use-has-permission.ts`,
-`components/require-permission.tsx`, `lib/require-permission.ts`,
-`routes/_auth/forbidden.tsx`.
-
-### Scaffolded auth infrastructure
-
-The scaffold ships a working auth entry point plus the hooks to extend
-it. You are not starting from zero.
-
-**What the scaffold provides:**
-- **`useAuth` hook** — `@/contexts/auth-context.tsx`. `{ user, session, loading }`; manages auth state via `onAuthStateChange`.
-- **`useTenantGuard` hook** — `@/hooks/use-tenant-guard.ts`. Gates tenant-scoped reads on a fresh JWT (see the previous subsection).
-- **`_auth.tsx` layout route** — pathless gate. Throws `redirect({ to: "/sign-in" })` when no session; all child routes are protected.
-- **`_anon/sign-in.tsx` + `_anon/sign-up.tsx` routes** — email/password pages under the anon-only `_anon` layout (signed-in users bounce to `/dashboard`). `sign-up.tsx` calls `supabase.auth.refreshSession()` right after `signUp` so `tenant_id` lands on the first JWT. Post-auth redirects to `/dashboard`.
-- **Public `index.tsx`** — auth-aware landing with a CTA that flips between "Sign in" and "Go to dashboard" based on `useAuth().user`.
+- **`useAuth`** — `@/contexts/auth-context.tsx`. `{ user, session, loading }`; tracks auth state via `onAuthStateChange`.
+- **`_auth.tsx`** — pathless gate; `beforeLoad` throws `redirect({ to: "/sign-in" })` when there's no session. All child routes are gated.
+- **`_anon/` pages** — `sign-in`, `sign-up`, `forgot-password`, `check-inbox` under the anon-only `_anon` layout (signed-in users bounce to `/dashboard`). Sign-up needs **no** `refreshSession` — on success the default workspace materializes and `WorkspaceProvider` selects it on the next render.
+- **Public `index.tsx`** — auth-aware landing; the CTA flips on `useAuth().user`.
 - **`ErrorBoundary`** — wraps the auth layout's `<Outlet />` to catch render errors.
 
-**What the agent extends:** richer auth surface (OAuth buttons, magic
-links, forgot-password, sign-out button placement, post-auth
-onboarding). The building blocks are in place — add routes and pages,
+**What you extend:** richer auth surface — OAuth buttons, magic links,
+post-auth onboarding. The building blocks are in place; add routes and pages,
 don't rewrite the gate.
 
 ### Auth strategy — clarify during planning
@@ -639,19 +478,10 @@ Different projects need different auth flows. Clarify this before building auth 
 
 Build only what's needed. An invitation-only app with OAuth doesn't need a sign-up page or password recovery.
 
-### Protected route pattern
-
-```typescript
-// _auth.tsx layout route — protects all child routes
-export const Route = createFileRoute("/_auth")({
-  beforeLoad: async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) throw redirect({ to: "/sign-in" });
-    return { session };
-  },
-  component: AuthLayout,
-});
-```
+Protection is by folder, not by wrapper: the `_auth.tsx` layout route's
+`beforeLoad` does `getSession()` and `throw redirect({ to: "/sign-in" })` when
+there's none — see [Route Architecture](#route-architecture) and
+[Routing Patterns](./references/routing.md).
 
 ### Provider nesting order
 
@@ -663,13 +493,102 @@ In TanStack Start, `src/routes/__root.tsx` splits into two pieces:
 ```
 QueryClientProvider
   -> AuthProvider
-    -> Outlet
-       + Toaster
+    -> WorkspaceProvider
+      -> Outlet
+         + Toaster
 ```
 
-`QueryClientProvider` is outermost so auth and route components can use queries. `AuthProvider` wraps `<Outlet/>` so route guards can access auth state. `Toaster` is a sibling of the outlet. Keeping the providers in `component` (not `shellComponent`) is what stops the Supabase client — which reads `import.meta.env` at module load — from being pulled into the prerendered shell.
+`QueryClientProvider` is outermost so auth and route components can use queries. `AuthProvider` wraps `<Outlet/>` so route guards can access auth state; `WorkspaceProvider` sits inside it (it needs `useAuth`) and supplies the active workspace + permissions to the tree. `Toaster` is a sibling of the outlet. Keeping the providers in `component` (not `shellComponent`) is what stops the Supabase client — which reads `import.meta.env` at first use — from being pulled into the prerendered shell.
 
-> **Load [Auth UI Patterns](./references/auth_ui.md) for sign-in/sign-up forms, OAuth redirect flows, and protected route patterns.**
+> **Load [Auth UI Patterns](./references/auth_ui.md) for sign-in/sign-up forms, the OAuth redirect flow, `onAuthStateChange` listener safety, and post-auth actions (invitation acceptance).**
+
+---
+
+## Workspaces, Roles & Permissions
+
+Every gated request runs in exactly one workspace, chosen **on the client** and
+asserted with the `x-workspace-id` header (injected by `lib/supabase.ts`). The
+server validates membership and pins the workspace for that request; the client
+reads role/permissions for it from `api.session_context()`. There is no tenant
+claim in the token and no re-mint on switch.
+
+### Switching workspace — `useWorkspace()`
+
+`useWorkspace()` (from `@/contexts/workspace-context`) returns
+`{ tenants, activeId, activeTenant, setActive, ready }` (plus `permissions`,
+`role`, `hasNoWorkspace`, `error`). **Switch = `setActive(id)`** — it updates
+the active-workspace store and invalidates scoped queries so they refetch under
+the new header. No `refreshSession`, no `tenant_select`, no JWT decode.
+
+```tsx
+const { tenants, activeTenant, setActive } = useWorkspace();
+// ...
+setActive(tenant.id); // instant; scoped queries refetch under the new workspace
+```
+
+Create-then-switch: `typedRpc("tenant_create", …)` → refetch the `["tenants"]`
+query so the new workspace is in the membership list → `setActive(created.id)`.
+(The reconcile only honours a workspace the user actually belongs to.)
+
+### Gating workspace-scoped queries — `useTenantGuard()`
+
+Workspace-scoped reads must wait until an active workspace has resolved.
+`useTenantGuard()` reads `WorkspaceProvider` and returns `{ ready, error }` — no
+`refreshSession` dance anymore, just the provider's readiness:
+
+```tsx
+const { user } = useAuth();
+const { ready, error } = useTenantGuard();
+
+const { data } = useQuery({
+  ...myQueries.list(),
+  enabled: ready && !!user, // gate tenant-scoped queries on ready
+});
+
+if (!ready) return <ListSkeleton />;
+if (error) return <EmptyState title="No workspace" description={error} />;
+```
+
+Skip it on purely personal pages (profile, account) where `auth.uid()` alone
+drives the policy.
+
+### Permissions — `useHasPermission()` (UX only)
+
+> **🛑 The frontend permission check is UX only — never security.** The real
+> gate is the backend `auth_verify_access()` guard inside every mutating RPC,
+> which returns **403** regardless of what the UI shows. A user who bypasses the
+> UI (devtools, direct `.rpc()`) still hits the 403. Never weaken a backend
+> guard because the UI hides a button.
+
+Permissions come from `api.session_context()` for the active workspace (via
+`WorkspaceProvider`), not the token. Same signature as before, still fails safe
+to `false` until the workspace is ready:
+
+```tsx
+const canEdit = useHasPermission("membership.update");
+<Button disabled={!canEdit}>Change role</Button>
+```
+
+Convention: **disable** mutating buttons (discoverable), **hide** nav entries
+the user can't use (`<RequirePermission permission="…">`). **Page guard**
+(route-level, also UX): `beforeLoad: () => requirePermission("membership.read")`
+resolves the active workspace and redirects to `/forbidden` (or `/no-workspace`
+when the account has none). See `references/auth_ui.md` (recipes) and
+`references/routing.md` (the route seam).
+
+### The account section
+
+`/account/profile` (display name + avatar), `/account/connections` (MCP/OAuth
+grants), and the avatar user menu in the top bar are **personal** —
+workspace-independent, driven by `auth.uid()`. See
+[Account & Connections](./references/account.md).
+
+**Scaffolded files:** `contexts/workspace-context.tsx` (`useWorkspace`),
+`lib/active-workspace.ts`, `lib/supabase.ts` (header injection),
+`lib/session-context.ts`, `hooks/use-has-permission.ts`,
+`hooks/use-tenant-guard.ts`, `lib/require-permission.ts`,
+`components/require-permission.tsx`, `routes/_auth/forbidden.tsx`,
+`routes/no-workspace.tsx`.
 
 ---
 
@@ -697,7 +616,8 @@ If available, these skills are invoked automatically at the right points in the 
 ## Reference Files
 
 - **[🌐 Rendering / SSR-later Patterns](./references/ssr.md)** — TanStack Start SPA-mode config, static-deploy shell fallback, and how to switch on SSR + `@supabase/ssr` cookie handling later
-- **[🔑 Auth UI Patterns](./references/auth_ui.md)** — Sign-in/sign-up forms, OAuth redirect flow, protected routes
+- **[🔑 Auth UI Patterns](./references/auth_ui.md)** — Sign-in/sign-up forms, OAuth redirect flow, protected routes, `onAuthStateChange` listener safety, post-auth actions, permission gating
+- **[👤 Account & Connections](./references/account.md)** — Profile (display name + avatar upload), MCP/OAuth connections, the avatar user menu
 - **[🗂 Routing Patterns](./references/routing.md)** — File-based routing, layouts, navigation, search params, route loaders
 - **[📊 Data Fetching Patterns](./references/data_fetching.md)** — TanStack Query, typedRpc, query key factories, cache invalidation
 - **[📝 Form Patterns](./references/forms.md)** — React Hook Form + Zod, validation, form modals, FormField component

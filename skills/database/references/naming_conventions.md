@@ -80,7 +80,7 @@ All paths below are relative to `supabase/database/`.
 | `schemas/public/tables/` | `{table}.sql` | `charts.sql` — one table + its grants/RLS/indexes/triggers |
 | `schemas/public/functions/` | `_auth_{entity}_{check}.sql` | `_auth_chart_owner.sql` — one `_auth_*` helper |
 | `schemas/public/functions/` | `_internal_{name}.sql` | `_internal_admin_handle_new_user.sql` — one internal util |
-| `schemas/public/functions/` | `_hook_{hook_name}.sql` | `_hook_custom_access_token.sql` — one auth hook |
+| `schemas/public/functions/` | `_hook_{hook_name}.sql` | `_hook_before_user_created.sql` — one auth hook |
 | `schemas/api/functions/` | `{entity}_{action}.sql` | `chart_create.sql` — one `api.*` RPC + its grants |
 | `schemas/api/tables/` | `{table}.sql` | `agentlink_tasks.sql` — PGMQ queue table |
 | `cron/` (top-level, imperative) | `{job}.sql` | `process-stale-tasks.sql` — one cron job |
@@ -89,6 +89,7 @@ All paths below are relative to `supabase/database/`.
 | `schemas/public/` | `schema.sql` | public schema-level grants (e.g. `supabase_auth_admin` USAGE) |
 | `cluster/extensions/` | `{ext}.sql` | one extension install per file (`pg_net.sql`, `pgmq.sql`, …) |
 | `rbac/` | `{entity}.sql` | RBAC reference DATA (rows): `roles.sql`, `permissions.sql`, `role_permissions.sql` — each fills an `rbac_desired` staging table, synced by the RBAC reconcile (NOT by `db apply`) |
+| `config/` (top-level, imperative) | `{name}.sql` | `db_pre_request.sql` — role-level settings (`ALTER ROLE … SET`) pg-delta can't model; applied imperatively on every deploy (NOT by `db apply`'s schema diff) |
 
 - Table files are named for the table; function files are named for the function
 - One object per file — never bundle multiple tables or functions into one file

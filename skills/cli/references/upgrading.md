@@ -4,6 +4,8 @@ How to move an existing project onto a newer AgentLink version — and what to d
 
 `npx agentlink-sh@latest` auto-detects an existing project (it finds `agentlink.json` in the cwd) and runs the **update** flow instead of scaffolding. There is no separate `upgrade` command — the update flow *is* the upgrade.
 
+> **Crossing the 2.0 boundary (identity-only auth + native MCP) is a special case.** `--force-update` reconciles `supabase/` but does **not** delete removed files, reconcile the frontend, run the auth migration, or bump the contract — and its drift guard hard-stops once the CLI is ≥ 2.0.0. Use the dedicated runbook: **[upgrade-2.0-identity-auth.md](./upgrade-2.0-identity-auth.md)**.
+
 ---
 
 ## The normal path: `check` → `--dry-run` → `--force-update` → `check`

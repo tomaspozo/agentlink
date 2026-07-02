@@ -1,5 +1,21 @@
 # CLI Troubleshooting
 
+## Contents
+
+- **Common Errors** — `42501 permission denied`, `db migrate` "No changes detected",
+  `schema "api" does not exist`, `function already exists`, duplicate
+  `schema_migrations_pkey`, `pg_net already exists`, `trigger does not exist`,
+  migration ordering, `db rebuild` fails, custom roles/cron/buckets gone after `db reset`.
+- **Supabase & DB Connection Issues** — DB URL wrong / connection refused, Vault
+  secret duplicate key, duplicate migration files, `db push` "Remote migration
+  versions not found", pointing at a different project, project transferred to a new
+  org, `env add` "bare mode", `env deploy` "Nothing to deploy", `env config` "No
+  agentlink.json found", re-login prompt, `Forbidden`/revoked access, plugin/skills
+  don't show up, `psql` not found in cloud mode, OAuth login timeout.
+- **Manual Migration Operations** — create a migration file manually, apply SQL
+  directly via psql, fix a broken migration, remove a migration.
+- **When to Intervene vs When to Use the CLI** — decision guidance.
+
 ## Common Errors
 
 ### `42501 permission denied for table public.<name>` (RPC fails / "GRANT … TO authenticated")

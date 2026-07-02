@@ -78,50 +78,60 @@ When a client RPC genuinely needs to do something privileged — write to `auth.
 3. The helper is `SECURITY DEFINER` but lives in `public` — which is **not** exposed via PostgREST, so the linter doesn't see it.
 4. The helper revalidates `auth.uid() = p_user_id` as defense-in-depth (defends against direct calls bypassing the wrapper) and then does the privileged write.
 
+Accepting a workspace invitation is a real example: the accepting user needs to *write* a `memberships` row and mark the invitation accepted — but the caller can't read the pending invitation (RLS hides invitations addressed to them by token) and can't be trusted to insert their own membership. So the privileged write goes in a `public._internal_admin_*` DEFINER helper; the `api` wrapper stays INVOKER.
+
 ```sql
 -- ❌ WRONG — DEFINER in api triggers lints 0028/0029
-CREATE OR REPLACE FUNCTION api.tenant_select(p_tenant_id uuid)
+CREATE OR REPLACE FUNCTION api.invitation_accept(p_token uuid)
 RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER       -- linter flags this
 SET search_path = ''
 AS $$
 BEGIN
-  -- ... checks membership, then UPDATE auth.users ...
+  -- ... bypasses RLS to read the invitation, then INSERTs a membership ...
 END; $$;
 
 -- ✅ CORRECT — INVOKER wrapper in api delegates to DEFINER helper in public
-CREATE OR REPLACE FUNCTION public._internal_admin_set_session_tenant(
-  p_user_id uuid, p_tenant_id uuid, p_role text
-) RETURNS void
+CREATE OR REPLACE FUNCTION public._internal_admin_complete_invitation(
+  p_user_id uuid, p_token uuid
+) RETURNS jsonb
 LANGUAGE plpgsql
-SECURITY DEFINER       -- in public, not exposed → linter doesn't see it
+SECURITY DEFINER       -- in public, not exposed → linter doesn't see it; bypasses RLS on invitations
 SET search_path = ''
 AS $$
 DECLARE
-  v_session_id uuid;
+  v_invitation record;
+  v_tenant record;
 BEGIN
+  -- Defense in depth: never act on behalf of another user, even if called directly.
   IF (SELECT auth.uid()) IS DISTINCT FROM p_user_id THEN
-    RAISE EXCEPTION 'Cannot set session tenant for another user';
+    RAISE EXCEPTION 'Cannot accept invitation on behalf of another user';
   END IF;
-  -- Read session_id from the caller's signed JWT — never a parameter.
-  -- The JWT is trusted, so this is by construction the caller's real session.
-  v_session_id := NULLIF((SELECT auth.jwt()->>'session_id'), '')::uuid;
-  IF v_session_id IS NULL THEN
-    RAISE EXCEPTION 'No session — JWT is missing session_id';
+
+  SELECT * INTO v_invitation
+  FROM public.invitations
+  WHERE token = p_token AND accepted_at IS NULL AND expires_at > now();
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Invalid or expired invitation';
   END IF;
-  INSERT INTO public.session_tenants (session_id, user_id, tenant_id, tenant_role)
-  VALUES (v_session_id, p_user_id, p_tenant_id, p_role)
-  ON CONFLICT (session_id) DO UPDATE
-    SET tenant_id = EXCLUDED.tenant_id,
-        tenant_role = EXCLUDED.tenant_role,
-        user_id = EXCLUDED.user_id;
+
+  INSERT INTO public.memberships (tenant_id, user_id, role)
+  VALUES (v_invitation.tenant_id, p_user_id, v_invitation.role)
+  ON CONFLICT (tenant_id, user_id) DO NOTHING;
+
+  UPDATE public.invitations SET accepted_at = now() WHERE id = v_invitation.id;
+
+  SELECT * INTO v_tenant FROM public.tenants WHERE id = v_invitation.tenant_id;
+  RETURN jsonb_build_object(
+    'id', v_tenant.id, 'name', v_tenant.name, 'slug', v_tenant.slug, 'role', v_invitation.role
+  );
 END; $$;
 
-REVOKE ALL ON FUNCTION public._internal_admin_set_session_tenant(uuid, uuid, text) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public._internal_admin_set_session_tenant(uuid, uuid, text) TO authenticated, service_role;
+REVOKE ALL ON FUNCTION public._internal_admin_complete_invitation(uuid, uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public._internal_admin_complete_invitation(uuid, uuid) TO authenticated, service_role;
 
-CREATE OR REPLACE FUNCTION api.tenant_select(p_tenant_id uuid)
+CREATE OR REPLACE FUNCTION api.invitation_accept(p_token uuid)
 RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY INVOKER       -- api is always INVOKER
@@ -129,18 +139,15 @@ SET search_path = ''
 AS $$
 DECLARE
   v_user_id uuid := (SELECT auth.uid());
-  v_role text;
 BEGIN
-  SELECT role INTO v_role FROM public.memberships
-   WHERE tenant_id = p_tenant_id AND user_id = v_user_id;
-  IF NOT FOUND THEN RAISE EXCEPTION 'Not a member of this tenant'; END IF;
+  IF v_user_id IS NULL THEN RAISE EXCEPTION 'Not authenticated'; END IF;
 
-  PERFORM public._internal_admin_set_session_tenant(v_user_id, p_tenant_id, v_role);
-  RETURN ...;
+  -- Wrapper validates the caller; helper does the RLS-bypassing write.
+  RETURN public._internal_admin_complete_invitation(v_user_id, p_token);
 END; $$;
 ```
 
-**Why the helper reads `session_id` from `auth.jwt()` instead of accepting it as a parameter.** Originally we passed `p_session_id` from the wrapper and validated it against `auth.sessions`. That validation required the function owner (`postgres`) to have SELECT on `auth.sessions` — NOT granted on Supabase Cloud (the table belongs to `supabase_auth_admin` and is locked down). Reading the session_id from `auth.jwt()` inside the DEFINER function avoids the auth.sessions dependency without weakening security: the JWT is signed by Supabase, so whatever session_id we read is by construction the caller's real session, and there's no parameter for a malicious direct caller to spoof.
+**Why the wrapper passes `auth.uid()` and the helper re-checks it.** The wrapper is the trust boundary: it runs as the caller (INVOKER), so `auth.uid()` is the real authenticated user, and it hands that id to the helper. The helper is DEFINER — it runs as the owner and could write *any* membership, so it re-asserts `auth.uid() = p_user_id` as defense in depth: even a malicious *direct* call to the helper (bypassing the wrapper) can't forge a membership for someone else, because the id is checked against the caller's signed JWT, not trusted from the parameter. Identity-only model (2.0): the wrapper returns the tenant and the client sets it as the active workspace (`x-workspace-id`) — there is no session pin and no token re-mint.
 
 **Where DEFINER is allowed:**
 

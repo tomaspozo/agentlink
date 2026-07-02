@@ -201,7 +201,9 @@ api schema (exposed to Data API)
 └── Functions only — the entire data access surface
     ├── chart_create()          ← agent builds these
     ├── chart_get_by_id()
-    ├── tenant_select()         ← scaffolded by CLI
+    ├── session_context()       ← scaffolded by CLI (role + perms for active workspace)
+    ├── tenant_update()         ← scaffolded by CLI
+    ├── tenant_delete()         ← scaffolded by CLI
     └── profile_get()           ← scaffolded by CLI
 
 public schema (NOT exposed — invisible to REST/Data API)

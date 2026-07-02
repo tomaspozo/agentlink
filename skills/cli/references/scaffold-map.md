@@ -42,12 +42,14 @@ irrelevant.
 | `roles` | RBAC roles (reconciled from `rbac/roles.sql`) |
 | `permissions` | RBAC permission keys (reconciled from `rbac/permissions.sql`) |
 | `role_permissions` | (role, permission) matrix (reconciled from `rbac/role_permissions.sql`) |
-| `session_tenants` | Tracks which tenant a session is pinned to (for JWT tenant claim) |
 
 ### `api` schema (`schemas/api/`) — the ONLY schema exposed to the Data API
 - `tables/agentlink_tasks.sql` — PGMQ-backed task queue.
 - **RPCs** (`functions/`), all callable via `supabase.rpc(...)`:
-  - Tenants: `tenant_create`, `tenant_list`, `tenant_select`
+  - Tenants: `tenant_create`, `tenant_list`, `tenant_update`, `tenant_delete`
+  - Session context: `session_context` — returns `{ tenant_id, name, slug, role,
+    permissions[] }` for the **active workspace** (the `x-workspace-id` header).
+    The client reads role + permissions from here, **not** from the JWT.
   - Profile: `profile_get`, `profile_update`
   - Memberships: `membership_list`, `membership_update_role`, `membership_remove`
   - Invitations: `invitation_create`, `invitation_list`, `invitation_preview`,
@@ -56,33 +58,43 @@ irrelevant.
     `_admin_queue_read`, `_admin_queue_archive`, `_admin_queue_delete`
 
 ### `public` functions (`schemas/public/functions/`) — internal, never exposed
-- **Auth / RLS helpers** (`_auth_*`): `_auth_tenant_id`, `_auth_tenant_role`,
-  `_auth_has_role`, `_auth_has_permission`, `_auth_is_tenant_member`.
+- **Per-request workspace resolver**: `_auth_pre_request` — the **db-pre-request
+  hook** PostgREST runs once per request (wired via `config/db_pre_request.sql`).
+  It validates the caller is a member of the `x-workspace-id` workspace and pins it
+  into a transaction-local GUC (`request.tenant_id`). No header → deny by default.
+- **Auth / RLS helpers** (`_auth_*`): `_auth_tenant_id` (reads the GUC set by
+  `_auth_pre_request`), `_auth_tenant_role`, `_auth_has_role`, `_auth_has_permission`
+  (derives permissions **fresh** from `memberships ⋈ role_permissions`),
+  `_auth_is_tenant_member`.
 - **Permission guards** (call these from your RPCs): `auth_has_access(permission)`
   → boolean; `auth_verify_access(permission)` → raises 403 if missing. Every
   mutating `api.*` RPC calls `auth_verify_access('<entity>.<action>')` first.
-- **Auth hooks** (`_hook_*`): `_hook_custom_access_token` (mints
-  `app_metadata.tenant_id` + `app_metadata.permissions` into the JWT on every
-  token), `_hook_before_user_created`, `_hook_send_email`.
+- **Auth hooks** (`_hook_*`): `_hook_before_user_created`, `_hook_send_email`.
 - **Internal admin** (`_internal_admin_*`, SECURITY DEFINER): `handle_new_user`,
   `create_tenant`, `create_invitation`, `complete_invitation`, `resend_invitation`,
-  `set_session_tenant`, `sync_session_tenants_on_membership`, `get_secret`,
-  `call_edge_function`.
+  `get_secret`, `call_edge_function`.
 - `set_updated_at` — generic `updated_at` trigger function.
 
-### Imperative resources (`cron/`, `storage/`, `rbac/`) — applied at deploy, NOT in migrations
-These three top-level folders under `supabase/database/` are **excluded** from
+### Imperative resources (`cron/`, `storage/`, `rbac/`, `config/`) — applied at deploy, NOT in migrations
+These four top-level folders under `supabase/database/` are **excluded** from
 `db apply`'s schema diff and from the migration diff, and applied imperatively on
 every deploy (all envs incl. prod) by the deploy step. Reason: the `cron` and
-`storage` schemas are filtered out of migration plans, and RBAC is reference
-*data*. Put new objects here (not under `schemas/`):
+`storage` schemas are filtered out of migration plans, RBAC is reference *data*,
+and `config/` holds role-level settings pg-delta can't model. Put new objects
+here (not under `schemas/`):
 - `cron/` — `cron.schedule(...)` jobs. Scaffolded: `process-stale-tasks.sql`
   (fires the queue worker every minute). Must be **idempotent** (`cron.schedule`
   upserts by job name).
 - `storage/` — buckets + `storage.objects` policies. Scaffolded: `avatars.sql`
-  (example private per-user bucket — edit or delete it). Must be **idempotent**
-  (`INSERT … ON CONFLICT DO UPDATE`; `DROP POLICY IF EXISTS` + `CREATE POLICY`).
+  (example **public** per-user avatar bucket — edit or delete it). Must be
+  **idempotent** (`INSERT … ON CONFLICT DO UPDATE`; `DROP POLICY IF EXISTS` +
+  `CREATE POLICY`).
 - `rbac/` — RBAC reference data (see below).
+- `config/` — role-level settings that have no schema-file home (pg-delta ignores
+  `ALTER ROLE`). Scaffolded: `db_pre_request.sql` (`ALTER ROLE authenticator SET
+  pgrst.db_pre_request = 'public._auth_pre_request'` + `NOTIFY pgrst, 'reload
+  config'`) — this is what wires the per-request workspace resolver. A
+  `db_pre_request` line dropped into `schemas/**.sql` silently never applies.
 
 ---
 
@@ -109,6 +121,27 @@ the UI with `useHasPermission('<key>')`.
 
 ---
 
+## Edge functions (`supabase/functions/`)
+
+- `mcp/` — the **native MCP server** (2.0 marquee feature). `index.ts` is tiny:
+  `export default { fetch: withMCP({ title, icon }, (ctx) => { registerAdminTools(ctx); /* your tools */ }) }`.
+  It exposes the app's `api.*` RPCs as MCP tools that run **as the calling user**
+  (forwards the user's JWT — never a service-role client). Add a domain tool with
+  `ctx.workspaceTool(name, { title, description, inputSchema }, handler)`.
+- `_shared/mcp.ts` — the plumbing: `withMCP(info, registerTools)` (mirrors
+  `@supabase/server`'s `withSupabase`), handles OAuth 2.1 resource-server discovery,
+  binds each request to the caller's JWT, applies the `x-workspace-id` model, and
+  ships `registerAdminTools(ctx)` (opt-in workspace/member/invitation CRUD tools).
+  Re-export from here: `import { withMCP, registerAdminTools, z } from "../_shared/mcp.ts"`.
+- Other scaffolded functions: `internal-queue-worker`, `internal-send-email`,
+  `internal-send-auth-email`; `_shared/` also holds `responses.ts` + `email-components/`.
+- **config.toml:** `[functions.mcp] verify_jwt = false` (OAuth discovery must reach
+  the handler, which does its own JWT check) + `[auth.oauth_server] enabled = true`.
+  **Cloud:** the OAuth 2.1 server must be enabled in Dashboard → Authentication →
+  OAuth Server (not via the Management API).
+
+---
+
 ## Frontend (`vite/src/`) — React + TanStack Start (SPA mode)
 
 ### Routes (`routes/`)
@@ -117,20 +150,35 @@ the UI with `useHasPermission('<key>')`.
 - `_anon.tsx` + children — unauthenticated: `sign-in`, `sign-up`, `forgot-password`,
   `check-inbox`.
 - `_auth.tsx` + children — authenticated: `dashboard`, `forbidden`,
-  `settings/members`.
-- Standalone: `accept-invite`, `auth.confirm`, `update-password`.
+  `settings/members`, `account/profile` (display name + avatar upload to the
+  **public** `avatars` bucket), `account/connections` (the MCP/OAuth clients the
+  user authorized — `supabase.auth.oauth.listGrants()` + per-row disconnect).
+- Standalone: `accept-invite`, `auth.confirm`, `update-password`, `no-workspace`
+  (shown when the user belongs to no workspace), `oauth.consent` (the MCP OAuth
+  authorize/consent screen).
 
 ### Auth & permissions (the parts you'll reuse most)
 - `contexts/auth-context.tsx` — `AuthProvider` + `useAuth()` → `{ user, session, loading }`.
 - `hooks/use-has-permission.ts` — `useHasPermission(perm, mode?)`. Reads permissions
-  from the JWT (`app_metadata.permissions`). **UX only — fails safe to `false`.**
+  from `api.session_context()` for the **active workspace** (via `useWorkspace()`),
+  **not** from the JWT — so they're always fresh for the workspace the user is acting
+  in. **UX only — fails safe to `false`.**
 - `components/require-permission.tsx` — `<RequirePermission permission=...>` wrapper.
   Convention: **hide** nav the user can't use; **disable** (not hide) mutating buttons.
-- `hooks/use-tenant-guard.ts` — gates UI until the tenant JWT claim is ready
-  (fresh-signup refresh window).
-- `lib/jwt.ts` — `readPermissions(session)` and tenant-claim readers.
-- `lib/supabase.ts` — the browser client. **All data access is `supabase.rpc(...)`;
-  `.from()` never works (only `api`, which has no tables, is exposed).**
+- `contexts/workspace-context.tsx` — `useWorkspace()` → `{ tenants, activeId,
+  activeTenant, permissions, role, ready, hasNoWorkspace, setActive }`. **Switch
+  workspace = `setActive(id)`** (persists the active-workspace store + refetches);
+  there is **no `refreshSession`, no `tenant_select`, no JWT decode**.
+- `hooks/use-tenant-guard.ts` — `useTenantGuard()` gates workspace-scoped queries
+  until the active workspace's `api.session_context()` has resolved (reads
+  `useWorkspace()`; no refresh dance).
+- `lib/session-context.ts` — fetches `api.session_context()` (role + permissions
+  for the active workspace). `lib/active-workspace.ts` — the active-workspace store
+  the client's fetch wrapper reads to set `x-workspace-id`.
+- `lib/supabase.ts` — the browser client; injects `x-workspace-id` (the active
+  workspace) into every Data-API request via a global fetch wrapper (set once, no
+  rebuild on switch). **All data access is `supabase.rpc(...)`; `.from()` never
+  works (only `api`, which has no tables, is exposed).**
 - `lib/auth/` — flow hooks: sign-in/up, magic-link, reset/update-password,
   verify-otp, resend-email, accept-invitation, invitation-preview.
 

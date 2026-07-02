@@ -1,6 +1,6 @@
 ---
 name: database
-description: Schema files, migrations, and type generation for Supabase Postgres. Use when the task involves creating or modifying tables, columns, indexes, triggers, RLS policies, or database functions. Activate whenever the task touches supabase/database/, supabase/migrations/, or involves structural database changes.
+description: Schema files, migrations, and type generation for Supabase Postgres. Use when the task involves creating or modifying tables, columns, indexes, triggers, RLS policies, grants, or database functions, or the imperative cron/storage/rbac/config folders (cron jobs, storage buckets, RBAC reference data, role-level settings like db_pre_request). Activate whenever the task touches supabase/database/, supabase/migrations/, or involves structural database changes.
 ---
 
 # Database
@@ -23,6 +23,8 @@ supabase/database/
 │   ├── roles.sql                       # synced by the RBAC reconcile, NOT by db apply
 │   ├── permissions.sql
 │   └── role_permissions.sql
+├── config/                             # role-level settings pg-delta can't model
+│   └── db_pre_request.sql              # ALTER ROLE authenticator SET pgrst.db_pre_request
 └── schemas/
     ├── api/
     │   ├── schema.sql                  # CREATE SCHEMA api + grants / default privileges
@@ -43,10 +45,10 @@ supabase/database/
         └── functions/
             ├── _auth_tenant_id.sql     # one function per file
             ├── _internal_admin_handle_new_user.sql
-            └── _hook_custom_access_token.sql
+            └── _hook_before_user_created.sql
 ```
 
-Files are **one object per file** — each table (with its grants, RLS, indexes, triggers) and each function lives in its own file, grouped by Postgres schema (`schemas/public/`, `schemas/api/`) and kind (`tables/`, `functions/`). Statement ordering is handled automatically: `db apply` resolves dependency order at apply time, so file count and order are irrelevant. The top-level `cron/`, `storage/`, and `rbac/` folders are **imperative** — applied at deploy, not by `db apply`'s schema diff (see below).
+Files are **one object per file** — each table (with its grants, RLS, indexes, triggers) and each function lives in its own file, grouped by Postgres schema (`schemas/public/`, `schemas/api/`) and kind (`tables/`, `functions/`). Statement ordering is handled automatically: `db apply` resolves dependency order at apply time, so file count and order are irrelevant. The top-level `cron/`, `storage/`, `rbac/`, and `config/` folders are **imperative** — applied at deploy, not by `db apply`'s schema diff (see below).
 
 **Conventions:**
 - `schemas/<schema>/tables/<table>.sql` — one table, named for the table (plural): `charts.sql`, contains the table + its indexes, triggers, grants, RLS policies
@@ -68,6 +70,7 @@ When creating or editing schema objects, put each in its own file under `supabas
 | A cron job (`cron.schedule(...)`) | `supabase/database/cron/<name>.sql` (imperative — see below). The job's body calls `public._internal_admin_call_edge_function('internal-<worker>')`; it never makes the outbound HTTP itself — `pg_net` only wakes the worker. See the [edge-functions](../edge-functions/SKILL.md) outbound-HTTP rule and [recipes.md](../../agents/references/recipes.md) for worked examples |
 | A storage bucket + its `storage.objects` policies | `supabase/database/storage/<name>.sql` (imperative — see below) |
 | RBAC reference data — roles / permissions / role→permission bindings (rows) | `supabase/database/rbac/<entity>.sql` (imperative — see below) |
+| A role-level setting / `ALTER ROLE … SET` (e.g. `pgrst.db_pre_request`) | `supabase/database/config/<name>.sql` (imperative — see below) |
 | Seed / default rows (any other `INSERT`/`UPDATE`/`DELETE`) | **NOT** a schema file — see the DDL-only rule below |
 
 **🛑 Declarative schema files are DDL ONLY — never put seed/data DML in them.** Files under `supabase/database/schemas/` define structure (`CREATE`/`ALTER` of tables, functions, policies, …). A standalone `INSERT`/`UPDATE`/`DELETE`/`MERGE`/`TRUNCATE` in a schema file is a **mistake**: `db apply` only applies structure (table/function/policy definitions), not row data, so the statement is **silently dropped** and the data never reaches the database (the CLI now hard-errors on it, naming the file + line). This is exactly why `rbac/` exists — reference data is rows, not schema. Seed/default data belongs in one of:
@@ -76,14 +79,15 @@ When creating or editing schema objects, put each in its own file under `supabas
 - **`supabase/database/rbac/`** — roles / permissions / role→permission bindings (the dedicated reference-data reconcile).
 - (Inside a function body, `INSERT`/`UPDATE` is fine — that's part of the function's DDL, not a standalone seed.)
 
-**Imperative folders — `cron/`, `storage/`, `rbac/`.** These three top-level folders under `supabase/database/` are **excluded** from `db apply`'s schema diff *and* from the migration diff, and applied imperatively by the deploy step on **every** path — `db apply` (local/dev), `db rebuild`, and **every `env deploy`** (all envs incl. prod, which is migrations-only). Reason: the `cron` and `storage` schemas are excluded from `db apply`'s schema diff and from migrations, so `cron.schedule()`, buckets, and storage policies never survive a migration; and RBAC is reference DATA, not DDL. This deploy step is the only path that reliably reaches prod — **do not** hand-append these to migration files. To apply just these folders without a full `db apply` (e.g. after editing a cron job or bucket), run `pnpm exec agentlink db resources`.
+**Imperative folders — `cron/`, `storage/`, `rbac/`, `config/`.** These four top-level folders under `supabase/database/` are **excluded** from `db apply`'s schema diff *and* from the migration diff, and applied imperatively by the deploy step on **every** path — `db apply` (local/dev), `db rebuild`, and **every `env deploy`** (all envs incl. prod, which is migrations-only). Reason: the `cron` and `storage` schemas are excluded from `db apply`'s schema diff and from migrations, so `cron.schedule()`, buckets, and storage policies never survive a migration; RBAC is reference DATA, not DDL; and role-level settings (`ALTER ROLE … SET`) aren't catalog objects pg-delta can diff or generate. This deploy step is the only path that reliably reaches prod — **do not** hand-append these to migration files. To apply just these folders without a full `db apply` (e.g. after editing a cron job or bucket), run `pnpm exec agentlink db resources`.
 
 - **`cron/` and `storage/` must be IDEMPOTENT** (they re-run on every deploy): `cron.schedule(name, …)` upserts by job name (`cron.unschedule(name)` to remove); storage buckets use `INSERT … ON CONFLICT (id) DO UPDATE`; storage policies use `DROP POLICY IF EXISTS` + `CREATE POLICY`. Each folder's files run in sorted order, one transaction per folder.
 - **`rbac/` is reference DATA, not schema.** The roles/permissions/role_permissions *tables* live in `schemas/public/tables/` (structure only). Their *rows* live in `rbac/<entity>.sql`, each filling an `rbac_desired` staging table, converged to **exactly** the declared set: **full reconcile** for permissions + bindings (a removed row is REVOKED everywhere — the only way revokes reach prod); roles are **upsert-only** (a referenced role can't be deleted: `memberships.role` FKs into `roles(name)`).
+- **`config/` is role-level settings pg-delta can't model** — idempotent, non-catalog SQL. It ships `config/db_pre_request.sql` (`ALTER ROLE authenticator SET pgrst.db_pre_request = 'public._auth_pre_request'; NOTIFY pgrst, 'reload config';`), which wires the per-request multitenancy resolver. **🛑 An `ALTER ROLE … SET` / `db_pre_request` line has no schema-file home:** it's a role-level GUC, not a catalog object, so `db apply` and `db migrate` **ignore it** — dropped into a `schemas/**.sql` file it is **silently never applied**. On prod that means PostgREST never runs `_auth_pre_request`, so **every request resolves no workspace** → `_auth_tenant_id()` is NULL → RLS matches no rows and `_auth_has_permission()` is false → the whole app fails deny-by-default. Put such statements in `config/` (idempotent: `ALTER ROLE … SET` is last-write-wins), where the deploy step applies them on every env incl. prod.
 
-**🛑 Editing `cron/`, `storage/`, or `rbac/`? The workflow is: edit the file → APPLY it.** A change to these folders does nothing until applied, and they are **excluded from the schema diff** — so `db apply`'s schema step won't carry them, and a `cron.schedule()`/bucket/policy/RBAC row dropped into a `schemas/` file silently never runs. After editing:
+**🛑 Editing `cron/`, `storage/`, `rbac/`, or `config/`? The workflow is: edit the file → APPLY it.** A change to these folders does nothing until applied, and they are **excluded from the schema diff** — so `db apply`'s schema step won't carry them, and a `cron.schedule()`/bucket/policy/RBAC row/`ALTER ROLE` dropped into a `schemas/` file silently never runs. After editing:
 - `pnpm exec agentlink db apply` applies them **alongside** your schema (the normal dev loop already covers them — `db apply` runs the imperative step too), **or**
-- `pnpm exec agentlink db resources` applies **only** `storage/` + `cron/` + `rbac/` (no schema diff, no type-gen) — reach for this when that's *all* you changed (`db rbac-sync` is the rbac-only subset).
+- `pnpm exec agentlink db resources` applies **only** `config/` + `storage/` + `cron/` + `rbac/` (no schema diff, no type-gen) — reach for this when that's *all* you changed (`db rbac-sync` is the rbac-only subset).
 On deploy they go out with every `env deploy`. Concretely:
 
 | You're changing… | Edit | Then |
@@ -91,6 +95,7 @@ On deploy they go out with every `env deploy`. Concretely:
 | A cron job | `cron/<name>.sql` (`cron.schedule(...)`) | `db apply` or `db resources` |
 | A storage **bucket** or its `storage.objects` **policies** | `storage/<name>.sql` | `db apply` or `db resources` |
 | An **RBAC permission** key, or a role→permission **binding** | `rbac/permissions.sql`, `rbac/role_permissions.sql` | `db apply` or `db resources` |
+| A **role-level setting** (`ALTER ROLE … SET`, e.g. `pgrst.db_pre_request`) | `config/<name>.sql` | `db apply` or `db resources` |
 
 **🛑 Removing an already-deployed `cron/` or `storage/` resource — deprecate the file, don't just delete it.** Deleting a `cron/` or `storage/` `.sql` file does **nothing** to a database that already has the resource: the imperative step only *applies* the files present — unlike `rbac/`, it never reconciles deletions. The job keeps firing / the bucket keeps existing on local, dev, **and prod**. Use a **tombstone** so the removal travels through the normal deploy path:
 
@@ -117,7 +122,7 @@ On deploy they go out with every `env deploy`. Concretely:
 
 Older projects keep declarative SQL under `supabase/schemas/`. The home moved to `supabase/database/` (matching Supabase's `db … generate` default). On `--force-update`, the CLI recreates the **scaffolded** objects under `supabase/database/` and **leaves your old `supabase/schemas/` exactly where it is — untouched, but no longer applied** (`db apply` reads `supabase/database/` only). It then asks the user to have you finish the move. When asked, do this:
 
-1. **Move each CUSTOM object** — anything the app added, i.e. NOT the scaffolded set (`tenants`/`memberships`/`invitations`/`profiles`/`roles`/`permissions`/`role_permissions`/`session_tenants`, the `api.*` RPCs, `_auth_*` / `_internal_*` / `_hook_*` functions, `agentlink_tasks`, `process-stale-tasks`), which already exists under `database/`. Place each in one object per file:
+1. **Move each CUSTOM object** — anything the app added, i.e. NOT the scaffolded set (`tenants`/`memberships`/`invitations`/`profiles`/`roles`/`permissions`/`role_permissions`, the `api.*` RPCs, `_auth_*` / `_internal_*` / `_hook_*` functions, `agentlink_tasks`, `process-stale-tasks`), which already exists under `database/`. Place each in one object per file:
    - table → `supabase/database/schemas/<schema>/tables/<table>.sql` (table + its grants, `ENABLE ROW LEVEL SECURITY`, policies, indexes, triggers — all together)
    - function / RPC → `supabase/database/schemas/<schema>/functions/<name>.sql`
    - extension → `supabase/database/cluster/extensions/<ext>.sql`

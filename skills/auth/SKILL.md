@@ -1,6 +1,6 @@
 ---
 name: auth
-description: Authentication, authorization, and tenant isolation for Supabase. Use when the task involves auth setup, sign up/sign in flows, RLS policies, row-level security, access control, permissions, roles, RBAC, multi-tenancy, tenant isolation, user profiles, OAuth, JWT claims, invitation flows, or membership management. Also use when someone asks "who can access this" or "how do I secure this table." Activate whenever the task touches auth, security policies, or tenant boundaries.
+description: Authentication, authorization, and tenant isolation for Supabase. Use when the task involves auth setup, sign up/sign in flows, RLS policies, row-level security, access control, permissions, roles, RBAC, multi-tenancy, tenant isolation, workspace context, the x-workspace-id header, session_context, user profiles, OAuth, JWT claims, invitation flows, or membership management. Also use when someone asks "who can access this" or "how do I secure this table." Activate whenever the task touches auth, security policies, or tenant boundaries.
 ---
 
 # Auth, RLS & Multi-Tenancy
@@ -25,12 +25,38 @@ Client → api.member_update(...)
 
 **When you add a capability you touch three layers:** declare the permission key (in `supabase/database/rbac/`), guard the RPC, gate the frontend. RLS only ever does isolation. See the checklist near the end of this file.
 
+---
+
+## The identity-only model — how a workspace is resolved
+
+**The JWT proves identity only.** It carries **no tenant and no permissions**. The active workspace is asserted **per request** by the client via an `x-workspace-id` header, validated server-side, and pinned into a transaction-local GUC that every helper reads. This is the canonical model — a fresh AgentLink scaffold *is* this. Nothing tenant-related lives in the token: there is no access-token claim hook, no per-device workspace-pin table, and no server-side "select workspace" RPC. If a project still has those objects, they're stale machinery to remove.
+
+**The request lifecycle:**
+
+1. The client attaches `Authorization: Bearer <jwt>` (identity) **and** `x-workspace-id: <uuid>` (active workspace) to every Data-API request.
+2. PostgREST runs `public._auth_pre_request()` once per request — the **db-pre-request hook**, wired by `ALTER ROLE authenticator SET pgrst.db_pre_request = 'public._auth_pre_request'` (shipped in `supabase/database/config/db_pre_request.sql`). It validates that `auth.uid()` is a **member** of the asserted workspace, then `set_config('request.tenant_id', <id>, true)` — transaction-local. No header → reset the GUC and return (deny by default). Non-member → `RAISE … ERRCODE '42501'` → **HTTP 403**.
+3. `public._auth_tenant_id()` reads that GUC; RLS `USING (tenant_id = _auth_tenant_id())` scopes every row; `auth_verify_access()` / `_auth_has_permission()` gate writes — both derive fresh from `(auth.uid(), resolved workspace)`.
+4. The client reads role + permissions from **`api.session_context()`** for the active workspace — *not* from the token. It returns `{ tenant_id, name, slug, role, permissions[] }`, or an empty context when no workspace is asserted (fresh sign-in → render the workspace picker). Switching workspace = sending a different header + re-fetching `session_context`. **No token re-mint, no session refresh.**
+
+### The 8 security non-negotiables
+
+Each is a hard rule — the places a bug leaks data across tenants — with the WHY. Do not relax them.
+
+1. **Workspace context lives in a *transaction-local* GUC** (`set_config(…, true)` / `SET LOCAL`), never a session GUC. A plain `SET` / `false` third arg persists on the pooled connection and bleeds one request's workspace into the **next user's** request — the worst failure in the system, gated by a single boolean. This is user-A-reads-user-B.
+2. **One GUC is the single source of truth.** Only `_auth_pre_request` writes `request.tenant_id`; everything else reads it via `_auth_tenant_id()`. If row-scoping and the permission guard resolved the workspace independently they could disagree (permission checked against A, rows scoped to B → confused-deputy write). Never read the header in app code.
+3. **The asserted workspace is membership-validated server-side.** `x-workspace-id` is client-asserted and trusted only after `_auth_pre_request` confirms `memberships(user = auth.uid(), tenant = header)`. Never trust it off the wire.
+4. **Fail closed.** A malformed/non-UUID header aborts the request — it never falls through to "some other workspace." Let the exception propagate; never swallow it.
+5. **Resolved-NULL means deny, not allow.** No header → `_auth_tenant_id()` is NULL → RLS matches no rows and `_auth_has_permission()` is false. Never let an empty/NULL workspace slip past a guard.
+6. **Aggregate / cross-workspace reads go through `SECURITY DEFINER` RPCs** that explicitly filter `tenant_id IN (SELECT tenant_id FROM memberships WHERE user_id = auth.uid())` — not broad client table reads, and never by overloading the single-tenant RLS predicate with a second mode.
+7. **The MCP server forwards the user's JWT; `service_role` is NEVER the user-scoped path.** With the user JWT, PostgREST + RLS + `auth_verify_access` stay the enforcement boundary. With `service_role`, RLS is bypassed and isolation reduces to "the MCP TypeScript is bug-free" — a confused-deputy waiting to happen. No `supabaseAdmin` in a tool.
+8. **No header → short-circuit with zero extra DB work.** A request that asserts no workspace does no membership read — it resets the GUC and returns. Cheap and unmistakably deny (rule 5).
+
 ### The guard helpers (`public/_authz.sql`)
 
 - `public.auth_verify_access(p_permission text)` — **raises** (SQLSTATE `42501` → HTTP 403). Call as the first statement of every mutating RPC.
 - `public.auth_has_access(p_permission text)` — **boolean**, for conditional branching inside an RPC (e.g. return a richer payload to admins).
 
-Both wrap `public._auth_has_permission` — JWT-only (`app_metadata.permissions`, populated by `_hook_custom_access_token`), zero DB reads, evaluated against the caller's **active workspace**. Do **not** call `_auth_has_permission` in policies anymore; use `auth_verify_access` in the RPC.
+Both wrap `public._auth_has_permission`, which derives the answer **fresh** on every request from `(caller, active workspace)` — one indexed probe into `memberships ⋈ role_permissions`, no JWT claim, nothing to go stale. Evaluated against the caller's **active workspace** (the one resolved from the `x-workspace-id` header). Do **not** call `_auth_has_permission` in policies; use `auth_verify_access` in the RPC.
 
 ```sql
 -- Canonical: isolation-only RLS + permission guard in the RPC
@@ -97,10 +123,10 @@ through per function.
 
 > **Scaffolded by the CLI.** Profiles, tenants, and memberships are created automatically on signup via the `_internal_admin_handle_new_user` trigger. The SQL below is for reference — it already exists in your project. If missing, run `pnpm exec agentlink --force-update` — do not recreate manually.
 
-User metadata belongs in a `profiles` table, not in Supabase Auth metadata. The trigger creates the profile and — for direct signups — a default tenant + owner membership. Invited users (created via `generateLink({ type: 'invite' })`) only get a profile; `invitation_accept()` handles adding them to the inviter's tenant. JWT claims (`tenant_id`, `tenant_role`, `permissions`) are populated automatically on every JWT mint by the custom access-token hook (`_hook_custom_access_token`) — the trigger doesn't touch `auth.users.raw_app_meta_data`:
+User metadata belongs in a `profiles` table, not in Supabase Auth metadata. The trigger (`_internal_admin_handle_new_user`, AFTER INSERT on `auth.users`) creates the profile and — for **direct** signups only — a default tenant + owner membership. Invited users (created via `generateLink({ type: 'invite' })`, so `invited_at IS NOT NULL`) get only a profile; `invitation_accept()` adds them to the inviter's tenant. The trigger writes **no** `raw_app_meta_data` — nothing tenant-related lives in the JWT in 2.0; the active workspace is asserted per request.
 
 ```sql
--- supabase/database/schemas/public/tables/profiles.sql
+-- supabase/database/schemas/public/tables/profiles.sql (scaffolded)
 CREATE TABLE IF NOT EXISTS public.profiles (
   id uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   email text,
@@ -113,126 +139,9 @@ CREATE TABLE IF NOT EXISTS public.profiles (
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ```
 
-```sql
--- Trigger function: supabase/database/schemas/public/functions/_internal_admin_handle_new_user.sql (scaffolded)
--- Trigger: supabase/database/schemas/public/tables/profiles.sql (scaffolded)
-CREATE OR REPLACE FUNCTION public._internal_admin_handle_new_user()
-RETURNS TRIGGER
-LANGUAGE plpgsql
-SECURITY DEFINER  -- required: reads from auth.users which RLS can't access
-SET search_path = ''
-AS $$
-DECLARE
-  v_display_name text;
-  v_tenant_id uuid;
-  v_slug text;
-BEGIN
-  v_display_name := COALESCE(
-    NEW.raw_user_meta_data->>'display_name',
-    NEW.raw_user_meta_data->>'full_name',
-    NEW.raw_user_meta_data->>'name',
-    split_part(NEW.email, '@', 1)
-  );
+> **Zero-touch, no picker for solo users.** After a direct signup the user has exactly one membership. The client asserts that workspace via `x-workspace-id` (the frontend resolves it from `session_context` / the user's memberships) — no selection UI and no session refresh. There's no "JWT minted before the membership row" race to paper over, because the token never carried the tenant.
 
-  -- Create profile (always — every user needs one)
-  INSERT INTO public.profiles (id, email, display_name, avatar_url)
-  VALUES (
-    NEW.id,
-    NEW.email,
-    v_display_name,
-    COALESCE(
-      NEW.raw_user_meta_data->>'avatar_url',
-      NEW.raw_user_meta_data->>'picture'
-    )
-  );
-
-  -- Only create a default tenant for direct signups.
-  -- Invited users (invited_at IS NOT NULL, set by generateLink) join
-  -- the inviter's tenant via invitation_accept().
-  IF NEW.invited_at IS NULL THEN
-    v_slug := regexp_replace(lower(split_part(NEW.email, '@', 1)), '[^a-z0-9]', '-', 'g')
-      || '-' || substr(replace(gen_random_uuid()::text, '-', ''), 1, 8);
-
-    INSERT INTO public.tenants (name, slug)
-    VALUES (v_display_name || '''s Workspace', v_slug)
-    RETURNING id INTO v_tenant_id;
-
-    INSERT INTO public.memberships (tenant_id, user_id, role)
-    VALUES (v_tenant_id, NEW.id, 'owner');
-    -- No raw_app_meta_data write here — the custom access-token hook
-    -- (_hook_custom_access_token) reads memberships on every JWT mint and
-    -- auto-selects the user's oldest membership when no per-session pin exists.
-  END IF;
-
-  RETURN NEW;
-END;
-$$;
-
-CREATE TRIGGER trg_auth_users_new_user
-  AFTER INSERT ON auth.users
-  FOR EACH ROW
-  EXECUTE FUNCTION public._internal_admin_handle_new_user();
-```
-
-> **Single-tenant zero-touch.** The custom access-token hook auto-selects the
-> user's oldest membership when no per-session pin exists. After signup the
-> first JWT minted already carries the right `tenant_id` — no `tenant_select`
-> dance required. The scaffolded `useTenantGuard` covers the only edge case:
-> a JWT minted *before* the AFTER-INSERT trigger materialized the membership
-> row. In that case it calls `refreshSession()` once, which re-runs the hook
-> against the now-present membership.
-
-**Need to customize signup logic?** If the app requires additional work on signup (e.g., creating rows in app-specific tables, syncing with external services), edit `supabase/database/schemas/public/functions/_internal_admin_handle_new_user.sql` and modify the function body. Keep the same function name. The update flow preserves your edits to this file; other managed functions live in their own files and keep receiving CLI updates. Apply with `pnpm exec agentlink db apply`.
-
-### Profile RPCs
-
-> **Scaffolded by the CLI** in `supabase/database/schemas/api/functions/profile_get.sql`.
-
-```sql
--- supabase/database/schemas/api/functions/profile_get.sql (scaffolded)
-CREATE OR REPLACE FUNCTION api.profile_get()
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY INVOKER
-SET search_path = ''
-AS $$
-DECLARE
-  v_result jsonb;
-BEGIN
-  SELECT jsonb_build_object(
-    'id', p.id,
-    'email', p.email,
-    'display_name', p.display_name,
-    'avatar_url', p.avatar_url
-  ) INTO v_result
-  FROM public.profiles p
-  WHERE p.id = auth.uid();
-
-  RETURN v_result;
-END;
-$$;
-
-CREATE OR REPLACE FUNCTION api.profile_update(
-  p_display_name text DEFAULT NULL,
-  p_avatar_url text DEFAULT NULL
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY INVOKER
-SET search_path = ''
-AS $$
-BEGIN
-  UPDATE public.profiles
-  SET
-    display_name = COALESCE(p_display_name, display_name),
-    avatar_url = COALESCE(p_avatar_url, avatar_url),
-    updated_at = now()
-  WHERE id = auth.uid();
-
-  RETURN api.profile_get();
-END;
-$$;
-```
+**Need to customize signup logic?** Edit the function body in `supabase/database/schemas/public/functions/_internal_admin_handle_new_user.sql` (keep the same name — the update flow preserves your edits here), then `pnpm exec agentlink db apply`. The full scaffolded body + the `profile_get` / `profile_update` RPCs are in **[RLS Patterns → Signup trigger & profile RPCs](./references/rls_patterns.md)** — don't recreate them; they already exist.
 
 ---
 
@@ -336,23 +245,15 @@ The multi-tenancy model uses these tables:
 tenants           → Organizations/teams (public/tables/tenants.sql)
 memberships       → Who belongs to which tenant, with what role (public/tables/memberships.sql)
 invitations       → Pending invitations (public/tables/invitations.sql)
-session_tenants   → Per-device tenant pin, keyed on auth.sessions.id (public/tables/session_tenants.sql)
 roles             → Role table (public/tables/roles.sql); rows in rbac/roles.sql
 permissions       → Permission table (public/tables/permissions.sql); rows in rbac/permissions.sql
 role_permissions  → Role→permission table (public/tables/role_permissions.sql); rows in rbac/role_permissions.sql
 tenant-scoped tables → Every row has a tenant_id column (agent creates these)
 ```
 
-**The custom access-token hook (`_hook_custom_access_token`) is the engine.** On every JWT mint (sign-in and refresh) it:
+There is **no per-device workspace-pin table** — the active workspace isn't stored server-side at all. It's asserted per request via `x-workspace-id`, resolved by the `_auth_pre_request` hook into the transaction-local `request.tenant_id` GUC (see "The identity-only model" at the top of this file). `_auth_tenant_id()` reads that GUC; RLS uses it for **isolation only** (scoping rows to the active workspace). **Permission checks do not go in policies** — they live in the RPC via `public.auth_verify_access('<entity>.<action>')`.
 
-1. Reads the per-device pin from `session_tenants` keyed on the session's `session_id`.
-2. Falls back to the user's oldest membership when no pin exists — single-tenant apps "just work" with no client-side selection.
-3. Looks up the user's permissions in `role_permissions`.
-4. Injects `tenant_id`, `tenant_role`, and `permissions` into `app_metadata`.
-
-Tenant context comes from JWT custom claims (`auth.jwt() -> 'app_metadata' ->> 'tenant_id'`), **not** from request parameters. RLS policies use `_auth_tenant_id()` for **isolation only** (scoping rows to the active tenant). **Permission checks do not go in policies** — they live in the RPC via `public.auth_verify_access('<entity>.<action>')`. See the four-layer Security Model at the top of this file.
-
-API RPCs live one-per-file under `supabase/database/schemas/api/functions/` (e.g. `tenant_select.sql`, `tenant_list.sql`, `tenant_create.sql`, `invitation_create.sql`, `invitation_accept.sql`, `membership_list.sql`). `tenant_select` writes `session_tenants` (per-device pin); `tenant_create` and `invitation_accept` also pin the new tenant to the caller's session so a single `refreshSession()` lands them inside it.
+API RPCs live one-per-file under `supabase/database/schemas/api/functions/` (e.g. `session_context.sql`, `tenant_list.sql`, `tenant_create.sql`, `tenant_update.sql`, `tenant_delete.sql`, `invitation_create.sql`, `invitation_accept.sql`, `membership_list.sql`). They resolve "current workspace" from `_auth_tenant_id()` — **never accept a `p_tenant_id` for the active workspace**. The client reads role + permissions from `api.session_context()`; there is no server-side "select workspace" RPC and no session refresh — switching workspace is a client variable change (a different header).
 
 > **Load [RLS Patterns](./references/rls_patterns.md) for tenant-scoped RLS policies, RBAC, invitation flows, and patterns for new tenant-scoped tables.**
 
@@ -366,19 +267,23 @@ or "simplify" it per project.
 The UX rule falls out of counting `tenants.length`:
 
 - **One tenant** (the common case for internal tools, invited-only
-  portals, first-time signups, and solo users): never render a tenant
-  picker. The access-token hook auto-selects the user's oldest
-  membership, so the JWT already carries the right `tenant_id` from
-  the very first mint. `useTenantGuard` covers the post-signup edge
-  where the JWT preceded the membership row — most apps need nothing
-  beyond what's scaffolded.
+  portals, first-time signups, and solo users): never render a
+  workspace picker. The client asserts the user's single workspace via
+  `x-workspace-id` on every request (resolved from their memberships /
+  `session_context`) — no selection UI needed. Because the token never
+  carried the tenant, there's no post-signup race to guard against.
 - **More than one tenant** (a user genuinely belongs to multiple
   workspaces): render a picker in chrome or on a dedicated switch
-  page. Call `api.tenant_select` on change, then
-  `await supabase.auth.refreshSession()` — the hook re-runs and the
-  new JWT carries the chosen tenant + permissions. Per-device: each
-  laptop/phone has its own `session_tenants` pin, so switching on one
-  doesn't move the other.
+  page. Switching is a **client variable change** — on the frontend
+  it's `useWorkspace().setActive(id)` (the scaffolded workspace
+  context), which updates the active-workspace store the global `fetch`
+  wrapper reads to set `x-workspace-id`, then re-fetches
+  `api.session_context()` for the new role + permissions. **No
+  server-side workspace-select RPC, no session refresh, no token
+  re-mint.** (Client depth lives in the `frontend` skill —
+  `useWorkspace`/`setActive`, the fetch wrapper.) Because context is per request,
+  the same session can even act in different workspaces on different
+  requests (this is what makes the MCP agent path native).
 
 When the user asks for "a signup form" or "allow signups", the
 scaffolded `/auth/sign-in`, `/auth/sign-up`, `/auth/check-inbox`,
@@ -404,10 +309,11 @@ UI and the `/accept-invite` flow.
 | `api.invitation_revoke(p_invitation_id uuid)` | Cancel a pending invitation | `invitation.delete` |
 | `api.invitation_accept(p_token uuid)` | Accept an invitation; idempotent on second click | (caller must be authenticated) |
 
-All eight RPCs read the current tenant from JWT claims via
-`public._auth_tenant_id()`. **Never accept `p_tenant_id` from the
-client when "current tenant" is what you mean** — match the existing
-convention in the scaffolded `tenant_*` RPCs under `database/schemas/api/functions/`.
+All eight RPCs read the current workspace from the request GUC via
+`public._auth_tenant_id()` (the value the pre-request hook pinned from
+`x-workspace-id`). **Never accept `p_tenant_id` from the client when
+"current workspace" is what you mean** — match the existing convention
+in the scaffolded `tenant_*` RPCs under `database/schemas/api/functions/`.
 
 Each permission-bearing RPC enforces its permission with
 `PERFORM public.auth_verify_access('<permission>')` as its first statement
@@ -424,7 +330,7 @@ Do all of these (the guard alone, or the frontend alone, is never enough):
 2. **Guard the RPC**: `PERFORM public.auth_verify_access('<key>')` as the first statement of the mutating `api.*` function; scope queries with `WHERE tenant_id = (SELECT public._auth_tenant_id())`.
 3. **Isolate the table**: ensure an isolation-only RLS policy exists (tenant/ownership, no permission predicate).
 4. **Gate the frontend**: route guard `requirePermission('<key>')` + control gating `useHasPermission('<key>')` (UX only).
-5. **Verify** the JWT carries the key for a permitted role — the access-token hook bakes `role_permissions` → `app_metadata.permissions` on every mint.
+5. **Verify** a permitted role resolves the key — `api.session_context()` (with the workspace asserted) returns it in `permissions[]`, and `auth_verify_access('<key>')` passes for that role. It's derived fresh from `role_permissions`, so a re-seed takes effect on the next request.
 
 ### Role enum and the owner rule
 
@@ -442,28 +348,31 @@ Roles ship pre-seeded with rank-ordered hierarchy:
 when their tenant is created, by the `_internal_admin_handle_new_user`
 trigger or `api.tenant_create`.
 
-### JWT-expiry caveat for role changes
+### Role changes take effect on the next request
 
-`trg_memberships_sync_session_tenants` keeps `session_tenants.tenant_role`
-in sync when a role changes, but **in-flight JWTs hold stale claims
-until expiry** (default `jwt_expiry = 3600` seconds, one hour). If you
-demote a user, they keep elevated permissions until their JWT refreshes.
+Permissions are derived fresh from `(user, workspace)` on every request —
+they are **not** baked into the JWT — so a demotion takes effect on the
+caller's **next request**, with no `jwt_expiry` propagation window and
+nothing to go stale. This deletes the entire stale-permissions class of
+bug that JWT-baked claims had.
 
-For sensitive immediate-effect demotions (e.g. revoking admin), call
-`auth.admin.signOut(userId)` server-side after the role change to force
-re-auth — requires `service_role`, so wire it through an edge function.
-The scaffold doesn't ship this by default; build it when the threat
-model requires sub-`jwt_expiry` propagation.
+The one thing a role change doesn't do is tear down a *live* session: an
+in-flight request already inside a transaction finishes. For a hard cut
+(fully terminate an ejected member's session), call
+`auth.admin.signOut(userId)` server-side after the change — requires
+`service_role`, so wire it through an edge function. The scaffold doesn't
+ship this by default; build it when the threat model requires it.
 
 ### Invitations work even when the app is single-tenant style
 
-The invitation pipeline doesn't care whether the UI exposes a tenant
+The invitation pipeline doesn't care whether the UI exposes a workspace
 switcher. An admin invites a teammate; the teammate signs up; the
 AFTER-INSERT trigger skips default-tenant creation because
 `invited_at IS NOT NULL`; the teammate accepts via
-`api.invitation_accept`; the membership row is created and pinned to
-their current session; next refresh lands them inside the joined
-workspace. No code path requires a UI picker.
+`api.invitation_accept`; the membership row is created. The client then
+asserts the joined workspace via `x-workspace-id` on its next request
+(setting it active and re-fetching `session_context`) — no re-mint, no
+picker required.
 
 ---
 
@@ -501,7 +410,7 @@ If a user reports that signup confirmations, password resets, or invitation emai
 
 ## Reference Files
 
-- **[🛡️ RLS Patterns](./references/rls_patterns.md)** — Tenant-scoped policies, RBAC, multi-tenancy model, invitation flows, JWT claims
+- **[🛡️ RLS Patterns](./references/rls_patterns.md)** — Request lifecycle, tenant-scoped policies, RBAC, multi-tenancy model (`_auth_pre_request`, `session_context`), signup trigger & profile RPCs, invitation flows
 
 ## Assets
 

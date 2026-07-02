@@ -1,6 +1,6 @@
 ---
 name: edge-functions
-description: Supabase Edge Functions. Use when the task involves creating, modifying, or debugging edge functions, webhooks, external API integrations, service-to-service calls, or anything that runs in the Deno edge runtime. Also use for configuring edge function secrets, config.toml, or migrating from legacy Supabase API keys (anon/service_role to publishable/secret). Activate whenever the task touches supabase/functions/ or mentions edge functions.
+description: Supabase Edge Functions. Use when the task involves creating, modifying, or debugging edge functions, webhooks, external API integrations, service-to-service calls, or anything that runs in the Deno edge runtime. Also use for the native MCP server — exposing app functionality over MCP, adding an MCP tool, or connecting Claude/Cursor/an MCP client to the app (supabase/functions/mcp/, withMCP, workspaceTool). Also use for configuring edge function secrets, config.toml, or migrating from legacy Supabase API keys (anon/service_role to publishable/secret). Activate whenever the task touches supabase/functions/ or mentions edge functions.
 ---
 
 # Edge Functions
@@ -172,11 +172,40 @@ Folders prefixed with `_` are shared modules — they are not deployed as edge f
 
 ---
 
+## Native MCP Server
+
+Your app ships a **native MCP server** at `supabase/functions/mcp/` — a per-user, OAuth 2.1 protected resource server that lets Claude, Cursor, or any MCP client call your app's `api.*` RPCs on the user's behalf. It mirrors `withSupabase`: the function file is `export default { fetch: withMCP(info, registerTools) }`, and `_shared/mcp.ts` owns OAuth discovery, the caller's-JWT binding, and the per-request `x-workspace-id` workspace model.
+
+**To expose functionality over MCP, add a domain tool** — one `ctx.workspaceTool(...)` per RPC:
+
+```ts
+import { withMCP, registerAdminTools, z } from "../_shared/mcp.ts";
+
+export default {
+  fetch: withMCP({ title: Deno.env.get("APP_NAME"), icon: ICON }, (ctx) => {
+    registerAdminTools(ctx); // optional: 10 free workspace/member/invitation tools
+
+    ctx.workspaceTool(
+      "list_notes",
+      { title: "List notes", description: "List notes in a workspace.", inputSchema: { status: z.string().optional() } },
+      ({ supabase, status }) => supabase.rpc("note_list", { p_status: status ?? null }),
+    );
+  }),
+};
+```
+
+`workspaceTool` adds the `workspace` arg, resolves it, binds a workspace-scoped client, calls your handler, and wraps the RPC `{ data, error }`. The handler just calls the `api.*` RPC — the DB (`auth_verify_access` + RLS) enforces per-workspace access. **Never use a service-role client in a tool** (`ctx` has no `supabaseAdmin` — confused-deputy). Requires `[functions.mcp] verify_jwt = false` + `[auth.oauth_server] enabled = true` in `config.toml`.
+
+> **For the tool config, the `ctx` toolkit, `registerAdminTools`, and the cloud OAuth caveat, load [MCP Server Reference](./references/mcp.md).**
+
+---
+
 ## Reference Files
 
 Load these as needed:
 
 - **[🔧 withSupabase Wrapper](./references/with_supabase.md)** — Full wrapper API: auth types, dual-auth, clients, anti-patterns, context reference
+- **[🔌 MCP Server](./references/mcp.md)** — The native per-user OAuth MCP server: `withMCP`, adding a domain tool with `workspaceTool`, the `ctx` toolkit, `registerAdminTools`, config.toml + cloud OAuth caveat
 - **[📦 Dependencies & Deployment](./references/dependencies.md)** — Per-function `deno.json`, import maps, bare specifiers, sub-path mapping, version pinning, `--use-api` deployment
 - **[📁 Edge Function Patterns](./references/edge_functions.md)** — Folder structure details, response helpers, feature-specific modules
 - **[🔑 API Key Migration](./references/api_key_migration.md)** — Migrate from legacy anon/service_role keys to new publishable/secret keys

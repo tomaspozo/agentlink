@@ -127,8 +127,8 @@ USING (user_id = (SELECT auth.uid()));
 -- branching. The matching table keeps an isolation-only policy (Pattern 2) as
 -- the backstop. Declare the permission key in the RBAC reference data under
 -- supabase/database/rbac/ (permissions.sql + role_permissions.sql, which fill
--- rbac_desired and are reconciled on db apply / env deploy) so the access-token
--- hook bakes it into the JWT.
+-- rbac_desired and are reconciled on db apply / env deploy) so
+-- auth_verify_access can derive it fresh from (caller, active workspace).
 
 CREATE OR REPLACE FUNCTION api.<table>_update(p_id uuid, p_name text)
 RETURNS jsonb
