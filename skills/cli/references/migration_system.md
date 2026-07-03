@@ -50,6 +50,8 @@ A migration is the delta between a **migrations-only baseline** (what replaying 
 
 **Default:** `db migrate` diffs your committed migrations against your schema files — **no Docker, no live DB, env-independent**. "No changes detected" means the committed migrations already capture your schema files. If it can't faithfully build the schema (an exotic extension/type), it errors and points at `--legacy`.
 
+If the diff contains a row-data-loss statement (`DROP TABLE`/`COLUMN`/`SCHEMA`, `TRUNCATE` — e.g. renaming or removing a table), `db migrate` prints the SQL and refuses to **write** the migration file without `--allow-destructive` — the same gate `db apply`/`db rebuild` use before pushing to a live DB, applied here before the drop is even committed as a deployment artifact. Review the printed diff with the user before adding the flag.
+
 **`--legacy`** builds the baseline a different way, trying in order:
 
 1. **Empty baseline** — no migration files yet (a brand-new project). Baseline = empty; desired = the live (just-`db apply`'d) DB. No Docker.

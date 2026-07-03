@@ -283,7 +283,7 @@ The CLI uses a **two-tier migration system** because some infrastructure (extens
 - **Pre-start migrations** — Extensions, schema creation (`api` schema + grants). Applied automatically by `npx supabase start`.
 - **Post-setup migrations** — Queues (`pgmq.create()` uses DO blocks), auth triggers (on `auth.users`). Marked as applied via `npx supabase migration repair`.
 
-**Tier 2: Application migrations** — Captures everything in `public` and `api` schemas: tables, functions, indexes, policies, triggers. `db migrate` diffs your committed migrations against the schema files (**no Docker**) — instead of `npx supabase db diff`, which sorts schema files alphabetically and breaks on cross-file FK references. `--legacy` is a Docker-based fallback.
+**Tier 2: Application migrations** — Captures everything in `public` and `api` schemas: tables, functions, indexes, policies, triggers. `db migrate` diffs your committed migrations against the schema files (**no Docker**) — instead of `npx supabase db diff`, which sorts schema files alphabetically and breaks on cross-file FK references. `--legacy` is a Docker-based fallback. Like `db apply`/`db rebuild`, `db migrate` refuses to **write** a migration containing a row-data-loss statement (`DROP TABLE`/`COLUMN`/`SCHEMA`, `TRUNCATE` — e.g. a table rename) without `--allow-destructive`; review the printed diff before adding the flag.
 
 ### Scaffold flow (interactive)
 
