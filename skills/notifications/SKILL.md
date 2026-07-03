@@ -115,6 +115,10 @@ The same shape applies to any other bespoke per-email function (e.g. an app's `i
 - **[references/transactional-email.md](references/transactional-email.md)** — full
   add-an-email recipe, the `internal_logs_*` log convention, idempotency/retry
   semantics, local testing with resend-box, and troubleshooting.
+- **[references/resend-box.md](references/resend-box.md)** — the local email
+  sandbox's HTTP API (list/filter/fetch/clear captured emails) and a
+  verification recipe for confirming a template actually rendered right, not
+  just that `internal_logs_email` says `sent`.
 - **Auth emails** (signup, magic link, recovery, email change): [auth skill](../auth/SKILL.md).
 - **Per-environment Resend setup** (API key, FROM address, local vs cloud):
   [cli/references/resend.md](../cli/references/resend.md).

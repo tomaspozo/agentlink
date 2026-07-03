@@ -4,6 +4,7 @@
 
 ### Added
 
+- **`notifications` skill: a new `references/resend-box.md` documents the local email sandbox's actual HTTP API** (list/filter/fetch/clear captured emails, response shape, a verification recipe) so the plugin is self-contained. `transactional-email.md`'s local-testing step previously said "see the `resend-box` companion skill" — that skill is not part of this plugin, not declared as a dependency, and not guaranteed to be installed, so on any machine without it the agent knew resend-box captures emails but had no way to actually query it. `notifications/SKILL.md` and `cli/references/resend.md` now cross-link the new reference too.
 - **`auth` skill: document the scaffold's new `no_access` suspension role and `api.user_ban`/`api.user_unban` platform-wide ban.** The membership RPC contract table grows from eight to eleven RPCs (`membership_suspend`, `user_ban`, `user_unban`), the role table gains `no_access` (rank 0, non-invitable, zero permissions), and the "role changes take effect on the next request" section is rewritten — it previously said the scaffold doesn't ship a live-session hard-cut and you'd have to build one; it now does (`user_ban` bans the account, kills `auth.sessions`/`auth.refresh_tokens`, and `_auth_pre_request` rejects a banned caller immediately even on a still-valid access token).
 
 ### Fixed

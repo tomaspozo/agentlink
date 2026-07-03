@@ -220,7 +220,10 @@ emails are captured locally instead of really sent. To exercise the full path:
    (`pnpm dev:all`).
 2. Sign up a user → `public.profiles` insert fires `trg_profiles_welcome_email` →
    `internal_logs_email` row goes `queued` → `sent`.
-3. Inspect the captured email in resend-box (see the `resend-box` companion skill).
+3. Inspect the captured email in resend-box — its HTTP API (list, filter by
+   recipient, fetch one, clear the inbox) is the only way to confirm the
+   template actually rendered right, not just that a send was attempted. See
+   [resend-box.md](resend-box.md) for the full API and a verification recipe.
 4. Confirm the auth confirmation email still arrives separately — the two paths are
    independent.
 
