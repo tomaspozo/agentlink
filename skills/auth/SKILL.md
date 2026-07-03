@@ -294,22 +294,25 @@ a tenant of one.
 
 ### Membership & invitation RPC contract
 
-The `api` schema exposes eight RPCs for managing workspace members.
+The `api` schema exposes eleven RPCs for managing workspace members.
 Match this contract — it's wired into the scaffolded `/settings/members`
 UI and the `/accept-invite` flow.
 
 | RPC | Purpose | Permission |
 |-----|---------|-----------|
 | `api.membership_list()` | List members of the current tenant | `membership.read` |
-| `api.membership_update_role(p_membership_id uuid, p_role text)` | Change a member's role (rejects `'owner'`; rejects self) | `membership.update` |
+| `api.membership_update_role(p_membership_id uuid, p_role text)` | Change a member's role (rejects `'owner'`; rejects self; rejects non-`invitable` roles, incl. `no_access`) | `membership.update` |
+| `api.membership_suspend(p_membership_id uuid)` | Move a member to `no_access` (zero permissions) WITHOUT deleting the row — reversible via `membership_update_role` to a real role. Workspace-scoped only; other tenants the member belongs to are untouched | `membership.suspend` |
 | `api.membership_remove(p_membership_id uuid)` | Remove a member (rejects self) | `membership.delete` |
+| `api.user_ban(p_membership_id uuid)` | Ban the member's whole ACCOUNT platform-wide — every workspace they belong to, not just this one — and kill their live sessions/refresh tokens. Owner-only; rejects self and rejects targeting an `'owner'` | `user.ban` |
+| `api.user_unban(p_membership_id uuid)` | Reverse `user_ban` | `user.ban` |
 | `api.invitation_list()` | List pending invitations for the current tenant | `invitation.create` |
 | `api.invitation_create(p_email text, p_role text)` | Invite — sends the workspace-invite email via `api._admin_send_email('invite', …)` → `internal-send-email` | `invitation.create` |
 | `api.invitation_resend(p_invitation_id uuid)` | Re-enqueue the email for an existing invitation (token unchanged) | `invitation.create` |
 | `api.invitation_revoke(p_invitation_id uuid)` | Cancel a pending invitation | `invitation.delete` |
 | `api.invitation_accept(p_token uuid)` | Accept an invitation; idempotent on second click | (caller must be authenticated) |
 
-All eight RPCs read the current workspace from the request GUC via
+All eleven RPCs read the current workspace from the request GUC via
 `public._auth_tenant_id()` (the value the pre-request hook pinned from
 `x-workspace-id`). **Never accept `p_tenant_id` from the client when
 "current workspace" is what you mean** — match the existing convention
@@ -342,11 +345,14 @@ Roles ship pre-seeded with rank-ordered hierarchy:
 | `admin` | 3 | yes | Manage members, invitations, tenant settings (except delete) |
 | `member` | 2 | yes (default) | Read teammates only |
 | `viewer` | 1 | yes | Read teammates only |
+| `no_access` | 0 | NO | None — only reachable via `api.membership_suspend`, never via invitations or `membership_update_role` |
 
 `'owner'` is non-assignable — both `invitations` and
 `api.membership_update_role` reject it. Owners are minted exclusively
 when their tenant is created, by the `_internal_admin_handle_new_user`
-trigger or `api.tenant_create`.
+trigger or `api.tenant_create`. `no_access` is non-invitable for the
+opposite reason: it's a suspension state you're moved INTO by an admin
+action, not a role you accept an invite as.
 
 ### Role changes take effect on the next request
 
@@ -356,12 +362,25 @@ caller's **next request**, with no `jwt_expiry` propagation window and
 nothing to go stale. This deletes the entire stale-permissions class of
 bug that JWT-baked claims had.
 
-The one thing a role change doesn't do is tear down a *live* session: an
-in-flight request already inside a transaction finishes. For a hard cut
-(fully terminate an ejected member's session), call
-`auth.admin.signOut(userId)` server-side after the change — requires
-`service_role`, so wire it through an edge function. The scaffold doesn't
-ship this by default; build it when the threat model requires it.
+The one thing a plain role change or `membership_suspend` doesn't do is
+tear down a *live* session: an in-flight request already inside a
+transaction finishes, and the member's OTHER workspaces are untouched —
+both are workspace-scoped. For a hard cut across every workspace the user
+belongs to, that's what `api.user_ban` is for: it bans the account
+(`auth.users.banned_until`, ~100 years — GoTrue's `ban_duration` has no
+literal "forever" value, so this is the documented/community convention
+for effectively permanent) and deletes their `auth.sessions` /
+`auth.refresh_tokens` rows so the ban takes effect on their next request,
+not their next login. It's plain SQL (`SECURITY DEFINER`, no edge function,
+no Admin API call) because `banned_until` and the session tables are just
+columns/rows in the `auth` schema. `_auth_pre_request` also rejects any
+request from a banned `auth.uid()` immediately — closing the one gap this
+approach can't otherwise cover: an already-issued **access token** (JWT) is
+self-contained and stays valid until its own `exp` regardless of
+`banned_until`, since GoTrue only checks bans at login/refresh, not
+per-request. This is why `user.ban` is owner-only (`rbac/role_permissions.sql`)
+unlike every other `membership.*` permission, which admin also holds — it's
+a bigger blast radius than anything else in the RPC contract.
 
 ### Invitations work even when the app is single-tenant style
 
