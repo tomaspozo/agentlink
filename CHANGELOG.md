@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-07-03
+
 ### Added
 
 - **`notifications` skill: a new `references/resend-box.md` documents the local email sandbox's actual HTTP API** (list/filter/fetch/clear captured emails, response shape, a verification recipe) so the plugin is self-contained. `transactional-email.md`'s local-testing step previously said "see the `resend-box` companion skill" — that skill is not part of this plugin, not declared as a dependency, and not guaranteed to be installed, so on any machine without it the agent knew resend-box captures emails but had no way to actually query it. `notifications/SKILL.md` and `cli/references/resend.md` now cross-link the new reference too.
