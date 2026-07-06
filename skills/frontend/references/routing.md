@@ -67,7 +67,7 @@ import {
 } from "@tanstack/react-router";
 import { QueryClientProvider } from "@tanstack/react-query";
 import type { QueryClient } from "@tanstack/react-query";
-import { AppToaster } from "@/components/app-toaster";
+import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/contexts/auth-context";
 import { queryClient } from "@/lib/query-client";
 
@@ -99,7 +99,7 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <Outlet />
-        <AppToaster />
+        <Toaster />
       </AuthProvider>
     </QueryClientProvider>
   );

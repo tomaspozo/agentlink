@@ -6,6 +6,11 @@
 
 - **`frontend` skill: forms migrate from React Hook Form to TanStack Form.** The scaffold's form stack is now `@tanstack/react-form` — the same family as the scaffold's TanStack Router + TanStack Query, and the stack shadcn's own docs currently favor — instead of `react-hook-form` + `@hookform/resolvers`. `SKILL.md`'s basic pattern and `references/forms.md`'s modal/edit-form patterns now use `useForm` with `validators: { onSubmit: schema }` and `form.Field`'s render prop, wrapped in shadcn's `Field`/`FieldLabel`/`FieldError` primitives, instead of `register`/`Controller`/`zodResolver`.
 - **`frontend` skill: three more curated shadcn primitives — `alert`, `empty`, `field`.** `references/scaffold-map.md`'s `components/ui/` inventory and `references/auth_ui.md`/`references/data_fetching.md` now reference these where they replace hand-rolled markup (e.g. empty states, inline field errors), keeping with the "never hand-roll a primitive shadcn ships" rule. `skills/cli/references/scaffold-map.md` component list updated to match.
+- **`frontend` skill: the scaffold's toaster is now the real vendored shadcn `Toaster` (`ui/sonner.tsx`), not a hand-rolled `AppToaster`.** `routing.md` and `data_fetching.md`'s `__root.tsx` examples now import `Toaster` from `@/components/ui/sonner`; `scaffold-map.md`'s component inventory drops `app-toaster`/`forms/form-field` (both deleted from the scaffold) and adds `sonner` to the curated `components/ui/` list.
+
+### Fixed
+
+- **`frontend` skill: `SKILL.md`'s own frontmatter still said "React Hook Form + Zod forms"** — missed in the earlier TanStack Form migration pass, which updated the body sections but not the YAML description used to decide when the skill activates.
 
 ## [2.1.0] - 2026-07-03
 

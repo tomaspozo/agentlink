@@ -481,7 +481,7 @@ This is **TanStack Start in SPA mode** -- there is no hand-written `src/main.tsx
 // src/routes/__root.tsx (the app-providers component)
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Outlet } from "@tanstack/react-router";
-import { AppToaster } from "@/components/app-toaster";
+import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/contexts/auth-context";
 import { queryClient } from "@/lib/query-client";
 
@@ -490,7 +490,7 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <Outlet />
-        <AppToaster />
+        <Toaster />
       </AuthProvider>
     </QueryClientProvider>
   );
@@ -505,10 +505,10 @@ The `__root.tsx` route registers this as `component` (the client-rendered app pr
 QueryClientProvider     <-- outermost: available to everything including auth
   AuthProvider          <-- auth state: available to beforeLoad hooks and all routes
     Outlet              <-- the route tree (rendered by TanStack Router)
-    AppToaster          <-- toast notifications: sibling to the outlet, always visible
+    Toaster             <-- toast notifications: sibling to the outlet, always visible
 ```
 
 - **QueryClientProvider** is outermost because auth logic and route loaders both need access to the query client. The same `queryClient` instance is also passed into the router context in `src/router.tsx`, so `beforeLoad` hooks and loaders can reach it.
 - **AuthProvider** wraps the outlet so auth state is available in `beforeLoad` hooks and all route components
 - **`<Outlet />`** renders the actual route tree (TanStack Router handles routing; you do not mount a `<RouterProvider>` by hand in SPA mode)
-- **AppToaster** is a sibling to the outlet (not nested inside) so toasts are visible during route transitions
+- **Toaster** is a sibling to the outlet (not nested inside) so toasts are visible during route transitions

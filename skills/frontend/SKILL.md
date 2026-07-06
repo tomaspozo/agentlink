@@ -1,6 +1,6 @@
 ---
 name: frontend
-description: Frontend integration for the scaffolded React + TanStack Start (SPA) app on Supabase — client setup, RPC calls, TanStack Query and TanStack Router, React Hook Form + Zod forms, shadcn/ui primitives, the PageShell/PageHeader page anatomy, route guards and permission gating, workspace switching, the account section, SSR-later config, and client-side auth. Activate whenever the task touches the frontend, the client, or any workspace/account UI: initializing or calling the Supabase client, building pages/forms/tables, adding shadcn/ui components, wiring TanStack routes or queries, guarding routes by auth or permission, switching the active workspace, or turning on SSR.
+description: Frontend integration for the scaffolded React + TanStack Start (SPA) app on Supabase — client setup, RPC calls, TanStack Query and TanStack Router, TanStack Form + Zod forms, shadcn/ui primitives, the PageShell/PageHeader page anatomy, route guards and permission gating, workspace switching, the account section, SSR-later config, and client-side auth. Activate whenever the task touches the frontend, the client, or any workspace/account UI: initializing or calling the Supabase client, building pages/forms/tables, adding shadcn/ui components, wiring TanStack routes or queries, guarding routes by auth or permission, switching the active workspace, or turning on SSR.
 ---
 
 # Frontend — Supabase Client Integration
@@ -333,7 +333,7 @@ TanStack Router with file-based routing. Route files in `src/routes/` map direct
 
 ```
 src/routes/
-├── __root.tsx                # Root shell + providers — QueryClientProvider, AuthProvider, AppToaster
+├── __root.tsx                # Root shell + providers — QueryClientProvider, AuthProvider, Toaster
 ├── index.tsx                 # PUBLIC /  (landing page)
 ├── _anon.tsx                 # Pathless layout — anon-only (redirects signed-in users to /dashboard)
 ├── _anon/                    # Logged-out-only pages
@@ -367,7 +367,7 @@ machines. Specifically, do not:
   no public anything). Customer portals, SaaS apps, and most
   products want a public `/` and gated `/dashboard`.
 
-- `__root.tsx` — root shell (`shellComponent`) + app providers (QueryClient, Auth, AppToaster) in `component`. TanStack Start owns the entry point; there is no `main.tsx`/`index.html`.
+- `__root.tsx` — root shell (`shellComponent`) + app providers (QueryClient, Auth, Toaster) in `component`. TanStack Start owns the entry point; there is no `main.tsx`/`index.html`.
 - `_auth.tsx` — pathless layout with `beforeLoad` `throw redirect({ to: "/sign-in" })`. In SPA mode this guard is client-only (UX, not security).
 - `$param` — dynamic route segments.
 - `-components/` — folders prefixed with `-` are ignored by the router.

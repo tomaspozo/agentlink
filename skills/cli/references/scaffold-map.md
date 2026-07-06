@@ -190,7 +190,7 @@ the UI with `useHasPermission('<key>')`.
 - `components/ui/` — curated shadcn primitives: button, dialog, alert-dialog,
   dropdown-menu, tooltip, switch, badge, card, input, label, skeleton, table,
   select, separator, tabs, popover, sheet, command, input-group, checkbox,
-  radio-group, textarea, accordion, avatar, scroll-area, alert, empty, field.
+  radio-group, textarea, accordion, avatar, scroll-area, alert, empty, field, sonner.
   **Need another?** `npx shadcn@latest add <name> --yes` (`components.json` is
   pre-wired) — never hand-roll a primitive or use a native element when shadcn
   ships one.
@@ -198,7 +198,7 @@ the UI with `useHasPermission('<key>')`.
   wrapper), `page-header` (eyebrow + title + description + actions hero),
   `auth-shell`, `empty-state`, `list-skeleton`, `error-boundary`, `not-found`,
   `create-workspace-dialog`, `invite-member-dialog`, `invite-context-banner`,
-  `check-inbox-card`, `forms/form-field`, `app-toaster`.
+  `check-inbox-card`.
 - **Page anatomy:** every gated page is `PageShell` → `PageHeader` → content;
   lists use shadcn `Table`, pickers use shadcn `Select`. `routes/_auth/settings/members.tsx`
   is the canonical reference page (Table + Select + Badge + PageHeader).
