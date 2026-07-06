@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **`frontend` skill: forms migrate from React Hook Form to TanStack Form.** The scaffold's form stack is now `@tanstack/react-form` — the same family as the scaffold's TanStack Router + TanStack Query, and the stack shadcn's own docs currently favor — instead of `react-hook-form` + `@hookform/resolvers`. `SKILL.md`'s basic pattern and `references/forms.md`'s modal/edit-form patterns now use `useForm` with `validators: { onSubmit: schema }` and `form.Field`'s render prop, wrapped in shadcn's `Field`/`FieldLabel`/`FieldError` primitives, instead of `register`/`Controller`/`zodResolver`.
+- **`frontend` skill: three more curated shadcn primitives — `alert`, `empty`, `field`.** `references/scaffold-map.md`'s `components/ui/` inventory and `references/auth_ui.md`/`references/data_fetching.md` now reference these where they replace hand-rolled markup (e.g. empty states, inline field errors), keeping with the "never hand-roll a primitive shadcn ships" rule. `skills/cli/references/scaffold-map.md` component list updated to match.
+
 ## [2.1.0] - 2026-07-03
 
 ### Added

@@ -256,16 +256,16 @@ src/
 
 ---
 
-## Forms with React Hook Form + Zod
+## Forms with TanStack Form + Zod
 
-Forms use React Hook Form for state management and Zod for validation. The pattern is: define a Zod schema, derive the form type, use `useForm` with `zodResolver`.
+Forms use TanStack Form (`@tanstack/react-form`) for state management and Zod for validation — the same family as this scaffold's TanStack Router + TanStack Query, and shadcn's own currently-documented forms stack. The pattern is: define a Zod schema, call `useForm` with `validators: { onSubmit: schema }`, and author each field with `form.Field`'s render prop wrapped in shadcn's `Field`/`FieldLabel`/`FieldError`.
 
 ### Basic pattern
 
 ```typescript
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "@tanstack/react-form";
 import { z } from "zod";
+import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 
 const chartSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -275,29 +275,53 @@ const chartSchema = z.object({
 type ChartForm = z.infer<typeof chartSchema>;
 
 function ChartCreateForm() {
-  const { register, handleSubmit, formState: { errors } } = useForm<ChartForm>({
-    resolver: zodResolver(chartSchema),
-  });
   const chartCreate = useChartCreate();
 
-  const onSubmit = (values: ChartForm) => {
-    chartCreate.mutate({ p_name: values.name, p_description: values.description });
-  };
+  const form = useForm({
+    defaultValues: { name: "", description: "" } as ChartForm,
+    validators: { onSubmit: chartSchema },
+    onSubmit: async ({ value }) =>
+      chartCreate.mutate({ p_name: value.name, p_description: value.description }),
+  });
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)}>
-      <FormField label="Name" error={errors.name?.message}>
-        <Input {...register("name")} />
-      </FormField>
-      <Button type="submit" disabled={chartCreate.isPending}>Create</Button>
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        void form.handleSubmit();
+      }}
+    >
+      <FieldGroup>
+        <form.Field
+          name="name"
+          children={(field) => {
+            const isInvalid = field.state.meta.isTouched && !field.state.meta.isValid;
+            return (
+              <Field data-invalid={isInvalid}>
+                <FieldLabel htmlFor={field.name}>Name</FieldLabel>
+                <Input
+                  id={field.name}
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  aria-invalid={isInvalid}
+                />
+                {isInvalid && <FieldError errors={field.state.meta.errors} />}
+              </Field>
+            );
+          }}
+        />
+        <Button type="submit" disabled={chartCreate.isPending}>Create</Button>
+      </FieldGroup>
     </form>
   );
 }
 ```
 
-The `FormField` component wraps a label, input, and error message into a consistent layout. Use it for all form fields to keep forms visually consistent.
+`Field`/`FieldGroup`/`FieldLabel`/`FieldError` (shadcn's `Field` component) wrap every field for consistent label, spacing, and error layout — never a raw `div` with `space-y-*`.
 
-> **Load [Form Patterns](./references/forms.md) for full patterns including form modals, Controller usage for non-native inputs, and async validation.**
+> **Load [Form Patterns](./references/forms.md) for full patterns including form modals, Select/Checkbox wiring, conditional validation, and cross-field `.refine()` checks.**
 
 ---
 
@@ -363,7 +387,7 @@ Reusable components that provide consistent UI patterns across the app. Check `s
 | `ListSkeleton` | Loading placeholder for list views | While query data is loading in list pages |
 | `EmptyState` | Icon + message + action for empty collections | When a list query returns zero items |
 | `ErrorBoundary` | Catches render errors, shows recovery UI | Wrap route components or complex sections |
-| `FormField` | Label + input + error message wrapper | Every form field — keeps forms visually consistent |
+| `Field`/`FieldGroup` (shadcn) | Label + input + error message wrapper | Every form field — keeps forms visually consistent |
 
 ### Page anatomy
 
@@ -382,13 +406,45 @@ Every gated page follows the same shape — compose the shipped primitives, don'
 
 ### Need a primitive that isn't shipped?
 
-The scaffold ships a curated shadcn set (`button`, `card`, `input`, `label`, `dialog`, `alert-dialog`, `dropdown-menu`, `tooltip`, `switch`, `badge`, `table`, `skeleton`, `select`, `separator`, `tabs`, `popover`, `sheet`, `command`, `checkbox`, `radio-group`, `textarea`, `accordion`, `avatar`, `scroll-area`). For anything else, **add it on demand — `components.json` is pre-wired:**
+The scaffold ships a curated shadcn set (`button`, `card`, `input`, `label`, `dialog`, `alert-dialog`, `dropdown-menu`, `tooltip`, `switch`, `badge`, `table`, `skeleton`, `select`, `separator`, `tabs`, `popover`, `sheet`, `command`, `checkbox`, `radio-group`, `textarea`, `accordion`, `avatar`, `scroll-area`, `alert`, `empty`, `field`) on the **Base UI** primitive library (shadcn's current default — `components.json`'s `style: "base-nova"`). For anything else, **add it on demand — `components.json` is pre-wired:**
 
 ```bash
 npx shadcn@latest add <name> --yes   # writes the component + installs its deps
 ```
 
 **Never hand-roll a primitive or fall back to a native element** when shadcn ships one — run the command above first.
+
+Base UI's API differs from Radix in a few places (`asChild` → `render`, `Select` needs an `items` array, `Accordion` uses `multiple` + array `defaultValue` instead of `type`). The `shadcn/ui` companion skill's `rules/base-vs-radix.md` documents every difference — check it before wiring a new interactive component. This scaffold's `ui/*` files and the account/settings routes already show the correct patterns to copy from.
+
+### Theming & customization
+
+The scaffold ships **pure, unmodified shadcn output** — `src/styles.css` is byte-for-byte what `npx shadcn@latest init -t start` generates (base-nova preset, neutral base color, Geist Variable font), and `components.json` matches a fresh shadcn scaffold exactly. There is no template-specific fork of the design system to work around.
+
+**Re-theme the app by editing `src/styles.css` — nothing else should need to change** to reskin the entire app (colors, corner radius, typography):
+
+```css
+/* src/styles.css */
+:root {
+  --primary: oklch(0.205 0 0);   /* → change this, every primary-colored element updates */
+  --radius: 0.625rem;            /* → change this, every rounded corner updates */
+}
+```
+
+Or swap the whole theme at once with the real shadcn CLI:
+
+```bash
+npx shadcn@latest init --preset <code> --force --no-reinstall   # rewrites styles.css wholesale
+```
+
+**Rules that keep this working:**
+- **No custom CSS declarations, no custom classes, no custom tokens.** Don't add anything to `styles.css` beyond what shadcn itself would generate — it gets silently wiped the next time someone runs `shadcn init --force`/`apply --preset <code>` (both rewrite the file wholesale), and it breaks the "one file reskins everything" guarantee.
+- Need a repeated visual pattern (an eyebrow label, a section divider)? Inline the Tailwind utilities directly at each call site (e.g. `text-xs font-medium uppercase tracking-wide text-muted-foreground`) rather than inventing a named class in the stylesheet.
+- Need a semantic color shadcn doesn't ship (success/warning)? Use Tailwind's stock palette directly (`text-green-600 dark:text-green-500`, `text-amber-600 dark:text-amber-500`) rather than adding a custom CSS variable — `destructive` already covers the error case.
+- Never add one-off inline styles or ad-hoc hex colors in component files — that's what breaks the "change one file, reskin everything" story.
+
+**Never hardcode a pixel/rem radius (`rounded-[2px]`, `rounded-[10px]`, `style={{ borderRadius: ... }}`) on any custom component** — bespoke cards, buttons, badges, banners, anything you build by hand instead of via `shadcn add`. Hardcoded radii don't track `--radius` in `styles.css`, so the element silently stops matching the theme the moment someone re-themes the app (this has bitten this exact scaffold before). Always use the theme-relative scale instead: `rounded-sm` / `rounded-md` / `rounded-lg` / `rounded-xl` / `rounded-2xl` / `rounded-3xl` / `rounded-4xl` / `rounded-full` (all mapped through `--radius` in `styles.css`'s `@theme inline` block). Pick whichever step visually matches what you're building — a small badge might want `rounded-md`, a card `rounded-xl`.
+
+If you genuinely believe a fixed, non-theme-relative radius is required (e.g. matching a third-party embed's exact pixel dimensions), **stop and ask the user to confirm before writing it** — don't silently opt out of the theme system.
 
 ---
 
@@ -620,4 +676,4 @@ If available, these skills are invoked automatically at the right points in the 
 - **[👤 Account & Connections](./references/account.md)** — Profile (display name + avatar upload), MCP/OAuth connections, the avatar user menu
 - **[🗂 Routing Patterns](./references/routing.md)** — File-based routing, layouts, navigation, search params, route loaders
 - **[📊 Data Fetching Patterns](./references/data_fetching.md)** — TanStack Query, typedRpc, query key factories, cache invalidation
-- **[📝 Form Patterns](./references/forms.md)** — React Hook Form + Zod, validation, form modals, FormField component
+- **[📝 Form Patterns](./references/forms.md)** — TanStack Form + Zod, validation, form modals, Field component

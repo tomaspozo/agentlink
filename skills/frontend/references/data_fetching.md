@@ -411,8 +411,8 @@ function AnimalsPage() {
         title="Animals"
         description="Everything registered in this workspace."
         actions={
-          <Button asChild>
-            <Link to="/animals/new">Register animal</Link>
+          <Button render={<Link to="/animals/new" />} nativeButton={false}>
+            Register animal
           </Button>
         }
       />

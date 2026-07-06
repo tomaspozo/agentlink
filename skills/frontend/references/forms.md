@@ -1,13 +1,15 @@
-# Form Patterns -- React Hook Form + Zod
+# Form Patterns -- TanStack Form + Zod
 
-Form handling with React Hook Form for state management, Zod for validation, and a consistent modal pattern for create/edit forms. Covers schema definition, input registration, the FormField component, the standard form modal pattern, and centralized label maps.
+Form handling with TanStack Form (`@tanstack/react-form`) for state management, Zod for validation, and shadcn's `Field`/`FieldGroup`/`FieldError` primitives for a consistent modal pattern for create/edit forms. Covers schema definition, `form.Field`'s render-prop pattern, the standard form modal pattern, and centralized label maps.
+
+TanStack Form is used (not React Hook Form) because this scaffold is already TanStack Router + TanStack Query — same family, same mental model — and it's what shadcn's own forms documentation currently teaches.
 
 ## Contents
 - Schema Definition
 - Form Setup
-- Input Registration
-- FormField Component
+- Field Types
 - Form Modal Pattern
+- Conditional Validation
 - Centralized Label Maps
 
 ---
@@ -37,202 +39,163 @@ Key points:
 - Optional fields use `.optional()` -- they can be `undefined` or an empty string
 - Enums use `z.enum()` with a custom `message` for the error text
 - Numeric inputs are defined as `z.string()` in the schema (HTML inputs return strings) and converted to numbers in the submit handler
-- Define `defaultValues` separately when the form needs initial state
-
-### Default values
-
-```typescript
-const defaultValues: AnimalFormData = {
-  tag_number: "",
-  name: "",
-  sex: "female",
-  breed: "",
-  birth_date: "",
-  weight_kg: "",
-  notes: "",
-};
-```
-
-Always define default values for every field. React Hook Form uses them for `reset()` and to avoid uncontrolled-to-controlled warnings.
 
 ---
 
 ## Form Setup
 
 ```typescript
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "@tanstack/react-form";
 
-const form = useForm<AnimalFormData>({
-  resolver: zodResolver(animalSchema),
-  defaultValues,
+const form = useForm({
+  defaultValues: {
+    tag_number: "",
+    name: "",
+    sex: "female",
+    breed: "",
+  } as AnimalFormData,
+  validators: { onSubmit: animalSchema },
+  onSubmit: async ({ value }) => {
+    // `value` is the validated, typed form data.
+    await createAnimal.mutateAsync(value);
+  },
 });
-
-const {
-  register,
-  control,
-  handleSubmit,
-  formState: { errors },
-  reset,
-} = form;
 ```
 
-Destructure what you need. The common set is:
-- `register` -- for native HTML inputs
-- `control` -- for controlled components (Select, Combobox, Checkbox)
-- `handleSubmit` -- wraps the submit handler with validation
-- `formState.errors` -- field-level error messages
-- `reset` -- resets the form to default values
-
----
-
-## Input Registration
-
-### `register()` for native inputs
-
-Use `register()` with standard HTML inputs (text, date, number, textarea). It returns `ref`, `onChange`, `onBlur`, and `name` props.
-
 ```typescript
-<Input {...register("tag_number")} placeholder="001" />
-<Input type="date" {...register("birth_date")} />
-<Input type="number" step="0.1" {...register("weight_kg")} />
-<Textarea {...register("notes")} rows={2} />
-```
-
-### `Controller` for controlled components
-
-Use `Controller` for components that do not accept standard input props (like Radix-based Select, Combobox, Checkbox). These components use `value`/`onValueChange` or `checked`/`onCheckedChange` instead of `ref`/`onChange`.
-
-```typescript
-import { Controller } from "react-hook-form";
-
-// Select
-<Controller
-  control={control}
-  name="sex"
-  render={({ field }) => (
-    <Select value={field.value} onValueChange={field.onChange}>
-      <SelectTrigger>
-        <SelectValue placeholder="Select..." />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectGroup>
-          <SelectItem value="female">Female</SelectItem>
-          <SelectItem value="male">Male</SelectItem>
-        </SelectGroup>
-      </SelectContent>
-    </Select>
-  )}
-/>
-
-// Checkbox
-<Controller
-  control={control}
-  name="alive"
-  render={({ field }) => (
-    <div className="flex items-center gap-2">
-      <Checkbox
-        id="alive"
-        checked={field.value}
-        onCheckedChange={(checked) => field.onChange(checked === true)}
-      />
-      <Label htmlFor="alive">Alive at birth</Label>
-    </div>
-  )}
-/>
-
-// Custom Combobox
-<Controller
-  control={control}
-  name="damId"
-  render={({ field }) => (
-    <AnimalCombobox
-      value={field.value}
-      onValueChange={field.onChange}
-      sex="female"
-    />
-  )}
-/>
-```
-
-### When to use which
-
-| Component | Method | Why |
-|-----------|--------|-----|
-| `<Input>` | `register()` | Native HTML input, accepts ref |
-| `<Textarea>` | `register()` | Native HTML textarea, accepts ref |
-| `<Select>` (Radix) | `Controller` | Uses `value`/`onValueChange`, not ref-based |
-| `<Checkbox>` (Radix) | `Controller` | Uses `checked`/`onCheckedChange` |
-| `<Combobox>` (custom) | `Controller` | Custom controlled component |
-
----
-
-## FormField Component
-
-The `FormField` component wraps every form field for consistent label and error display.
-
-```typescript
-// src/components/forms/form-field.tsx
-import { Label } from "@/components/ui/label";
-
-interface FormFieldProps {
-  label: string;
-  error?: string;
-  children: React.ReactNode;
-}
-
-export function FormField({ label, error, children }: FormFieldProps) {
-  return (
-    <div data-invalid={error ? true : undefined}>
-      <Label className="mb-1.5">{label}</Label>
-      {children}
-      {error && <p className="mt-1 text-xs text-destructive">{error}</p>}
-    </div>
-  );
-}
-```
-
-### Usage
-
-```typescript
-import { FormField } from "@/components/forms/form-field";
-
-// With register()
-<FormField label="Tag Number *" error={errors.tag_number?.message}>
-  <Input {...register("tag_number")} placeholder="001" />
-</FormField>
-
-// With Controller
-<FormField label="Sex *" error={errors.sex?.message}>
-  <Controller
-    control={control}
-    name="sex"
-    render={({ field }) => (
-      <Select value={field.value} onValueChange={field.onChange}>
-        <SelectTrigger>
-          <SelectValue placeholder="Select..." />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectGroup>
-            <SelectItem value="female">Female</SelectItem>
-            <SelectItem value="male">Male</SelectItem>
-          </SelectGroup>
-        </SelectContent>
-      </Select>
-    )}
-  />
-</FormField>
-
-// Optional field (no asterisk, no error)
-<FormField label="Notes">
-  <Textarea {...register("notes")} rows={2} />
-</FormField>
+<form
+  onSubmit={(e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    void form.handleSubmit();
+  }}
+>
+  {/* ...fields... */}
+</form>
 ```
 
 Key points:
-- Mark required fields with `*` in the label text: `"Tag Number *"`
-- Pass `errors.fieldName?.message` as the `error` prop -- it is `undefined` when there is no error
-- The `data-invalid` attribute can be used for CSS styling on invalid fields
+- `defaultValues` doubles as the reset target — always define one for every field, cast to the schema's inferred type when TanStack Form's inference doesn't line up (e.g. `as AnimalFormData`)
+- `validators: { onSubmit: schema }` runs the whole Zod schema on submit — TanStack Form calls `onSubmit` (the mutation) only if validation passes
+- The native `<form onSubmit>` always calls `e.preventDefault()` + `e.stopPropagation()` then hands off to `form.handleSubmit()` — this is boilerplate, copy it verbatim
+- `form.reset(values?)` resets to `defaultValues`, or to `values` if provided (useful for seeding a form once async data — e.g. the record being edited — resolves)
+
+---
+
+## Field Types
+
+Every field is authored with `form.Field`'s render-prop (`children`), wrapped in shadcn's `Field` component for label/error layout. Reference `field.state.value`/`field.handleChange`/`field.handleBlur` for the control, and `field.state.meta.isTouched`/`isValid`/`errors` for validation display.
+
+### Input / Textarea
+
+```typescript
+import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
+
+<FieldGroup>
+  <form.Field
+    name="tag_number"
+    children={(field) => {
+      const isInvalid = field.state.meta.isTouched && !field.state.meta.isValid;
+      return (
+        <Field data-invalid={isInvalid}>
+          <FieldLabel htmlFor={field.name}>Tag number</FieldLabel>
+          <Input
+            id={field.name}
+            name={field.name}
+            value={field.state.value}
+            onBlur={field.handleBlur}
+            onChange={(e) => field.handleChange(e.target.value)}
+            aria-invalid={isInvalid}
+            placeholder="001"
+          />
+          {isInvalid && <FieldError errors={field.state.meta.errors} />}
+        </Field>
+      );
+    }}
+  />
+</FieldGroup>
+```
+
+`Textarea` follows the identical pattern — same props, swap `Input` for `Textarea`.
+
+### Select
+
+Base UI's `Select` requires an `items` array on the root (used for accessibility and the placeholder). Wire `value`/`onValueChange` straight to `field.state.value`/`field.handleChange` — no `Controller` needed, TanStack Form's fields are controlled natively. Base UI's `onValueChange` passes `T | null` (nullable, for a "cleared" selection); guard the null case before calling `field.handleChange` if the field itself is a non-nullable enum:
+
+```typescript
+const SEX_ITEMS = [
+  { value: "female", label: "Female" },
+  { value: "male", label: "Male" },
+];
+
+<form.Field
+  name="sex"
+  children={(field) => {
+    const isInvalid = field.state.meta.isTouched && !field.state.meta.isValid;
+    return (
+      <Field data-invalid={isInvalid}>
+        <FieldLabel htmlFor={field.name}>Sex</FieldLabel>
+        <Select
+          items={SEX_ITEMS}
+          name={field.name}
+          value={field.state.value}
+          onValueChange={(value) => {
+            if (value !== null) field.handleChange(value);
+          }}
+        >
+          <SelectTrigger id={field.name} aria-invalid={isInvalid}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem value="female">Female</SelectItem>
+              <SelectItem value="male">Male</SelectItem>
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+        {isInvalid && <FieldError errors={field.state.meta.errors} />}
+      </Field>
+    );
+  }}
+/>
+```
+
+### Checkbox / Switch / RadioGroup
+
+Same shape — `checked`/`onCheckedChange` (Checkbox, Switch) or `value`/`onValueChange` (RadioGroup) wired to `field.state.value`/`field.handleChange`:
+
+```typescript
+<form.Field
+  name="alive"
+  children={(field) => (
+    <Field orientation="horizontal">
+      <Checkbox
+        id={field.name}
+        checked={field.state.value}
+        onCheckedChange={(checked) => field.handleChange(checked === true)}
+      />
+      <FieldLabel htmlFor={field.name} className="font-normal">
+        Alive at birth
+      </FieldLabel>
+    </Field>
+  )}
+/>
+```
+
+### When to reach for `form.Subscribe`
+
+Anything that needs to react to form-wide state (not a single field's value) — a submit button disabled until the form is dirty, a live field-value preview — goes through `form.Subscribe`, not a direct read of `form.state` (which isn't reactive outside a subscription):
+
+```typescript
+<form.Subscribe
+  selector={(state) => state.isDirty}
+  children={(isDirty) => (
+    <Button type="submit" disabled={!isDirty || mutation.isPending}>
+      {mutation.isPending ? "Saving…" : "Save changes"}
+    </Button>
+  )}
+/>
+```
 
 ---
 
@@ -241,12 +204,11 @@ Key points:
 The standard pattern for create and edit forms. State is managed by the parent via `open`/`onOpenChange` props, not internal to the modal.
 
 ```typescript
-import { useForm, Controller } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "@tanstack/react-form";
 import { z } from "zod";
 import { toast } from "sonner";
 import { useCreateAnimal } from "@/mutations/animals";
-import { FormField } from "@/components/forms/form-field";
+import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Loader2 } from "lucide-react";
@@ -275,12 +237,10 @@ const animalSchema = z.object({
 
 type AnimalFormData = z.infer<typeof animalSchema>;
 
-const defaultValues: AnimalFormData = {
-  tag_number: "",
-  name: "",
-  sex: "female",
-  breed: "",
-};
+const SEX_ITEMS = [
+  { value: "female", label: "Female" },
+  { value: "male", label: "Male" },
+];
 
 interface CreateAnimalModalProps {
   open: boolean;
@@ -290,41 +250,32 @@ interface CreateAnimalModalProps {
 export function CreateAnimalModal({ open, onOpenChange }: CreateAnimalModalProps) {
   const createAnimal = useCreateAnimal();
 
-  const form = useForm<AnimalFormData>({
-    resolver: zodResolver(animalSchema),
-    defaultValues,
+  const form = useForm({
+    defaultValues: { tag_number: "", name: "", sex: "female", breed: "" } as AnimalFormData,
+    validators: { onSubmit: animalSchema },
+    onSubmit: async ({ value }) => {
+      createAnimal.mutate(
+        {
+          tag_number: value.tag_number,
+          sex: value.sex,
+          name: value.name || null,
+          breed: value.breed || null,
+        },
+        {
+          onSuccess: () => {
+            toast.success("Animal created");
+            form.reset();
+            onOpenChange(false);
+          },
+          onError: (err) => toast.error(err.message),
+        },
+      );
+    },
   });
 
-  const {
-    register,
-    control,
-    handleSubmit,
-    formState: { errors },
-    reset,
-  } = form;
-
   const handleClose = (isOpen: boolean) => {
-    if (!isOpen) reset(defaultValues);
+    if (!isOpen) form.reset();
     onOpenChange(isOpen);
-  };
-
-  const onSubmit = (data: AnimalFormData) => {
-    createAnimal.mutate(
-      {
-        tag_number: data.tag_number,
-        sex: data.sex,
-        name: data.name || null,
-        breed: data.breed || null,
-      },
-      {
-        onSuccess: () => {
-          toast.success("Animal created");
-          reset(defaultValues);
-          onOpenChange(false);
-        },
-        onError: (err) => toast.error(err.message),
-      },
-    );
   };
 
   return (
@@ -333,38 +284,101 @@ export function CreateAnimalModal({ open, onOpenChange }: CreateAnimalModalProps
         <DialogHeader>
           <DialogTitle>Create Animal</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-3">
-          <FormField label="Tag Number *" error={errors.tag_number?.message}>
-            <Input {...register("tag_number")} placeholder="001" />
-          </FormField>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            void form.handleSubmit();
+          }}
+        >
+          <FieldGroup>
+            <form.Field
+              name="tag_number"
+              children={(field) => {
+                const isInvalid = field.state.meta.isTouched && !field.state.meta.isValid;
+                return (
+                  <Field data-invalid={isInvalid}>
+                    <FieldLabel htmlFor={field.name}>Tag number</FieldLabel>
+                    <Input
+                      id={field.name}
+                      name={field.name}
+                      value={field.state.value}
+                      onBlur={field.handleBlur}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                      aria-invalid={isInvalid}
+                      placeholder="001"
+                    />
+                    {isInvalid && <FieldError errors={field.state.meta.errors} />}
+                  </Field>
+                );
+              }}
+            />
 
-          <FormField label="Sex *" error={errors.sex?.message}>
-            <Controller
-              control={control}
+            <form.Field
               name="sex"
-              render={({ field }) => (
-                <Select value={field.value} onValueChange={field.onChange}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      <SelectItem value="female">Female</SelectItem>
-                      <SelectItem value="male">Male</SelectItem>
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
+              children={(field) => {
+                const isInvalid = field.state.meta.isTouched && !field.state.meta.isValid;
+                return (
+                  <Field data-invalid={isInvalid}>
+                    <FieldLabel htmlFor={field.name}>Sex</FieldLabel>
+                    <Select
+                      items={SEX_ITEMS}
+                      name={field.name}
+                      value={field.state.value}
+                      onValueChange={(value) => {
+                        if (value !== null) field.handleChange(value);
+                      }}
+                    >
+                      <SelectTrigger id={field.name} aria-invalid={isInvalid}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          <SelectItem value="female">Female</SelectItem>
+                          <SelectItem value="male">Male</SelectItem>
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                    {isInvalid && <FieldError errors={field.state.meta.errors} />}
+                  </Field>
+                );
+              }}
+            />
+
+            <form.Field
+              name="name"
+              children={(field) => (
+                <Field>
+                  <FieldLabel htmlFor={field.name}>Name</FieldLabel>
+                  <Input
+                    id={field.name}
+                    name={field.name}
+                    value={field.state.value}
+                    onBlur={field.handleBlur}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    placeholder="Luna"
+                  />
+                </Field>
               )}
             />
-          </FormField>
 
-          <FormField label="Name">
-            <Input {...register("name")} placeholder="Luna" />
-          </FormField>
-
-          <FormField label="Breed">
-            <Input {...register("breed")} placeholder="Holstein" />
-          </FormField>
+            <form.Field
+              name="breed"
+              children={(field) => (
+                <Field>
+                  <FieldLabel htmlFor={field.name}>Breed</FieldLabel>
+                  <Input
+                    id={field.name}
+                    name={field.name}
+                    value={field.state.value}
+                    onBlur={field.handleBlur}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    placeholder="Holstein"
+                  />
+                </Field>
+              )}
+            />
+          </FieldGroup>
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => handleClose(false)}>
@@ -387,13 +401,13 @@ export function CreateAnimalModal({ open, onOpenChange }: CreateAnimalModalProps
 ### Key points about this pattern
 
 - **State managed by parent** via `open`/`onOpenChange` -- the modal does not own its visibility
-- **`form.reset(defaultValues)` on close AND on success** -- prevents stale data when reopening
+- **`form.reset()` on close AND on success** -- prevents stale data when reopening
 - **`handleClose` wraps `onOpenChange`** to always reset the form when the dialog closes (including backdrop click and escape key)
 - **Mutation with toast feedback** -- `onSuccess` shows a success toast, `onError` shows the error message
 - **Loading state on submit button** via `isPending` -- prevents double submission
 - **`DialogContent` with `max-h-[90vh] overflow-y-auto`** -- ensures long forms scroll within the dialog on small screens
-- **Form converts empty strings to `null`** -- `data.name || null` ensures empty optional fields are sent as `null` to the RPC, not as empty strings
-- **`FormField` wraps every field** for consistent label and error layout
+- **Form converts empty strings to `null`** -- `value.name || null` ensures empty optional fields are sent as `null` to the RPC, not as empty strings
+- **`Field`/`FieldGroup` wrap every field** for consistent label, spacing, and error layout — never a raw `div` with manual `space-y-*`
 
 ### Usage in a page component
 
@@ -413,19 +427,69 @@ function AnimalsPage() {
 }
 ```
 
-### Grid layouts in forms
+### Seeding a form from async data
 
-Use CSS grid for side-by-side fields:
+When a form edits an existing record that loads asynchronously (e.g. a workspace-settings page), seed it once the data resolves with `form.reset(values)` inside a `useEffect` — the same call used to reset to defaults, just given new values:
 
 ```typescript
-<div className="grid grid-cols-2 gap-3">
-  <FormField label="Date *" error={errors.date?.message}>
-    <Input type="date" {...register("date")} />
-  </FormField>
-  <FormField label="Weight (kg)">
-    <Input type="number" step="0.1" {...register("weight_kg")} />
-  </FormField>
-</div>
+const { reset } = form;
+useEffect(() => {
+  if (tenant) reset({ name: tenant.name, slug: tenant.slug });
+}, [tenant, reset]);
+```
+
+Pre-filling a single field the same way (e.g. an email address arriving from an invitation preview) uses `form.setFieldValue` instead of a full reset, guarded so it only fires once:
+
+```typescript
+useEffect(() => {
+  if (form.getFieldValue("email") === "" && invitedEmail) {
+    form.setFieldValue("email", invitedEmail);
+  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [invitedEmail]);
+```
+
+---
+
+## Conditional Validation
+
+When a field's requiredness depends on external component state (a mode toggle, a "show this field" flag) rather than another field's value, build the schema with `.superRefine()` reading that state via closure — **not** a ternary between two structurally different Zod objects. TanStack Form's `validators.onSubmit` type must stay consistent across renders; a ternary between e.g. `z.object({ password: z.string().optional() })` and `z.object({ password: z.string().min(6) })` produces a type TanStack Form can't reconcile.
+
+```typescript
+const [mode, setMode] = useState<"password" | "magic_link">("password");
+
+const baseSchema = z.object({
+  email: z.string().email("Enter a valid email"),
+  password: z.string().optional(),
+});
+
+// Re-evaluated fresh every render, so toggling `mode` immediately swaps
+// which rule is enforced — the inferred TS type never changes.
+const schema = baseSchema.superRefine((data, ctx) => {
+  if (mode === "password" && (!data.password || data.password.length < 6)) {
+    ctx.addIssue({ code: "custom", path: ["password"], message: "At least 6 characters" });
+  }
+});
+
+const form = useForm({
+  defaultValues: { email: "", password: "" },
+  validators: { onSubmit: schema },
+  onSubmit: async ({ value }) => { /* ... */ },
+});
+```
+
+For cross-field checks that depend only on other form values (not external state), a plain `.refine()` on the object works and needs no closure:
+
+```typescript
+const schema = z
+  .object({
+    password: z.string().min(6, "At least 6 characters"),
+    confirm: z.string().min(6, "At least 6 characters"),
+  })
+  .refine((data) => data.password === data.confirm, {
+    message: "Passwords don't match",
+    path: ["confirm"],
+  });
 ```
 
 ---

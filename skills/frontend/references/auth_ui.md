@@ -224,7 +224,7 @@ the same post-auth action it runs **twice**. Guard it — see
 
 What you can change freely:
 - Copy, headings, descriptions
-- Layout, spacing, colors (the visual system in `index.css` / `globals.css`)
+- Layout, spacing, colors (the visual system's tokens live in `src/styles.css` — see [Theming & customization](../SKILL.md#theming--customization))
 - Form field order, validation messages
 - Add OAuth providers (see [extension point](#oauth-callback-extension-point))
 - Move pages around — but keep the URL paths stable, because `internal-send-auth-email` builds verify URLs from `REDIRECT_PATHS`
