@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.3.0] - 2026-07-07
+
 ### Changed
 
 - **`database` + `cli` skills: pgmq queues are documented as an IMPERATIVE resource, not a schema file or migration.** `cli/references/migration_system.md`, `cli/SKILL.md`, `cli/references/scaffold-map.md`, `cli/references/troubleshooting.md`, `database/SKILL.md` (the `supabase/database/` tree), and `database/references/naming_conventions.md` now place the pgmq queue in `supabase/database/queue/` alongside `config/`, `cron/`, `storage/`, `rbac/`. The rule agents must learn: a queue (or any `DO`/`pgmq`/`cron` block) in `schemas/` never reaches prod — prod is migrations-only and skips declarative `db apply`, so Supabase-managed objects must live in an imperative folder. Documented `db resources --env <name>` / `--prod` as the way to push just those to a cloud env.

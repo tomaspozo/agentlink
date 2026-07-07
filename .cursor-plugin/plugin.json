@@ -1,7 +1,7 @@
 {
   "name": "agentlink",
   "description": "Build apps with Supabase as the backend. Equips AI agents with schema-driven workflows, RPC-first data access, edge functions, auth, RLS, and multi-tenancy.",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "author": {
     "name": "Tomás Pozo",
     "url": "https://github.com/tomaspozo"
