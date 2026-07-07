@@ -61,11 +61,13 @@ context itself.
                          ▼
                   /update-password ─► /dashboard
 
-            /accept-invite?token=&[code=]
+            /accept-invite?token=&[code=]     (self-contained: inline create-account / sign-in)
                          │
-                         ├─ ?code present (new user)   → exchangeCodeForSession → invitation_accept → setActive(joined) → /dashboard
-                         └─ no ?code (existing user)   → if no session: /sign-in?next=/accept-invite?token=...
-                                                       → else: invitation_accept → setActive(joined) → /dashboard
+                         ├─ signed out, new user      → inline create-account form
+                         │      └─ email confirmation on → /check-inbox?type=signup&next=/accept-invite?token=…
+                         │            (paste OTP or click link) → back to /accept-invite → auto-join
+                         ├─ ?code present (return)     → exchangeCodeForSession → session → auto-join
+                         └─ session, email matches     → invitation_accept → setActive(joined) → invalidate ["tenants"] → /dashboard
 
             /settings/members  (in-app, gated)
                          ├─ membership_list    — show members + roles
