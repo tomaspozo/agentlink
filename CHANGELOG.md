@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.3.1] - 2026-07-07
+
 ### Changed
 
 - **`frontend` skill: the invite-accept flow diagram (`references/auth_ui.md`) reflects the CLI 2.3.1 scaffold.** A new user accepting an invitation with email confirmation on now routes through the shared `/check-inbox?type=signup` step (paste the 8-digit OTP or click the link) and lands back on `/accept-invite` to auto-join — instead of the old bare "click the link" card. The diagram also drops a stale `/sign-in` bounce (the page is self-contained with an inline create-account / sign-in form) and notes the `["tenants"]` cache refresh before landing on `/dashboard`. Keeps the plugin in lockstep with the CLI's `2.3.1` scaffold (invite-accept OTP step, invite-accept sign-out-race fix, and the route-guard query-cache fix).
