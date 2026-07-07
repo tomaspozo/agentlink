@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-07-06
+
 ### Changed
 
 - **`frontend` skill: forms migrate from React Hook Form to TanStack Form.** The scaffold's form stack is now `@tanstack/react-form` — the same family as the scaffold's TanStack Router + TanStack Query, and the stack shadcn's own docs currently favor — instead of `react-hook-form` + `@hookform/resolvers`. `SKILL.md`'s basic pattern and `references/forms.md`'s modal/edit-form patterns now use `useForm` with `validators: { onSubmit: schema }` and `form.Field`'s render prop, wrapped in shadcn's `Field`/`FieldLabel`/`FieldError` primitives, instead of `register`/`Controller`/`zodResolver`.
