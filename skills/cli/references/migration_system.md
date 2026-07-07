@@ -11,8 +11,9 @@ Hand-written SQL the CLI ships for infrastructure a schema diff can't capture. Y
 - **Why hand-shipped:** a generated migration mangles `CREATE EXTENSION` — extensions need specific schemas (`pg_catalog` for `pg_cron`, `extensions` for `pg_net`) and version pinning (`pgmq` needs `VERSION '1.5.1'`).
 
 **Post-setup migrations** — SQL that depends on application objects and uses patterns a diff can't see.
-- `agentlink_queues` — `DO $$ … pgmq.create('agentlink_tasks') … $$` (a function call inside a DO block — a diff sees the resulting tables but not the create call).
 - `agentlink_auth_triggers` — `CREATE TRIGGER … ON auth.users` (the `auth` schema is outside the `public`/`api` scope a diff monitors).
+
+> **The pgmq queue is NOT a migration.** `pgmq.create('agentlink_tasks')` lives in the imperative resource `supabase/database/queue/agentlink_tasks.sql` (see "imperative folders" below), not in a migration or a schema file. A migration only runs once per env, so it can't self-heal a queue table left malformed by a pgmq upgrade (a stale table missing the `msg_id` PK → `pgmq.send` fails → signup breaks). The imperative folder re-runs on **every** deploy (all envs incl. prod) and drops+recreates a malformed queue. Add any new pgmq queue there — never in `schemas/` (declarative apply skips DO blocks and never reaches prod).
 
 ## Tier 2: Application migrations (`db migrate`)
 
@@ -61,7 +62,7 @@ If the diff contains a row-data-loss statement (`DROP TABLE`/`COLUMN`/`SCHEMA`, 
 
 Non-destructive — no reset of the dev DB, no data backup/restore.
 
-**Limitation:** the `cron` and `storage` schemas are excluded from migrations by design — `cron/`, `storage/`, and `rbac/` are imperative folders applied on every deploy. Never hand-append `cron.schedule()` or storage policies to a generated migration.
+**Limitation:** the `pgmq`, `cron` and `storage` schemas are excluded from migrations by design — `queue/`, `config/`, `cron/`, `storage/`, and `rbac/` are imperative folders applied on every deploy. Never hand-append `pgmq.create()`, `cron.schedule()`, or storage policies to a generated migration.
 
 ---
 
@@ -92,7 +93,7 @@ The safe regeneration path for an uncommitted, **not-yet-deployed** migration is
   schema_paths = ["./database/**/*.sql"]
   ```
 
-- **`cron/`, `storage/`, `rbac/` are imperative** — excluded from `db apply`'s schema diff and from migrations, applied by the deploy step on every deploy.
+- **`queue/`, `config/`, `cron/`, `storage/`, `rbac/` are imperative** — excluded from `db apply`'s schema diff and from migrations, applied by the deploy step on every deploy (all envs incl. prod). This is the ONLY path that reaches prod for Supabase-managed schemas (pgmq/cron/storage) — prod is migrations-only and skips declarative `db apply`, so anything the diff drops (DO blocks, pgmq/cron/storage objects) must live in an imperative folder or it never lands on prod. Push just these with `db resources` (`--prod` for prod).
 
 ## Adding a new extension
 

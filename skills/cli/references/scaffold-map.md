@@ -44,7 +44,6 @@ irrelevant.
 | `role_permissions` | (role, permission) matrix (reconciled from `rbac/role_permissions.sql`) |
 
 ### `api` schema (`schemas/api/`) — the ONLY schema exposed to the Data API
-- `tables/agentlink_tasks.sql` — PGMQ-backed task queue.
 - **RPCs** (`functions/`), all callable via `supabase.rpc(...)`:
   - Tenants: `tenant_create`, `tenant_list`, `tenant_update`, `tenant_delete`
   - Session context: `session_context` — returns `{ tenant_id, name, slug, role,
@@ -75,13 +74,19 @@ irrelevant.
   `get_secret`, `call_edge_function`.
 - `set_updated_at` — generic `updated_at` trigger function.
 
-### Imperative resources (`cron/`, `storage/`, `rbac/`, `config/`) — applied at deploy, NOT in migrations
-These four top-level folders under `supabase/database/` are **excluded** from
+### Imperative resources (`queue/`, `cron/`, `storage/`, `rbac/`, `config/`) — applied at deploy, NOT in migrations
+These five top-level folders under `supabase/database/` are **excluded** from
 `db apply`'s schema diff and from the migration diff, and applied imperatively on
-every deploy (all envs incl. prod) by the deploy step. Reason: the `cron` and
-`storage` schemas are filtered out of migration plans, RBAC is reference *data*,
-and `config/` holds role-level settings pg-delta can't model. Put new objects
-here (not under `schemas/`):
+every deploy (all envs incl. prod) by the deploy step. Reason: the `pgmq`, `cron`
+and `storage` schemas are filtered out of migration plans, RBAC is reference
+*data*, and `config/` holds role-level settings pg-delta can't model. Put new
+objects here (not under `schemas/`) — a schema file with a `DO`/`pgmq`/`cron`
+block never reaches prod (prod is migrations-only and skips `db apply`). Push
+just these to a cloud env with `db resources --env <name>` / `db resources --prod`:
+- `queue/` — pgmq queues via `DO $$ … pgmq.create(...) … $$`. Scaffolded:
+  `agentlink_tasks.sql` (the async-task queue behind `_admin_enqueue_task` /
+  `_hook_send_email`). Idempotent + **self-healing**: recreates a malformed queue
+  (a stale pgmq table missing the `msg_id` PK, which otherwise breaks signup).
 - `cron/` — `cron.schedule(...)` jobs. Scaffolded: `process-stale-tasks.sql`
   (fires the queue worker every minute). Must be **idempotent** (`cron.schedule`
   upserts by job name).

@@ -82,7 +82,7 @@ All paths below are relative to `supabase/database/`.
 | `schemas/public/functions/` | `_internal_{name}.sql` | `_internal_admin_handle_new_user.sql` — one internal util |
 | `schemas/public/functions/` | `_hook_{hook_name}.sql` | `_hook_before_user_created.sql` — one auth hook |
 | `schemas/api/functions/` | `{entity}_{action}.sql` | `chart_create.sql` — one `api.*` RPC + its grants |
-| `schemas/api/tables/` | `{table}.sql` | `agentlink_tasks.sql` — PGMQ queue table |
+| `queue/` (top-level, imperative) | `{queue}.sql` | `agentlink_tasks.sql` — `DO $$ … pgmq.create(...) … $$` (prod-safe, self-healing) |
 | `cron/` (top-level, imperative) | `{job}.sql` | `process-stale-tasks.sql` — one cron job |
 | `storage/` (top-level, imperative) | `{name}.sql` | `avatars.sql` — bucket + its `storage.objects` policies |
 | `schemas/api/` | `schema.sql` | `CREATE SCHEMA api;` + grants / default privileges |

@@ -23,19 +23,21 @@ supabase/database/
 │   ├── roles.sql                       # synced by the RBAC reconcile, NOT by db apply
 │   ├── permissions.sql
 │   └── role_permissions.sql
-├── config/                             # role-level settings pg-delta can't model
+├── config/                             # role-level settings pg-delta can't model (imperative)
 │   └── db_pre_request.sql              # ALTER ROLE authenticator SET pgrst.db_pre_request
-└── schemas/
-    ├── api/
+├── queue/                              # pgmq queues — imperative, prod-safe, self-healing
+│   └── agentlink_tasks.sql             # DO $$ … pgmq.create('agentlink_tasks') … $$
+├── cron/                               # pg_cron jobs — imperative
+│   └── process-stale-tasks.sql         # fires the queue worker every minute
+├── storage/                            # buckets + storage.objects policies — imperative
+│   └── avatars.sql
+└── schemas/                            # DECLARATIVE — applied by db apply / diffed into migrations
+    ├── api/                            # functions only — never create tables here
     │   ├── schema.sql                  # CREATE SCHEMA api + grants / default privileges
-    │   ├── tables/
-    │   │   └── agentlink_tasks.sql     # PGMQ queue
-    │   ├── functions/
-    │   │   ├── tenant_create.sql       # one RPC per file
-    │   │   ├── profile_get.sql
-    │   │   └── chart_create.sql        # custom api.chart_create
-    │   └── cron/
-    │       └── process-stale-tasks.sql # cron jobs
+    │   └── functions/
+    │       ├── tenant_create.sql       # one RPC per file
+    │       ├── profile_get.sql
+    │       └── chart_create.sql        # custom api.chart_create
     └── public/
         ├── schema.sql                  # public schema-level grants (e.g. supabase_auth_admin USAGE)
         ├── tables/
@@ -163,11 +165,19 @@ CREATE OR REPLACE FUNCTION api.chart_create(...)
 
 **RLS on every table is ISOLATION-ONLY.** When you create a tenant-scoped table, give it `ENABLE ROW LEVEL SECURITY` and a cheap policy scoping rows to the tenant/owner — `tenant_id = (SELECT public._auth_tenant_id())` and/or `user_id = (SELECT auth.uid())`. Do **not** put permission checks (`_auth_has_permission(...)`) in policies. Permission/action authz lives in the `api.*` RPC via `public.auth_verify_access('<entity>.<action>')`. See the `auth` skill's four-layer Security Model and checklist.
 
+**A permission-gated write must NOT be directly writable by `authenticated`.** The isolation-only split is safe *only* when the RLS policy is the complete authorization for that write. RLS never sees an `auth_verify_access('<entity>.<action>')` check, so if that check is what gates a write, the isolation policy is a *weaker* gate than the RPC — and a direct `supabase.from('t').update(...)` (or any client that reaches the table) skips the permission entirely. Match the grant to how the write actually happens:
+- **Written by a `SECURITY DEFINER` helper** (`_internal_admin_*`, runs as owner, bypasses RLS) → grant that write (`INSERT`/`UPDATE`/`DELETE`) to `service_role` only. `authenticated` never touches the table for that op; a stray `… UPDATE … TO authenticated` here is dead weight that becomes a live bypass the day the `api`-only schema boundary slips.
+- **Written directly by a `SECURITY INVOKER` RPC** (as the caller) → `authenticated` needs the grant and the isolation policy is the table-level gate. Use this *only* when tenant/owner isolation is the whole authorization (no per-action permission).
+- **The tell:** if the RPC guards a write with `auth_verify_access(...)`, route that write through a `SECURITY DEFINER` helper and grant it to `service_role` only — not a direct INVOKER write with an `authenticated` grant. `SELECT` (and `INSERT`/`DELETE` when isolation genuinely is the whole check) stays grantable to `authenticated` as normal.
+
 **GRANT every table explicitly — default-deny.** Supabase stopped auto-granting table privileges in 2026, and AgentLink keeps that posture on purpose: a `public` table is **unreachable until you grant it**, so internal/audit/extension tables stay private (least privilege). The `api.*` RPCs are `SECURITY INVOKER` (they touch tables **as the caller**), so a table with no grant fails `42501 permission denied for table …` — and because local dev is also new-default (`config.toml` sets `auto_expose_new_tables = false`), a forgotten grant fails **immediately in dev**, not silently on prod. Grant `authenticated, service_role` (never `anon`), bundled with the RLS enable:
 
 ```sql
 CREATE TABLE IF NOT EXISTS public.charts ( ... );
 ALTER TABLE public.charts ENABLE ROW LEVEL SECURITY;
+-- Full DML to authenticated is right ONLY when isolation is the whole authz.
+-- If a write is gated by auth_verify_access(...) in the RPC, grant that write
+-- to service_role only and do it via a SECURITY DEFINER helper (see rule above).
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.charts TO authenticated, service_role;
 
 -- READ-ONLY for authenticated (e.g. reference data): grant SELECT only;

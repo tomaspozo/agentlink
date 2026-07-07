@@ -171,16 +171,19 @@ pnpm exec agentlink db apply --env dev          # Target specific environment
 pnpm exec agentlink db apply --db-url "postgresql://..."  # Explicit DB URL
 ```
 
-Pushes your schema-file changes to the live DB — **no Docker needed**. It handles changes to existing objects, so editing a table/column (an `ALTER`) lands without a rebuild. `--legacy` falls back to a create-only mode; `--allow-destructive` is required only for row-data-loss ops (`DROP TABLE`/`COLUMN`/`SCHEMA`, `TRUNCATE`). `db apply` also applies the imperative resources (`storage/`, `cron/`, `rbac/`).
+Pushes your schema-file changes to the live DB — **no Docker needed**. It handles changes to existing objects, so editing a table/column (an `ALTER`) lands without a rebuild. `--legacy` falls back to a create-only mode; `--allow-destructive` is required only for row-data-loss ops (`DROP TABLE`/`COLUMN`/`SCHEMA`, `TRUNCATE`). `db apply` also applies the imperative resources (`queue/`, `config/`, `storage/`, `cron/`, `rbac/`).
 
 ### Apply imperative resources only
 
 ```bash
-pnpm exec agentlink db resources                 # storage/ + cron/ + rbac/, nothing else
+pnpm exec agentlink db resources                 # queue/ + config/ + storage/ + cron/ + rbac/, nothing else
 pnpm exec agentlink db resources --env dev
+pnpm exec agentlink db resources --prod           # push imperative resources to prod (prompts to confirm)
 ```
 
-Applies **only** the imperative folders (`supabase/database/` `storage/`, `cron/`, `rbac/`) — no schema diff, no type-gen. Use it after editing a cron job, storage bucket, or RBAC file when you don't want a full `db apply`. Idempotent. (`db rbac-sync` is the rbac-only subset.)
+Applies **only** the imperative folders (`supabase/database/` `queue/`, `config/`, `storage/`, `cron/`, `rbac/`) — no schema diff, no type-gen. Use it after editing the pgmq queue, a cron job, storage bucket, or RBAC file when you don't want a full `db apply` (dev) or `env deploy` (prod). Idempotent. (`db rbac-sync` is the rbac-only subset.)
+
+`--prod` (shorthand for `--env prod`) is the supported way to push an imperative-only change to prod **without** a full `env deploy` — e.g. re-running the pgmq queue self-heal, or applying a new cron/storage/rbac change. It prompts for confirmation (`--yes` to skip in CI). Since prod is migrations-only and skips declarative `db apply`, imperative folders are the ONLY path these Supabase-managed objects reach prod — `db resources --prod` runs exactly that path in isolation.
 
 ### Run SQL
 
@@ -281,7 +284,7 @@ The CLI uses a **two-tier migration system** because some infrastructure (extens
 **Tier 1: Template migrations (hand-crafted)** — Pre-written SQL files embedded in the CLI. Two categories:
 
 - **Pre-start migrations** — Extensions, schema creation (`api` schema + grants). Applied automatically by `npx supabase start`.
-- **Post-setup migrations** — Queues (`pgmq.create()` uses DO blocks), auth triggers (on `auth.users`). Marked as applied via `npx supabase migration repair`.
+- **Post-setup migrations** — Auth triggers (on `auth.users`). Marked as applied via `npx supabase migration repair`. (The pgmq queue is **not** a migration — it's an imperative resource in `supabase/database/queue/`, applied on every deploy incl. prod so it can self-heal a malformed queue. See `references/migration_system.md`.)
 
 **Tier 2: Application migrations** — Captures everything in `public` and `api` schemas: tables, functions, indexes, policies, triggers. `db migrate` diffs your committed migrations against the schema files (**no Docker**) — instead of `npx supabase db diff`, which sorts schema files alphabetically and breaks on cross-file FK references. `--legacy` is a Docker-based fallback. Like `db apply`/`db rebuild`, `db migrate` refuses to **write** a migration containing a row-data-loss statement (`DROP TABLE`/`COLUMN`/`SCHEMA`, `TRUNCATE` — e.g. a table rename) without `--allow-destructive`; review the printed diff before adding the flag.
 
