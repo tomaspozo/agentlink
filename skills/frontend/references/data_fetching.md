@@ -7,6 +7,7 @@ Data fetching and caching with TanStack Query, using `typedRpc()` to call Supaba
 - Query Factory Pattern
 - Mutation Pattern
 - Query Key Structure
+- Reloading on a Workspace Switch
 - typedRpc() Helper
 - Cache Invalidation Strategies
 - Loading and Error States
@@ -254,6 +255,58 @@ queryClient.invalidateQueries({ queryKey: ["animals", "detail", animalId] });
 - Third segment (optional) is the params object or ID string
 - Include filter/pagination params in the key so different filters get different cache entries
 - Use `null` (not `undefined`) for empty filter values -- `undefined` values are stripped from objects and can cause key mismatches
+- **Do NOT put the active workspace id in the key.** Keep keys plain (`["members"]`); reloading when the workspace switches is handled centrally — see [Reloading on a Workspace Switch](#reloading-on-a-workspace-switch)
+
+---
+
+## Reloading on a Workspace Switch
+
+Every request already carries the active workspace via the `x-workspace-id`
+header (the fetch wrapper in `lib/supabase.ts` reads it from the active-workspace
+store). But TanStack Query caches by **key** — so if `["members"]` is the key in
+workspace A and again in workspace B, switching workspace does not change the key
+and React Query keeps serving A's cached rows until something forces a refetch.
+That's the "I switched workspace but the data didn't reload, I had to refresh"
+bug.
+
+**This is handled centrally — you do NOT put the workspace id in query keys.**
+`WorkspaceProvider` resets workspace-scoped queries when the active workspace
+changes:
+
+```typescript
+// contexts/workspace-context.tsx — on an actual workspace switch
+queryClient.resetQueries({
+  predicate: (q) => !KEEP_ON_WORKSPACE_SWITCH.includes(q.queryKey[0] as string),
+});
+```
+
+So your query keys stay clean (`["members"]`, `["incidents"]`) with **zero
+per-query boilerplate** — no `["members", activeId]`, no `enabled: !!activeId`.
+`resetQueries` (not `invalidateQueries`) clears the cached rows first, so the UI
+shows a loading state instead of flashing the previous workspace's data.
+
+### The one thing you must maintain: user-scoped vs workspace-scoped
+
+The reset assumes **every query is workspace-scoped** and resets it — *unless*
+its key root is in `KEEP_ON_WORKSPACE_SWITCH`. So the moment you add a query that
+is tied to the **user, not the workspace**, add its key root to that list, or it
+will be needlessly refetched on every switch.
+
+| Scope | Reloads on switch? | Examples (key root) | In `KEEP_…`? |
+|-------|--------------------|---------------------|--------------|
+| **Workspace-scoped** — changes per workspace | ✅ yes (that's the point) | `members`, `invitations`, and your app data: `incidents`, `projects`, `documents`… | no (default) |
+| **User-scoped** — tied to the person | ❌ no — must survive the switch | `tenants` (the workspace list), `profile`, `oauth-grants`, and likely: account settings, **active sessions / devices**, notification preferences, billing/plan | **yes — add it** |
+
+Rule of thumb: *"Would this query return different data if I switched workspace?"*
+Yes → leave the key plain, it resets automatically. No → it's user-scoped, add
+its root to `KEEP_ON_WORKSPACE_SWITCH`. The failure mode of forgetting is a
+harmless extra refetch (never wrong-tenant data), but keep the list honest.
+
+> Do not "fix" a switch-reload bug by adding `queryClient.invalidateQueries()`
+> (filter-less) somewhere, or by threading `activeId` into keys. The first
+> refetches user-scoped data too (profile, connected apps) on every switch — the
+> exact over-fetch this design avoids; the second is per-query boilerplate the
+> central reset already handles.
 
 ---
 
@@ -440,7 +493,7 @@ function AnimalsPage() {
 
 `PageShell` + `PageHeader` give the page its chrome; `ListSkeleton` / `EmptyState` are the shared
 loading and empty states. For a table-shaped list, swap the card grid for shadcn `Table` (see
-`routes/_auth/settings/members.tsx`).
+`routes/_auth/settings/members/index.tsx`).
 
 ### Skeleton loading
 

@@ -157,12 +157,53 @@ Routes are flat-file based: `_anon/sign-in.tsx` renders at `/sign-in`, NOT `/_an
 |---------|---------|-----|
 | Index route | `index.tsx` | `/` (parent path) |
 | Static segment | `_auth/dashboard.tsx` | `/dashboard` |
-| Nested segment | `_auth/settings/members.tsx` | `/settings/members` |
+| Nested segment | `_auth/settings/workspace.tsx` | `/settings/workspace` |
 | Dotted segment | `auth.confirm.tsx` | `/auth/confirm` |
 | Dynamic param | `$animalId.tsx` | `/:animalId` |
 | Layout route | `_auth.tsx` | No URL segment, wraps children |
 | Pathless group | `_auth/` prefix | Groups routes under a layout |
 | Co-located files | `-components/` | Ignored by the router |
+
+### List + detail pages (`x/index.tsx`, not `x.tsx`)
+
+When you want `/things` (a list) and `/things/$id` (a detail) as **independent**
+pages, put the list in an **index route** — a folder with `index.tsx` — never a
+flat `things.tsx`:
+
+```
+✅ CORRECT — siblings under the layout
+_auth/things/
+  index.tsx        --> /things       (the list)
+  $id.tsx          --> /things/$id   (the detail)
+
+❌ WRONG — detail nests inside the list
+_auth/things.tsx     --> /things       (list, becomes a parent)
+_auth/things.$id.tsx --> /things/$id   (detail, nests as its child)
+```
+
+Why the flat form breaks: `things.$id` shares the `things` segment prefix with
+`things.tsx`. Because a route file *exists* for the parent segment and has its
+own `component`, the generator treats `things.tsx` as a **parent layout** and
+nests `things.$id` as its child. A child route only renders inside its parent's
+`<Outlet />` — but a list component fills the whole page and has no `<Outlet />`,
+so the detail component never mounts. Symptom: clicking a row changes the URL to
+`/things/<id>` but the view stays on the list ("nothing happens"). In
+`routeTree.gen.ts` you'll see `ThingsIdRoute` hanging off the list route via
+`getParentRoute`, instead of off the `_auth` layout.
+
+The index-route form has no route file *at* the `things` segment, so the two
+pages become siblings — both children of the `_auth` layout (which does have an
+`<Outlet />`), and `/things/$id` matches the detail alone. `createFileRoute` id
+follows the file: `"/_auth/things/"` for the list (trailing slash), NOT
+`"/_auth/things"`.
+
+Reserve the flat `things.tsx` form for the case where `/things` is *genuinely a
+layout* that wraps its children and renders its own `<Outlet />`.
+
+The scaffold ships this exact pattern — copy it rather than re-deriving it:
+`routes/_auth/settings/members/index.tsx` (the list) beside
+`routes/_auth/settings/members/$membershipId.tsx` (the detail, reading its one
+record out of the same `["members"]` query the list uses).
 
 ### Layout routes (`_` prefix)
 

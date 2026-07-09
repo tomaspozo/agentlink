@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Added
+
+- **`frontend` skill: the canonical list + detail routing pattern is documented and demonstrated.** `references/routing.md` gained a "List + detail pages" section and `SKILL.md` a matching rule: for independent `/x` (list) and `/x/$id` (detail) pages, use an index route (`x/index.tsx` + `x/$id.tsx`) — never a flat `x.tsx` + `x.$id.tsx`, which makes the generator treat `x.tsx` as a parent layout and nest the detail inside it, so `/x/$id` changes the URL but keeps rendering the list (the detail only mounts in an `<Outlet/>` the full-page list doesn't have). Points at the scaffold's new `_auth/settings/members/` (list `index.tsx` + detail `$membershipId.tsx`) as the reference to copy.
+- **`frontend` skill: `references/data_fetching.md` gained "Reloading on a Workspace Switch".** Explains why query keys must NOT carry the active workspace id (reloading on switch is centralized in `WorkspaceProvider`, which resets workspace-scoped queries), with a user-scoped vs workspace-scoped table and the rule that a user-level query (`profile`, `oauth-grants`, account settings, active sessions, billing…) must be added to `KEEP_ON_WORKSPACE_SWITCH` so it isn't needlessly refetched on every switch. A matching note landed in `SKILL.md`'s workspace-switching section and the Query Key Structure rules; flags the two anti-patterns (filter-less `invalidateQueries()`, threading `activeId` into keys).
+
+### Changed
+
+- **`frontend` skill: canonical members references now point at `members/index.tsx`.** `SKILL.md`'s route tree, `references/auth_ui.md`'s route-guard recipe, and `references/routing.md`'s convention table updated for the CLI scaffold's members list+detail split.
+
 ## [2.3.1] - 2026-07-07
 
 ### Changed

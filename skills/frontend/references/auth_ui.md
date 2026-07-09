@@ -393,10 +393,10 @@ const canManage = useHasPermission("membership.update");
 ### Recipe — guard a page (TanStack Router `beforeLoad`)
 
 ```tsx
-// routes/_auth/settings/members.tsx
+// routes/_auth/settings/members/index.tsx
 import { requirePermission } from "@/lib/require-permission";
 
-export const Route = createFileRoute("/_auth/settings/members")({
+export const Route = createFileRoute("/_auth/settings/members/")({
   beforeLoad: () => requirePermission("membership.read"), // → redirect /forbidden
   component: MembersPage,
 });

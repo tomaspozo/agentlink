@@ -349,7 +349,10 @@ src/routes/
     │   ├── $animalId.tsx     # /animals/:animalId
     │   └── -components/      # Route-scoped components (ignored by router)
     │       └── AnimalCard.tsx
-    └── settings/members.tsx  # /settings/members
+    └── settings/
+        └── members/
+            ├── index.tsx        # /settings/members         (list)
+            └── $membershipId.tsx # /settings/members/:id     (detail)
 ```
 
 **Per-section gating is the whole API.** A file in `src/routes/*` is
@@ -370,6 +373,7 @@ machines. Specifically, do not:
 - `__root.tsx` — root shell (`shellComponent`) + app providers (QueryClient, Auth, Toaster) in `component`. TanStack Start owns the entry point; there is no `main.tsx`/`index.html`.
 - `_auth.tsx` — pathless layout with `beforeLoad` `throw redirect({ to: "/sign-in" })`. In SPA mode this guard is client-only (UX, not security).
 - `$param` — dynamic route segments.
+- **List + detail → `x/index.tsx` + `x/$id.tsx`, never flat `x.tsx` + `x.$id.tsx`.** A flat `x.tsx` with a `component` makes the generator treat `x` as a *parent* and nest `x.$id` inside it; the detail then only renders in the list's `<Outlet />`, which it doesn't have — so `/x/$id` changes the URL but keeps showing the list. Use an index route so the two are siblings under the layout. See [Routing Patterns](./references/routing.md).
 - `-components/` — folders prefixed with `-` are ignored by the router.
 
 > **Load [Routing Patterns](./references/routing.md) for full patterns including navigation, search params, route loaders, and pending UI.**
@@ -400,7 +404,7 @@ Every gated page follows the same shape — compose the shipped primitives, don'
 </PageShell>
 ```
 
-- **Lists → shadcn `Table`** (`@/components/ui/table`). `routes/_auth/settings/members.tsx` is the canonical reference (Table + Select + Badge + PageHeader).
+- **Lists → shadcn `Table`** (`@/components/ui/table`). `routes/_auth/settings/members/index.tsx` is the canonical reference (Table + Select + Badge + PageHeader), and its sibling `members/$membershipId.tsx` is the canonical **list + detail** pair — copy that folder shape (`index.tsx` + `$id.tsx`) for any `/x` + `/x/$id` feature.
 - **Pickers → shadcn `Select`** (`@/components/ui/select`) via `Controller`. **Never a native `<select>`.**
 - **Loading → `ListSkeleton`**; **empty → `EmptyState`**; **headers → `PageHeader`**.
 
@@ -573,8 +577,16 @@ claim in the token and no re-mint on switch.
 `useWorkspace()` (from `@/contexts/workspace-context`) returns
 `{ tenants, activeId, activeTenant, setActive, ready }` (plus `permissions`,
 `role`, `hasNoWorkspace`, `error`). **Switch = `setActive(id)`** — it updates
-the active-workspace store and invalidates scoped queries so they refetch under
-the new header. No `refreshSession`, no `tenant_select`, no JWT decode.
+the active-workspace store and resets workspace-scoped queries so they refetch
+under the new header. No `refreshSession`, no `tenant_select`, no JWT decode.
+
+**Reloading on switch is centralized — never put the workspace id in query
+keys.** `WorkspaceProvider` resets workspace-scoped queries when the active
+workspace changes, so keys stay plain (`["members"]`, `["incidents"]`) with no
+per-query boilerplate. The one rule: a query tied to the **user** rather than the
+workspace (`profile`, `oauth-grants`, account settings, active sessions, billing)
+must survive the switch — add its key root to `KEEP_ON_WORKSPACE_SWITCH` in
+`workspace-context.tsx`. See [Data Fetching → Reloading on a Workspace Switch](./references/data_fetching.md#reloading-on-a-workspace-switch).
 
 ```tsx
 const { tenants, activeTenant, setActive } = useWorkspace();
