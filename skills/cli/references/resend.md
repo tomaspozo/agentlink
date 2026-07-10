@@ -72,6 +72,14 @@ coupled (the domain must be verified under the key's account), so it's
   prompts interactively.
 - Passing only one → error.
 
+**Interactive first-time — OAuth is the default.** When run without
+`--api-key`, first-time setup offers **"Connect with Resend"**: a browser OAuth
+(PKCE) flow that provisions a durable `sending_access` key for the user and
+pushes it — no dashboard trip, no copy-paste. "Paste an existing API key" stays
+as the fallback. This only affects the interactive prompt; `--api-key`,
+`--non-interactive`, and saved defaults are unchanged, so scripted/agent-driven
+setup still passes the key explicitly.
+
 **Already configured** — the key is **sticky**:
 
 - `--email` / `--name` alone → change the FROM, key untouched (partial push).
