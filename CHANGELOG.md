@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.4.0] - 2026-07-15
+
 ### Added
 
 - **Codex plugin format — the same directory now installs in Claude Code, Cursor, and Codex.** New `.codex-plugin/plugin.json` ([spec](https://learn.chatgpt.com/docs/build-plugins)) declares the seven shared skills, the destructive-DB hook, and an `interface` block (display name, category, brand color, default prompts) for directory presentation. The **hook is reused verbatim** — no Codex variant: Codex's hook system mirrors Claude Code's (same `PreToolUse` event, `matcher: "Bash"`, `tool_input.command` payload, exit-2 + stderr blocking) and it reads `CLAUDE_PLUGIN_ROOT` for compatibility, so `.codex-plugin/plugin.json` points straight at `hooks/hooks.json`.
