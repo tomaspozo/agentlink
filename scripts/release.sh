@@ -11,6 +11,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 PLUGIN_JSON="$REPO_ROOT/.claude-plugin/plugin.json"
 CURSOR_PLUGIN_JSON="$REPO_ROOT/.cursor-plugin/plugin.json"
+CODEX_PLUGIN_JSON="$REPO_ROOT/.codex-plugin/plugin.json"
 BUILDER_MD="$REPO_ROOT/agents/builder.md"
 CHANGELOG="$REPO_ROOT/CHANGELOG.md"
 
@@ -104,7 +105,7 @@ if [[ "$DRY_RUN" == true ]]; then
   echo "[dry-run] Would:"
   echo "  1. Stamp [Unreleased] → [$VERSION] - $TODAY in CHANGELOG.md"
   echo "  2. Add fresh [Unreleased] section"
-  echo "  3. Bump both plugin.json manifests (.claude-plugin + .cursor-plugin) to $VERSION"
+  echo "  3. Bump all three plugin.json manifests (.claude-plugin + .cursor-plugin + .codex-plugin) to $VERSION"
   echo "  4. Update the AGENTLINK_VERSION stamp in agents/builder.md to $VERSION"
   echo "  5. Commit, tag $TAG, push, create GitHub release"
   exit 0
@@ -125,16 +126,17 @@ cd "$REPO_ROOT"
 # Replace "## [Unreleased]" with the new version header, and add a fresh [Unreleased] above it
 sed -i '' "s/^## \[Unreleased\]/## [Unreleased]\n\n## [$VERSION] - $TODAY/" "$CHANGELOG"
 
-# --- 2. Bump plugin.json (both the Claude Code and Cursor manifests) ---
+# --- 2. Bump plugin.json (the Claude Code, Cursor, and Codex manifests) ---
 jq --arg v "$VERSION" '.version = $v' "$PLUGIN_JSON" > "$PLUGIN_JSON.tmp" && mv "$PLUGIN_JSON.tmp" "$PLUGIN_JSON"
 jq --arg v "$VERSION" '.version = $v' "$CURSOR_PLUGIN_JSON" > "$CURSOR_PLUGIN_JSON.tmp" && mv "$CURSOR_PLUGIN_JSON.tmp" "$CURSOR_PLUGIN_JSON"
+jq --arg v "$VERSION" '.version = $v' "$CODEX_PLUGIN_JSON" > "$CODEX_PLUGIN_JSON.tmp" && mv "$CODEX_PLUGIN_JSON.tmp" "$CODEX_PLUGIN_JSON"
 
 # --- 2b. Update the AGENTLINK_VERSION stamp in builder.md (the lockstep marker
 #         the agent reads to reason about contract drift). ---
 perl -pi -e "s/AGENTLINK_VERSION: [0-9]+\.[0-9]+\.[0-9]+/AGENTLINK_VERSION: $VERSION/; s/\*\*AgentLink version:\*\* \`[0-9]+\.[0-9]+\.[0-9]+\`/\*\*AgentLink version:\*\* \`$VERSION\`/" "$BUILDER_MD"
 
 # --- 3. Commit ---
-git add "$CHANGELOG" "$PLUGIN_JSON" "$CURSOR_PLUGIN_JSON" "$BUILDER_MD"
+git add "$CHANGELOG" "$PLUGIN_JSON" "$CURSOR_PLUGIN_JSON" "$CODEX_PLUGIN_JSON" "$BUILDER_MD"
 git commit -m "$(cat <<EOF
 Release $TAG
 

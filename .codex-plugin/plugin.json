@@ -1,0 +1,35 @@
+{
+  "name": "agentlink",
+  "description": "Build apps with Supabase as the backend. Equips AI agents with schema-driven workflows, RPC-first data access, edge functions, auth, RLS, and multi-tenancy.",
+  "version": "2.3.1",
+  "author": {
+    "name": "Tomás Pozo",
+    "url": "https://github.com/tomaspozo"
+  },
+  "homepage": "https://agentlink.sh",
+  "repository": "https://github.com/tomaspozo/agentlink",
+  "keywords": [
+    "supabase",
+    "development"
+  ],
+  "license": "MIT",
+  "skills": [
+    "./skills/",
+    "./codex/skills/"
+  ],
+  "hooks": "./hooks/hooks.json",
+  "interface": {
+    "displayName": "AgentLink",
+    "shortDescription": "Full-stack Supabase apps, built the opinionated way",
+    "longDescription": "AgentLink teaches coding agents how to build full-stack apps on Supabase: RPC-first data access through an isolated `api` schema, row-level security on every table, edge functions for anything that talks to the outside world, and Postgres-native cron + queues for background work. Ships an entry-point builder skill plus seven domain skills (cli, database, rpc, auth, edge-functions, frontend, notifications) and a hook that blocks destructive database commands.",
+    "developerName": "Tomás Pozo",
+    "category": "Developer Tools",
+    "websiteURL": "https://agentlink.sh",
+    "defaultPrompt": [
+      "Scaffold a new Supabase app with AgentLink.",
+      "Add a tenant-scoped table with RLS and the RPCs to read and write it.",
+      "Deploy my edge functions to the dev environment."
+    ],
+    "brandColor": "#5cb8e4"
+  }
+}

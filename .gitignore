@@ -24,4 +24,12 @@ node_modules/
 *.log
 .claude/
 .cursor/
-.agents/
+
+# Locally-installed companion skills land in .agents/ and stay ignored — but the
+# Codex repo marketplace lives at .agents/plugins/marketplace.json and MUST ship.
+# (Codex looks for the marketplace there, not in .codex-plugin/. Git won't descend
+# into an excluded directory, so each level is re-included explicitly.)
+.agents/*
+!.agents/plugins/
+.agents/plugins/*
+!.agents/plugins/marketplace.json

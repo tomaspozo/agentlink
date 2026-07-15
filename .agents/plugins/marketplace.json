@@ -1,0 +1,12 @@
+{
+  "name": "tomaspozo",
+  "plugins": [
+    {
+      "name": "agentlink",
+      "source": {
+        "source": "local",
+        "path": "./"
+      }
+    }
+  ]
+}

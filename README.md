@@ -13,7 +13,7 @@ Fewer errors. Fewer wasted tokens. One backend that serves every client.
 
 ---
 
-AgentLink is a [Claude Code plugin](https://docs.anthropic.com/en/docs/claude-code/plugins) (and a [Cursor plugin](https://cursor.com/docs/reference/plugins)) — a builder agent plus six composable skills — that teaches AI agents a single, opinionated architecture for full-stack apps on Supabase. Instead of letting the model improvise a different backend every time, it gives it one well-worn path: schema isolation, RPC-first data access, RLS on every table, edge functions for the outside world, and Postgres-native background jobs.
+AgentLink is a [Claude Code plugin](https://docs.anthropic.com/en/docs/claude-code/plugins) (and a [Cursor plugin](https://cursor.com/docs/reference/plugins), and a [Codex plugin](https://learn.chatgpt.com/docs/build-plugins)) — a builder agent plus seven composable skills — that teaches AI agents a single, opinionated architecture for full-stack apps on Supabase. Instead of letting the model improvise a different backend every time, it gives it one well-worn path: schema isolation, RPC-first data access, RLS on every table, edge functions for the outside world, and Postgres-native background jobs.
 
 It ships with the [`agentlink-sh` CLI](https://www.npmjs.com/package/agentlink-sh) — the plugin's hands. The agent reasons about _what_ to build; the CLI does the work the agent shouldn't do itself: OAuth, project creation, applying schemas, generating migrations, switching environments, and deploying. Designed for internal tools, business software, and operational apps.
 
@@ -70,17 +70,24 @@ Already have a project? In **Claude Code**, install the plugin from the marketpl
 
 In **Cursor**, install it from the marketplace instead — run `/add-plugin tomaspozo/agentlink` (or find AgentLink in the Cursor marketplace). See [Use it in Cursor](#use-it-in-cursor) below.
 
+In **Codex**, add this repo as a marketplace, then install from it:
+
+```bash
+codex plugin marketplace add tomaspozo/agentlink
+codex plugin add agentlink@tomaspozo
+```
+
 For local development of the plugin itself, point Claude Code at this directory:
 
 ```bash
 claude --plugin-dir ./agent
 ```
 
-(For Cursor, copy the directory into `~/.cursor/plugins/local/` — see `CONTRIBUTING.md`.)
+(For Cursor, copy the directory into `~/.cursor/plugins/local/` — see `CONTRIBUTING.md`. For Codex, `codex plugin marketplace add ./agent` takes a local path.)
 
 ### Use it in Cursor
 
-The same plugin is Cursor-compatible — the builder agent, all six skills, the
+The same plugin is Cursor-compatible — the builder agent, all seven skills, the
 always-on architecture rule, and the destructive-DB guard load in Cursor too.
 Install it from this repository via Cursor's plugin manager (it reads the
 manifest at `agent/.cursor-plugin/plugin.json`). In Cursor the `agentlink` builder is
@@ -88,6 +95,16 @@ selectable as a custom agent (rather than a forced default), and the skills
 trigger on their descriptions just like in Claude Code.
 
 Don't have Cursor yet? Grab it at [cursor.com](https://cursor.com/referral?code=IMIH9YQ5EFRF).
+
+### Use it in Codex
+
+The same plugin is Codex-compatible — all seven skills and the destructive-DB
+guard load there too (Codex's hook contract matches Claude Code's, so it's the
+very same hook). Codex plugins have no concept of a custom agent, so the builder
+spine ships as an entry-point **`builder` skill** instead: describe what you want
+to build and it routes Codex into the architecture and the other skills. Because
+that's description-triggered rather than a forced default, mentioning Supabase or
+your app explicitly makes it fire reliably.
 
 In a scaffolded project (1.4+), run CLI commands through the project-local binary: `pnpm exec agentlink <subcommand>` — e.g. `pnpm exec agentlink check`, `db apply`, `env deploy prod`. (Creating a brand-new project uses `npx agentlink-sh@latest <name>`, since there's no local install yet.)
 
@@ -129,9 +146,12 @@ The agent works autonomously against `local` and `dev` — `db apply` and `env d
 A PreToolUse hook (`hooks/block-destructive-db.sh`) stops the agent from running:
 
 - `npx supabase db reset` — destroys and recreates the local database
+- `pnpm exec agentlink db rebuild` — the same destructive reset, wrapped
 - `npx supabase db push --force` / `-f` — overwrites remote schema without diffing
 
 Run these yourself in a terminal if you really need them.
+
+The same hook runs in Claude Code and Codex (their hook contracts match); Cursor gets an equivalent guard via `hooks/block-destructive-db.cursor.sh`.
 
 ## Companion skills
 
